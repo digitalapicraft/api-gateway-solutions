@@ -1,0 +1,5 @@
+{
+  "_case": "wrong-secret",
+  "_status": 401,
+  "_note": "Correct client id, wrong client secret, at the token endpoint. No token is minted. generate mode is the only helix-auth mode that verifies the secret — key-auth validate resolves on the credential key alone. This is the single case that distinguishes a real credentials flow from a static key with extra steps."
+}

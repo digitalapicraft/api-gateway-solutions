@@ -1,0 +1,6 @@
+{
+  "_case": "unauthenticated",
+  "_status": 401,
+  "_note": "helix-auth validate rejects in the access phase. No transform ran and the SOAP handler was never contacted. The response body is whatever your gateway build emits for an auth rejection — assert the STATUS, not this shape.",
+  "_headers_present": ["X-Request-Id"]
+}

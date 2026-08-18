@@ -1,0 +1,188 @@
+# Test plan — SOAP/XML backend served as REST/JSON.
+#
+# Cases 1-5 are executed in order by ../gateway/verify.sh, which exits 0 only if
+# all of them hold. The fixtures under requests/ and expected/ document each case
+# independently so you can run one by hand.
+#
+# Substitute your own values:
+#   {{GATEWAY}}        gateway base URL, e.g. https://<YOUR_GATEWAY_HOST>
+#   {{CLIENT_ID}}      the app's client id (the credential key)
+#   {{CLIENT_SECRET}}  the app's client secret
+#   {{ACCESS_TOKEN}}   the JWT returned by the token-issue case
+
+meta:
+  solution: 02-soap-to-rest
+  version: 1.0.0
+  executor: gateway/verify.sh
+  note: >-
+    Cases 1-5 are automated. The XML-semantics cases (single vs multiple elements,
+    namespaces, attributes) are manual because they need a handler that can be made
+    to return each shape, and they are the cases most likely to surprise a partner
+    in production.
+  status: >-
+    NOT EXECUTED for this package — no gateway connector was available in the
+    session that produced it. These are the assertions verify.sh makes, not results
+    that have been obtained. Run it against your own environment.
+
+cases:
+  - id: unauthenticated
+    type: negative
+    intent: >-
+      helix-auth validate rejects a call with no token in the access phase — before
+      the body is transformed and before the SOAP handler is contacted. Nothing
+      downstream does any work.
+    request: requests/unauthenticated.http
+    expected: expected/unauthenticated.json
+    expected_status: 401
+    notes: >-
+      Worth confirming the handler really wasn't called. If your SOAP system logs
+      requests, this case should leave no trace in it.
+
+  - id: token-issue
+    type: positive
+    intent: An app's client credentials are exchanged for a signed JWT. See solution 01 for the full treatment.
+    request: requests/token-request.http
+    expected: expected/token-200.json
+    expected_status: 200
+    assertions:
+      - body.access_token is present and is a three-segment JWT
+      - body.token_type is "Bearer"
+      - body.expires_in matches the configured token_ttl (900 in this package)
+
+  - id: valid-call-transformed
+    type: positive
+    intent: >-
+      With a valid Bearer token, the JSON request body is converted to XML, the
+      handler is called on its real path, and its XML response comes back as JSON.
+    request: requests/valid-locations.http
+    expected: expected/locations-200.json
+    expected_status: 200
+    assertions:
+      - response content-type is application/json
+      - the body parses as JSON
+    notes: >-
+      A 500 here from a handler that works under curl is almost never the handler.
+      Suspect, in order: a second transform plugin converting the body twice; a
+      missing SOAPAction header; request field names that don't match the elements
+      the handler reads.
+
+  - id: response-really-converted
+    type: positive
+    intent: >-
+      THE CASE THAT MATTERS. The response body contains no XML markup. A
+      content-type header is a claim the gateway makes; a body with no angle
+      brackets is evidence the transform actually ran.
+    request: requests/valid-locations.http
+    expected: expected/locations-200.json
+    expected_status: 200
+    assertions:
+      - the response body matches no XML-open-tag pattern (no `<` followed by a name, `/` or `?`)
+    notes: >-
+      Relabelling unconverted XML as application/json is a real and easy
+      misconfiguration, and it passes any check that only inspects headers. The
+      partner's parser is what discovers the truth, with an error message pointing
+      nowhere near your gateway. Never assert the header alone.
+
+  - id: invalid-token
+    type: negative
+    intent: A forged or garbage JWT is rejected before the SOAP hop.
+    request: requests/invalid-token.http
+    expected: expected/invalid-token-401.json
+    expected_status: 401
+
+  - id: empty-result-envelope
+    type: boundary
+    intent: >-
+      When the handler returns an empty envelope, the client gets valid but empty
+      JSON rather than an error. Distinguishes "no results" from "the transform
+      broke", which look similar from a client.
+    request: requests/valid-locations.http
+    expected: expected/locations-empty-200.json
+    expected_status: 200
+    type_of_execution: manual
+    procedure: Send a query that legitimately matches nothing (e.g. a nonexistent region code).
+    notes: >-
+      verify.sh warns rather than fails on an empty object, because an empty result
+      is usually a request whose field names didn't match the elements the handler
+      reads — not a broken transform.
+
+  - id: single-vs-multiple-elements
+    type: boundary
+    intent: >-
+      Establish what your transform does when a collection has exactly ONE member
+      versus several. XML cannot distinguish an item from a list of one, so one
+      element may become an object where two become an array.
+    type_of_execution: manual
+    procedure: >-
+      1) Query so the handler returns exactly one <Site>. Record the JSON shape.
+      2) Query so it returns several. Record the JSON shape.
+      3) Compare: is the single case an object or a one-element array?
+    expected: >-
+      Both shapes documented, and BOTH published in your developer documentation.
+    notes: >-
+      Run this before you onboard anyone. Partner code written against a
+      multi-result example breaks on the single-result case — the edge case,
+      discovered in production, on their side. This is the highest-value manual
+      case in the plan.
+
+  - id: namespaced-and-attribute-payload
+    type: boundary
+    intent: >-
+      Establish how namespaces and XML attributes survive the transform, since
+      default settings often flatten prefixes or drop attributes entirely.
+    type_of_execution: manual
+    procedure: >-
+      Call an operation whose response carries namespace prefixes and elements with
+      attributes. Inspect the JSON: are prefixes preserved, stripped or mangled? Do
+      attributes appear as fields, or vanish?
+    expected: Documented behaviour for your build, and configuration set deliberately if the defaults are wrong for you.
+    notes: >-
+      The spec leaves xml-to-json as a default block. This case is how you find out
+      whether the defaults suit your envelope.
+
+  - id: double-transform-misconfiguration
+    type: failure
+    intent: >-
+      Establish the symptom of the most common misconfiguration so it's
+      recognisable: adding json-to-xml alongside the bidirectional xml-to-json
+      converts the body twice and the handler receives JSON labelled as XML.
+    type_of_execution: manual
+    expected_status: 500
+    procedure: >-
+      In a THROWAWAY test environment only, add a json-to-xml plugin next to
+      xml-to-json and call the route.
+    notes: >-
+      Exercise in a controlled environment only. The point is diagnostic
+      familiarity: a 500 from a handler that works under curl, with a config that
+      looks MORE thorough rather than less, should immediately suggest double
+      conversion.
+
+  - id: upstream-failure
+    type: failure
+    intent: >-
+      When the SOAP handler is unreachable or errors, the gateway surfaces a 5xx
+      rather than a malformed 200.
+    request: requests/valid-locations.http
+    expected: expected/upstream-502.json
+    expected_status: 502
+    type_of_execution: manual
+    optional: true
+    procedure: Point the upstream at an unreachable host, or stop the handler. Controlled environments only.
+
+  - id: slow-handler-timeout
+    type: failure
+    intent: >-
+      Establish what happens when the handler is slower than the gateway timeout,
+      because legacy SOAP systems built for batch use often are.
+    type_of_execution: manual
+    expected_status: 504
+    procedure: Call an operation known to take longer than the route's timeout.
+    notes: >-
+      A 504 here looks like an outage and isn't. Knowing your handler's real p99
+      before go-live is worth more than the test itself.
+
+coverage:
+  positive: [token-issue, valid-call-transformed, response-really-converted]
+  negative: [unauthenticated, invalid-token]
+  boundary: [empty-result-envelope, single-vs-multiple-elements, namespaced-and-attribute-payload]
+  failure:  [double-transform-misconfiguration, upstream-failure, slow-handler-timeout]

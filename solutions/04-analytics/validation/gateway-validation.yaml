@@ -1,0 +1,129 @@
+# Gateway validation — what a real gateway established about THIS package.
+#
+# For this package: nothing. No gateway connector was available in the session that
+# produced it, so no dry-run, no deployment and no functional test was performed.
+#
+# This package also has a category the others do not: analytics_verification. That is
+# manual BY NATURE — captured asynchronously in the log phase and read from the portal
+# or via the agent, so no script can assert it. Keeping it separate from
+# functional_tests is deliberate: folding it in would let an exit code stand in for
+# looking.
+
+gateway_validation:
+  solution: 04-analytics
+  version: 1.0.0
+
+  target: null
+  host: null
+  environment: null
+
+  dry_run:
+    status: NOT_RUN
+    reason: no gateway connector available in the session that produced this public package
+    detail: >-
+      The configuration in gateway/api-spec.yaml has been structurally reviewed (see
+      local-validation.yaml) and nothing more. A structural review confirms the absence
+      of an analytics plugin block, identity on every non-token route, templated paths
+      and an API-wide request-id — but it cannot establish that a gateway accepts the
+      document, nor anything about what analytics then records.
+
+  deployment:
+    status: NOT_RUN
+    environment: null
+
+  functional_tests:
+    executor: gateway/verify.sh
+    status: NOT_RUN
+    scope_note: >-
+      verify.sh verifies the REQUEST PATH and seeds traffic. It does not, and cannot,
+      verify analytics. Exit 0 means the path is correctly shaped and a known pattern is
+      seeded — the script says so in its own output rather than leaving the reader to
+      infer it.
+    detail: >-
+      Written and reviewed; its required-variable and unreachable-host paths were
+      exercised locally (see local-validation.yaml). No case has been run against a
+      gateway from this package.
+    cases:
+      - { id: identity-enforced,       expected_status: 401, result: NOT_RUN, note: "a 200 here permanently prevents per-app analytics on that route" }
+      - { id: token-issue,             expected_status: 200, result: NOT_RUN }
+      - { id: correlation-id-present,  expected_status: 200, result: NOT_RUN }
+      - { id: seed-known-pattern,      expected_status: n/a, result: NOT_RUN }
+
+  analytics_verification:
+    status: NOT_RUN
+    method: manual — query the portal or the agent after real traffic exists
+    why_separate: >-
+      Analytics runs in the log phase, asynchronously, and is read out of band. No shell
+      script can assert that a chart is correct. Recording this as its own status keeps
+      "the request path is right" distinct from "the analytics answers the question",
+      which are genuinely different claims.
+    cases:
+      - { id: per-app-attribution,          result: NOT_RUN, note: "the package's central claim" }
+      - { id: path-templating,              result: NOT_RUN, note: "the check that matters most — its failure is unrecoverable" }
+      - { id: correlation-end-to-end,       result: NOT_RUN, note: "needs your backend to log the forwarded id" }
+      - { id: latency-profile-separation,   result: NOT_RUN }
+      - { id: charts-catalogue-spot-check,  result: NOT_RUN, note: "tier-1 charts 1-4 from charts.md" }
+
+  cleanup:
+    status: NOT_REQUIRED   # nothing was provisioned
+
+  overall: UNVALIDATED
+
+# ---------------------------------------------------------------------------
+# Provenance only. NOT a validation status for this package.
+# Deliberately narrow — it would be easy to overclaim here.
+# ---------------------------------------------------------------------------
+prior_art:
+  status: PARTIAL
+  what_ran: >-
+    In an earlier internal build, the platform's global analytics was queried after
+    deploying an API and making live calls. A request count for a one-hour window,
+    broken down by route, was retrieved and matched the two requests that had actually
+    been sent.
+  what_this_supports:
+    - Capture is genuinely always-on, with no analytics plugin present in the API's own spec.
+    - The data is queryable per route, and per-route counts matched reality at that volume.
+  what_this_does_NOT_support:
+    - Per-app attribution at any meaningful scale. Two requests from one app demonstrates
+      nothing about whether attribution is usable across hundreds of integrations, which
+      is precisely this package's central claim.
+    - That templated paths aggregate as described. Not tested — and it is the check that
+      matters most, because getting it wrong cannot be undone for data already captured.
+    - That X-Request-Id correlates end to end into a backend's own logs.
+    - Any of the twelve queries in charts.md. None has been run as written.
+    - That THIS spec dry-runs cleanly. It is a different document.
+  honest_summary: >-
+    The prior art establishes that the pipe works. It establishes almost nothing about
+    whether the data flowing through it is shaped usefully, which is the entire subject
+    of this package.
+  provenance: >-
+    Earlier internal Agent Mode build against a non-production test environment. Host,
+    organisation, API, developer and app identifiers deliberately withheld from this
+    public package.
+  verified_this_session: false
+
+# ---------------------------------------------------------------------------
+what_you_should_do:
+  - Confirm analytics IS enabled globally in your org. The whole package assumes it. If it
+    is not, this needs revisiting rather than adjusting.
+  - Do NOT add a helix-analytics block. If an agent proposes one, correct it.
+  - Audit identity coverage BEFORE generating traffic you care about querying. Ask the
+    agent which routes are unauthenticated, and understand that rows captured for those
+    will never be attributable.
+  - Audit path templating at the same time, for the same reason. Both decisions are
+    unrecoverable for data already captured.
+  - Run validate_route and dry_run_deploy. Do not let the first gateway interaction be a
+    deploy.
+  - Run gateway/verify.sh to check the request path and seed a labelled pattern. Note the
+    window timestamps and counts it prints.
+  - Then do the manual analytics checks it prints. Treat path-templating as the gate — it
+    is the only way to discover that problem, and discovering it late means discovering it
+    permanently.
+  - Ask your backend teams to log X-Request-Id. Cheapest observability work available, and
+    the half of correlation that is routinely skipped.
+  - Spot-check tier-1 charts 1-4 from charts.md against your own org, and if a query
+    returns nothing, ask the agent to show the field it filtered on rather than accepting
+    the empty result.
+  - Confirm your retention window covers the questions you intend to ask.
+  - Record what you actually observed here, with your own provenance, before publishing or
+    demoing this solution.

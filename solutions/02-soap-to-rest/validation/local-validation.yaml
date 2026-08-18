@@ -1,0 +1,87 @@
+# Local (pre-gateway) validation — a structural review of the importable
+# artifacts. It does not, and cannot, establish gateway behaviour. Nothing here
+# implies a gateway accepted this configuration.
+
+local_validation:
+  solution: 02-soap-to-rest
+  version: 1.0.0
+  status: PASS_WITH_WARNINGS
+
+  checks:
+    syntax:                  PASS   # api-spec.yaml parses as valid OpenAPI 3.0.3; verify.sh parses under bash
+    schema:                  PASS_WITH_WARNINGS   # helix-auth, proxy-rewrite, request-id and cors use confirmed fields; xml-to-json is left as a DEFAULT block because its schema is build-dependent
+    required_fields:         PASS   # generate route carries token_ttl + signing_secret; validate route carries validate_auth_type + signing_secret; proxy-rewrite carries uri
+    references:              PASS   # /oauth/token and /locations reference the identical <ENV:JWT_SIGNING_SECRET>
+    plugin_ordering:         PASS   # access (helix-auth) -> rewrite (proxy-rewrite) -> request transform -> upstream -> response transform. Rejection precedes translation, which is the property that matters.
+    plugin_scoping:          PASS   # validate is per-route on /locations, NOT at the document root, so POST /oauth/token stays reachable without a token
+    transform_direction:     PASS   # exactly ONE xml-to-json block and NO json-to-xml. The bidirectional plugin covers both directions; a second transform would double-convert.
+    plugin_agreement:        PASS   # proxy-rewrite declares Content-Type text/xml and xml-to-json is what makes that true — the two are consistent
+    auth_authz_dependencies: PASS   # /oauth/token intentionally unprotected; nothing on /locations reads context helix-auth has not yet produced
+    request_response:        PASS   # documented 200/401/502/504 responses match the design
+    security:                PASS   # no literal secrets; signing_secret is <ENV:JWT_SIGNING_SECRET>; client_id/client_secret provisioned on the credential by the control plane
+    no_commentary_keys:      PASS   # plugin blocks contain schema fields only; all explanation is in YAML comments
+    tests_match_impl:        PASS   # the five verify.sh cases map to routes and plugins present in the spec; the seven manual/boundary/failure cases are flagged as such in tests/test-plan.yaml
+    placeholders:            PASS   # <SOAP_UPSTREAM_URL>, <YOUR_GATEWAY_HOST>, <ORG_ID>, <CLIENT_ID>, <CLIENT_SECRET>, <ENV:JWT_SIGNING_SECRET> — no real hosts, org ids or personas
+
+  warnings:
+    - >-
+      xml-to-json is left as a DEFAULT (empty) block. That takes plugin defaults,
+      which suit a straightforward element-to-object mapping. Namespaced or
+      attribute-heavy envelopes will need fields set. Its schema varies by build —
+      confirm with get_plugin_config in YOUR org rather than trusting this file.
+      The whole solution rests on this plugin, so confirm it exists before designing
+      around it.
+    - >-
+      The spec assumes the handler does NOT require a SOAPAction header. Many classic
+      SOAP 1.1 and .asmx endpoints DO, and return a 500 with an unhelpful envelope
+      without one. If yours is one of them, add it in proxy-rewrite.headers.set.
+      Nothing in a structural review can determine this.
+    - >-
+      Content-Type is set to text/xml (SOAP 1.1 style). SOAP 1.2 handlers expect
+      application/soap+xml and will return 415 for text/xml.
+    - >-
+      The request body's field names must match the element names the handler reads.
+      A mismatch typically produces a 200 with an empty result rather than an error —
+      which reads as "no data" and is actually "wrong request".
+    - >-
+      The JSON response shape is DERIVED from the XML, not designed. Element names
+      and casing pass through. Once partners integrate against them they are part of
+      your public contract.
+    - >-
+      XML has no arrays. A one-member collection may transform to an object where a
+      multi-member one transforms to a list. tests/test-plan.yaml case
+      single-vs-multiple-elements exists for this and is manual — nothing in this
+      document can determine the behaviour of your build.
+    - >-
+      No request validation. A partner can send JSON that converts to XML the handler
+      rejects; the failure surfaces as a 500 from the handler rather than a 400 from
+      the gateway. Add request-validation if a clean edge rejection matters.
+    - >-
+      The upstream is bound on the service at import/bind time, not expressed in the
+      OpenAPI paths. Nothing in this document can confirm it is reachable, nor that
+      /GetData.ashx exists on it.
+    - >-
+      Applying helix-auth validate API-wide instead of per-route would protect
+      POST /oauth/token and make obtaining a first token impossible. The spec is
+      correct as written; the warning exists because it is the change an editor is
+      most likely to make for tidiness.
+
+  assumptions:
+    - API "Partner Locations API"; mediated route POST /locations; handler path /GetData.ashx. All illustrative.
+    - The handler expects text/xml and does not require SOAPAction.
+    - Request field names match the elements the handler reads.
+    - The gateway is the token issuer; no external identity provider is involved.
+    - JWT_SIGNING_SECRET exists on the target environment before the revision is deployed.
+
+  not_established_here:
+    - Whether a gateway accepts this configuration (that is a dry-run).
+    - Whether xml-to-json exists in your org, or what fields it exposes.
+    - Whether the transform actually runs on the response — the single most important
+      behavioural question in this solution, and one only a live call can answer. See
+      verify.sh case 4.
+    - What JSON shape your handler's XML actually produces.
+    - Whether the handler needs SOAPAction, or what its real latency is.
+    - Any request/response behaviour whatsoever.
+
+  performed_by: helix-solution-builder
+  verified_this_session: true

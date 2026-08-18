@@ -1,0 +1,148 @@
+# Solution manifest — the traceability spine for this package.
+# Every artifact below corresponds to this one solution version. If the gateway
+# config changes, bump `version` and re-derive the docs and infographic from it
+# — never the other way round.
+
+solution:
+  name: Serve a SOAP backend as REST/JSON
+  slug: 02-soap-to-rest
+  version: 1.0.0
+  category:
+    - API Transformation
+    - Enterprise & Hybrid
+  tags: [soap, xml, json, protocol-mediation, legacy-modernization, xml-to-json, proxy-rewrite]
+
+problem:
+  statement: >-
+    API teams need to open a SOAP/XML system of record to partners who require
+    REST/JSON because every integration otherwise becomes an adapter service or a
+    rewrite, without modifying a backend that is correct, stable and unsafe to
+    touch.
+
+business_need:
+  summary: >-
+    Stop the count of services you operate growing with the count of partners you
+    onboard. Integration lead time drops from an adapter project to a
+    configuration change, the system of record leaves the critical path for
+    commercial decisions, and the pressure to rewrite it becomes a technical
+    decision on your own timetable rather than a commercial emergency.
+
+implementation:
+  gateway_capabilities:
+    - xml-to-json (BIDIRECTIONAL)           # JSON->XML on the request AND XML->JSON on the response. One plugin.
+    - proxy-rewrite                         # retarget /locations -> /GetData.ashx; set Content-Type text/xml
+    - helix-auth (mode generate)            # POST /oauth/token — see solution 01
+    - helix-auth (mode validate, jwt-auth)  # POST /locations — rejects in the access phase, BEFORE any transform
+    - request-id                            # correlate the client's JSON with the handler's XML across the hop
+    - cors                                  # browser access; authorization must be in allow_headers
+  custom_code_required: false
+  notes: >-
+    xml-to-json is bidirectional. Adding json-to-xml alongside it converts the
+    body twice and the handler receives nonsense — a 500 that looks like a backend
+    fault while the config looks more thorough, not less. This is the single most
+    common way the solution is built wrong, by people and by models.
+    xml-to-json is left as a DEFAULT (empty) block because its schema varies by
+    build. That takes plugin defaults, which suit a simple element-to-object
+    mapping and may not suit namespaced or attribute-heavy envelopes. Confirm with
+    get_plugin_config in the target org.
+    Authentication runs before the transform, deliberately: there is no point
+    converting a body that is about to be discarded.
+    proxy-rewrite and xml-to-json must agree — the former declares the body is
+    text/xml, the latter is what makes that true.
+
+validation:
+  # No gateway connector was available in the session that produced this public
+  # package, so no dry-run, deployment or functional test was performed FOR THIS
+  # ARTIFACT. See prior_art for what an earlier internal build established, and
+  # validation/gateway-validation.yaml for the full record.
+  local:
+    status: PASS_WITH_WARNINGS
+    basis: >-
+      structural review of api-spec.yaml and verify.sh — syntax, plugin scoping and
+      phase ordering, secret handling, transform direction, test-to-implementation
+      mapping. Warnings because xml-to-json is a default block whose real schema is
+      build-dependent.
+    verified_this_session: true
+  gateway_dry_run:
+    status: NOT_RUN
+    verified_this_session: false
+    reason: no gateway connector available in the session that produced this package
+  deployment:
+    status: NOT_RUN
+    environment: null
+  functional_test:
+    status: NOT_RUN
+    verified_this_session: false
+    executor: gateway/verify.sh
+    reason: written and reviewed, not executed against a gateway from this package
+
+prior_art:
+  # Recorded so the reader knows which parts have run somewhere and which have not.
+  # This is provenance, NOT a validation status for this package.
+  status: PASS
+  scope: >-
+    In an earlier internal build, Helix Agent Mode generated, dry-ran and deployed
+    an equivalent configuration against a real SOAP backend in a non-production
+    test environment: a bidirectional xml-to-json plus proxy-rewrite exposing a
+    SOAP handler as a JSON endpoint (revision 1), then a helix-auth generate token
+    endpoint plus validate on the mediated route (revision 2). Live calls to both
+    routes were observed.
+  not_established: >-
+    This repackaged spec — placeholder-parameterised upstream and handler path, a
+    typed request body schema, token_ttl 900, an added cors block, and validate
+    scoped per route — has not itself been dry-run or deployed. verify.sh has never
+    been executed end to end, so in particular the case-4 assertion (response body
+    contains no XML markup) has never been confirmed anywhere.
+  provenance: >-
+    Earlier internal Agent Mode build against a non-production test environment.
+    Host, organisation, API, developer and app identifiers deliberately withheld
+    from this public package.
+
+artifacts:
+  documentation: [README.md, architecture.md, business-need.md]
+  source_code: [gateway/api-spec.yaml, gateway/verify.sh]
+  agent_prompt: helix-agent-prompt.md
+  blog: blog.md
+  infographic: [infographic.md]
+  tests: [tests/test-plan.yaml, tests/requests/, tests/expected/]
+  validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
+
+assumptions:
+  - API name "Partner Locations API"; mediated route POST /locations; SOAP handler path /GetData.ashx. All illustrative — replace with yours.
+  - The handler expects content-type text/xml (SOAP 1.1 style). SOAP 1.2 handlers want application/soap+xml.
+  - The handler does NOT require a SOAPAction header. Many classic SOAP 1.1 and .asmx
+    endpoints DO; add it in proxy-rewrite.headers.set if yours is one of them.
+  - The request body's field names match the element names the handler reads.
+  - Authentication is wanted. Remove the helix-auth blocks if this API is internal-only.
+  - token_ttl 900 is a deliberate choice, not a platform default. See solution 01.
+  - JWT_SIGNING_SECRET exists on the target environment before the revision is deployed.
+  - The upstream is bound on the service at import/bind time, not in the OpenAPI paths.
+
+limitations:
+  - The JSON shape is DERIVED from the XML, not designed. Element names, casing and
+    vendor prefixes come through as-is, and once partners integrate against them they
+    are part of your public contract — renaming is then a breaking change.
+  - XML has no concept of an array. A collection with one member may transform to an
+    object where two members transform to a list. Partner code written against a
+    multi-result example breaks on the single-result case. Publish BOTH example shapes.
+  - Namespaces and attributes need explicit configuration and may be flattened or
+    dropped by default.
+  - Body translation only. WS-Security, SOAP headers, attachments and MTOM are not
+    addressed.
+  - No validation of the transformed request. A partner can send JSON that converts to
+    XML the handler rejects; the error surfaces as a 500 from the handler rather than a
+    400 from the gateway. Add request-validation for a clean edge rejection.
+  - One inbound call maps to exactly one backend call. Fanning out to several SOAP
+    operations, or merging results, is composition — a different pattern.
+  - Mediation does not make a slow handler fast. If the SOAP system takes eight
+    seconds, so does the mediated API; check the gateway timeout before concluding the
+    upstream is down, because the symptom is a 504 that looks like an outage.
+  - Two conversions per request add latency. Small, but not zero, and it grows with
+    payload size.
+  - A transform that silently fails to run on the response yields a 200 with an XML
+    body and a JSON content-type — success-shaped failure, discovered by the partner's
+    parser. verify.sh case 4 exists specifically to catch this and has never been run.
+  - xml-to-json's schema varies by build. Confirm with get_plugin_config rather than
+    trusting the field names in this spec.
+
+status: UNVALIDATED   # generated + locally reviewed; the pattern was proven in a prior internal build, this artifact not gateway-confirmed

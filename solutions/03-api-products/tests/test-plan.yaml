@@ -1,0 +1,214 @@
+# Test plan — API Products with enforced quota.
+#
+# Cases 1-5 are executed in order by ../gateway/verify.sh, which exits 0 only if
+# all of them hold. The fixtures under requests/ and expected/ document each case
+# independently so you can run one by hand.
+#
+# Substitute your own values:
+#   {{GATEWAY}}     gateway base URL, e.g. https://<YOUR_GATEWAY_HOST>
+#   {{FREE_KEY}}    client id of the app subscribed to the Free product
+#   {{PRO_KEY}}     client id of a DIFFERENT app subscribed to the Pro product
+#   {{FREE_LIMIT}}  the Free product's quota limit, e.g. 60
+
+meta:
+  solution: 03-api-products
+  version: 1.0.0
+  executor: gateway/verify.sh
+  note: >-
+    Cases 1-5 are automated. The multi-node counting case, the fail-close case and
+    the developer-scope case are manual: they require changing gateway-level
+    configuration or observing behaviour across nodes, which no single request can
+    assert.
+  status: >-
+    NOT EXECUTED for this package — no gateway connector was available in the session
+    that produced it. These are the assertions verify.sh makes, not results that have
+    been obtained. Run it against your own environment.
+  two_apps_required: >-
+    FREE_KEY and PRO_KEY MUST belong to two SEPARATE APPS. Quota is counted per app
+    (the credential), so two keys on one app share a bucket and correct isolation
+    will look broken. verify.sh refuses to run if the two keys are identical.
+
+cases:
+  - id: unauthenticated
+    type: negative
+    intent: helix-auth validate rejects a call with no apikey header, before the enforcer runs.
+    request: requests/no-key.http
+    expected: expected/unauthenticated-401.json
+    expected_status: 401
+
+  - id: unknown-key
+    type: negative
+    intent: >-
+      A syntactically plausible but unregistered key is rejected. Distinguishes "no
+      credential" from "not a credential I know", both of which are 401.
+    request: requests/unknown-key.http
+    expected: expected/unauthenticated-401.json
+    expected_status: 401
+
+  - id: valid-free-call
+    type: positive
+    intent: >-
+      A registered app subscribed to a product covering this API is admitted, and its
+      request is metered against that product's quota.
+    request: requests/valid-free.http
+    expected: expected/valid-200.json
+    expected_status: 200
+    notes: >-
+      A 403 here has two usual causes, in this order: (a) the route has no service_id,
+      so the enforcer returns 403 before quota is considered at all; (b) the app is not
+      subscribed to a product covering this API, or the resolved product has no quota
+      object — which is a 403, NOT "unlimited". Also confirm helix-auth is used rather
+      than raw key-auth: key-auth resolves no subscription, so there is nothing for the
+      enforcer to enforce against.
+      A 401 here usually means you are sending the app's SECRET where its KEY (client
+      id) belongs. key-auth validate resolves on the credential key.
+
+  - id: quota-exhausted
+    type: boundary
+    intent: >-
+      Once the Free product's window is spent, further calls from that app are rejected
+      with 429 and the documented body.
+    request: requests/free-over-quota.http
+    expected: expected/quota-exceeded-429.json
+    expected_status: 429
+    assertions:
+      - the body is {"error":"quota exceeded"}
+      - there is NO Retry-After header
+      - there are NO X-RateLimit-* headers
+    notes: >-
+      The absent headers are part of the contract, not an oversight — assert their
+      absence so a future platform change that adds them is noticed deliberately
+      rather than silently.
+      If 429 never arrives: the quota may be higher than you think; quota_policy may be
+      `local` on a multi-node gateway so each node counts separately; or the app may be
+      subscribed to a higher-ranked product than you expect, since only the top-ranked
+      covering product is evaluated.
+
+  - id: isolation
+    type: positive
+    intent: >-
+      THE CASE THAT MATTERS. At the same moment the Free app is throttled, a second app
+      subscribed to a different product still succeeds. This is what proves the limit is
+      scoped to the offending app rather than to the API.
+    request: requests/pro-during-free-throttle.http
+    expected: expected/valid-200.json
+    expected_status: 200
+    notes: >-
+      Cases 1-4 only prove a rate limit exists; any limiter does that. This case proves
+      the blast radius is one app, which is the entire business case. Do not skip it.
+      If the second app is ALSO 429: check the two keys really belong to separate apps;
+      check the second app is subscribed to a DIFFERENT product with its own quota; and
+      check no route-scoped limiter is keyed on something global — a shared remote_addr
+      behind a load balancer will throttle everyone at once.
+
+  - id: unlimited-product
+    type: boundary
+    intent: >-
+      An app on a product with limit -1 is never throttled, but is still authenticated
+      and still attributed. Unlimited must not mean unidentified.
+    type_of_execution: manual
+    procedure: >-
+      Subscribe a third app to the Internal product (limit -1). Send more calls than any
+      metered tier allows. Confirm no 429, then confirm the calls still appear in
+      analytics attributed to that app.
+    expected: no 429 at any volume; calls attributed to the app in analytics
+    notes: >-
+      limit -1 marks the request absorbed and skips the counter entirely. Worth
+      confirming attribution survives, because the value of a named Internal product is
+      that first-party traffic shows up separately rather than blending into a partner
+      tier.
+
+  - id: product-without-quota
+    type: failure
+    intent: >-
+      Establish that a product with no quota object is a 403, not "unlimited" — because
+      it is the opposite of what most people assume.
+    type_of_execution: manual
+    expected_status: 403
+    procedure: >-
+      In a THROWAWAY test environment only, create a product with no quota object,
+      subscribe an app to it, and call the API.
+    notes: >-
+      Under the default fail_close this rejects. Diagnostic familiarity is the point: a
+      403 on an app you know is subscribed should make you check whether its product
+      carries a quota.
+
+  - id: quota-backend-unreachable
+    type: failure
+    intent: >-
+      With error_policy fail_close (the default), a quota-backend outage returns 503
+      rather than silently serving unmetered traffic.
+    request: requests/quota-backend-down.http
+    expected: expected/quota-backend-503.json
+    expected_status: 503
+    type_of_execution: manual
+    optional: true
+    procedure: >-
+      In a controlled environment, make the quota backend unreachable (stop Redis, or
+      point plugin_attr at an unreachable host) and call the API with a valid key.
+    notes: >-
+      Then flip error_policy to fail_open and repeat: the call should succeed, unmetered.
+      Run both halves once, deliberately. Which behaviour you want is a commercial
+      decision — fail_close protects metering accuracy at the cost of availability;
+      fail_open protects availability by serving traffic you cannot account for, and you
+      may not notice it happened.
+
+  - id: multi-node-counting
+    type: failure
+    intent: >-
+      Establish that the quota is counted GLOBALLY rather than per gateway node. This is
+      the single most common way the solution fails to deliver its promise, and it is
+      invisible from the route configuration.
+    type_of_execution: manual
+    procedure: >-
+      On a gateway with more than one node, set FREE_LIMIT to the product's real limit
+      and send requests through the load balancer until 429. Compare the count at which
+      429 arrives with the configured limit. If it is roughly N times the limit on N
+      nodes, quota_policy is `local` and each node is counting in its own memory.
+      Fix by setting quota_policy to redis in plugin_attr.api-product-enforcer in the
+      gateway's config.yaml — NOT on the route, which accepts only error_policy and
+      ctx_namespace.
+    expected: 429 arrives at approximately the configured limit, not a multiple of it
+    notes: >-
+      You will not see this in a single-node test environment. Skipping this case is how
+      a correctly configured route serves three times the quota you sold.
+
+  - id: developer-scope-pooling
+    type: boundary
+    intent: >-
+      Establish what quota_key_scope: developer actually changes, since it is a real
+      trade-off rather than a tidier default.
+    type_of_execution: manual
+    procedure: >-
+      Give one developer two apps subscribed to the same product. With the default app
+      scope, confirm each app has its own bucket. Then set quota_key_scope to developer
+      on the product and confirm the two apps now share one.
+    expected: independent buckets under app scope; a shared bucket under developer scope
+    notes: >-
+      Pooling means one of that developer's apps CAN starve their own production traffic.
+      Run this before choosing, so the trade-off is observed rather than assumed.
+
+  - id: per-ip-ceiling-on-search
+    type: boundary
+    intent: >-
+      The route-scoped limit-count on POST /orders/search caps a single source
+      independently of the product quota, and (unlike the enforcer) does emit
+      X-RateLimit-* headers.
+    type_of_execution: manual
+    procedure: >-
+      Send more than 20 requests in 60 seconds to POST /orders/search from one source
+      with a valid key whose product quota is nowhere near spent. Expect 429 from the
+      per-IP limiter, with X-RateLimit-* headers present.
+    expected_status: 429
+    notes: >-
+      CRITICAL: if the gateway sits behind a proxy or load balancer without real-ip in
+      front, every caller presents the balancer's address and this becomes a GLOBAL
+      20/min cap on the endpoint. Verify from two different source addresses — if
+      throttling one throttles the other, real-ip is missing and you have a
+      self-inflicted outage waiting for a traffic spike.
+
+coverage:
+  positive: [valid-free-call, isolation]
+  negative: [unauthenticated, unknown-key]
+  boundary: [quota-exhausted, unlimited-product, developer-scope-pooling, per-ip-ceiling-on-search]
+  failure:  [product-without-quota, quota-backend-unreachable, multi-node-counting]

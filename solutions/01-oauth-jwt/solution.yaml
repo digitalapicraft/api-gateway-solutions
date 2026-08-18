@@ -1,0 +1,130 @@
+# Solution manifest — the traceability spine for this package.
+# Every artifact below corresponds to this one solution version. If the gateway
+# config changes, bump `version` and re-derive the docs and infographic from it
+# — never the other way round.
+
+solution:
+  name: OAuth 2.0 with JWT, without touching the backend
+  slug: 01-oauth-jwt
+  version: 1.0.0
+  category:
+    - Security & Access
+  tags: [oauth2, jwt, client-credentials, authentication, helix-auth, token-endpoint]
+
+problem:
+  statement: >-
+    API teams need standards-based authentication on a partner-facing API because
+    static keys never expire and a public API is a standing risk, without waiting
+    for a backend release cycle to thread auth through every request handler.
+
+business_need:
+  summary: >-
+    Move authentication to the edge so it ships in a configuration change instead
+    of a backend release, and bound the exposure window of a compromised
+    credential from indefinite (a static key) to the token lifetime (minutes).
+    Identity resolved here is also the prerequisite for per-app metering and
+    per-app analytics.
+
+implementation:
+  gateway_capabilities:
+    - helix-auth (mode generate)            # POST /oauth/token — verifies client_id/secret, signs the JWT
+    - helix-auth (mode validate, jwt-auth)  # protected routes — verifies the signature and expiry, access phase
+    - request-id                            # correlation across the auth failure and the backend
+    - cors                                  # browser access; authorization must be in allow_headers
+  custom_code_required: false
+  notes: >-
+    helix-auth generate is used because the GATEWAY is the token issuer. If an
+    external identity provider (Keycloak, Auth0, Entra ID, Okta) already issues
+    the tokens, this solution is the wrong shape: drop the token route and use the
+    jwt-auth plugin as a verifier against that issuer instead. The two are not
+    interchangeable implementations — they sit on opposite sides of the issuer
+    boundary.
+    validate is applied PER ROUTE, not API-wide, so POST /oauth/token stays
+    reachable without a token. Applying it at the document root makes obtaining a
+    first token impossible and every request returns 401.
+    The signing secret must resolve to the same value on the issue route and every
+    validate route; nothing in either plugin block hints that the value is shared.
+
+validation:
+  # No gateway connector was available in the session that produced this public
+  # package, so no dry-run, deployment or functional test was performed FOR THIS
+  # ARTIFACT. See prior_art for what an earlier internal build did establish, and
+  # validation/gateway-validation.yaml for the full record.
+  local:
+    status: PASS
+    basis: structural review of api-spec.yaml and verify.sh — syntax, schema fields, plugin scoping, secret handling, test-to-implementation mapping
+    verified_this_session: true
+  gateway_dry_run:
+    status: NOT_RUN
+    verified_this_session: false
+    reason: no gateway connector available in the session that produced this package
+  deployment:
+    status: NOT_RUN
+    environment: null
+  functional_test:
+    status: NOT_RUN
+    verified_this_session: false
+    executor: gateway/verify.sh
+    reason: written and reviewed, not executed against a gateway from this package
+
+prior_art:
+  # Recorded so the reader knows which parts have run somewhere, and which have
+  # not. This is provenance, NOT a validation status for this package.
+  status: PASS
+  scope: >-
+    The helix-auth generate + validate (jwt-auth) pair — a token endpoint issuing
+    a signed JWT and a protected route rejecting anything else — was generated,
+    dry-run and deployed via Helix Agent Mode against a non-production test
+    environment in an earlier internal build, and live calls to both the token
+    endpoint and a protected route were observed.
+  not_established: >-
+    This repackaged spec (standalone, placeholder-parameterised, token_ttl 900,
+    per-route validate scoping, cors block) has not itself been dry-run or
+    deployed. verify.sh has never been executed end to end.
+  provenance: earlier internal Agent Mode build; host, org and resource identifiers withheld from this public package
+
+artifacts:
+  documentation: [README.md, architecture.md, business-need.md]
+  source_code: [gateway/api-spec.yaml, gateway/verify.sh]
+  agent_prompt: helix-agent-prompt.md
+  blog: blog.md
+  infographic: [infographic.md]
+  tests: [tests/test-plan.yaml, tests/requests/, tests/expected/]
+  validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
+
+assumptions:
+  - API name is "Orders API" and the protected paths are /orders* (illustrative — replace with yours).
+  - The token endpoint is POST /oauth/token (illustrative; any path works).
+  - token_ttl is 900 seconds. This is a deliberate choice, not a platform default —
+    it is the only bound on a leaked token's usefulness. Pick it for your own risk
+    tolerance and tell integrators to cache and refresh at ~80% of the lifetime.
+  - The gateway is the token issuer and no external identity provider is involved.
+  - JWT_SIGNING_SECRET exists as an environment variable on the target environment
+    BEFORE the revision is deployed.
+  - The upstream is bound on the service at import/bind time, not in the OpenAPI paths.
+
+limitations:
+  - Client credentials authenticates the APPLICATION, not an end user. No end-user
+    identity and no consent are established. Delegated user access needs the
+    authorization code flow, which this is not.
+  - This is authentication, not authorization. The token proves who is calling; it
+    carries no scopes and no per-route permissions in this configuration.
+  - No token revocation list. Disabling an app stops NEW tokens; already-issued
+    tokens remain valid until they expire. The TTL is therefore the security
+    control, not app status.
+  - No refresh tokens — client credentials does not use them. The client re-exchanges
+    its long-lived secret instead.
+  - Symmetric signing — one shared secret both signs and verifies, so anyone able to
+    verify is also able to sign. Independent third-party verification would require
+    asymmetric keys and is out of scope.
+  - Rotating the signing secret invalidates tokens issued under the old value the
+    moment the new one is live. With a 900s TTL the blast radius is bounded to
+    roughly fifteen minutes of 401s, but it is not a zero-downtime change as written.
+  - All four caller-side failure causes (no header, missing Bearer prefix, expired,
+    bad signature) return an indistinguishable 401. Correct security behaviour, and
+    genuinely hard for integrators to self-diagnose — document the causes and give
+    them X-Request-Id.
+  - helix-auth's exact schema varies by build. Confirm with get_plugin_config before
+    deploying rather than trusting the field names in this spec.
+
+status: UNVALIDATED   # generated + locally reviewed; auth mechanism proven in a prior internal build, this artifact not gateway-confirmed

@@ -1,0 +1,12 @@
+{
+  "_case": "quota-exhausted",
+  "_status": 429,
+  "_note": "This IS the documented body — assert it exactly. Unlike the 401 shapes, the quota rejection has a defined payload.",
+  "error": "quota exceeded",
+  "_headers_absent": [
+    "Retry-After — the client is told nothing about when to try again",
+    "X-RateLimit-Limit / X-RateLimit-Remaining / X-RateLimit-Reset — no budget headers at all"
+  ],
+  "_why_that_matters": "A client cannot read its remaining quota off any response, successful or rejected. Two consequences you must design around: publish the window length and a backoff-WITH-JITTER contract in your developer docs, because the response cannot carry it (without jitter every client retries at the same instant at the top of each window, which is a scheduled thundering herd); and surface remaining quota in the portal and analytics rather than in headers.",
+  "_if_you_need_headers": "That is limit-count with show_limit_quota_header: true — a different limiter with a different key. Do not try to make the product enforcer emit them."
+}

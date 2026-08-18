@@ -1,0 +1,21 @@
+### Case: valid-call-transformed / response-really-converted
+###
+### Plain JSON in. The gateway converts this body to XML, calls the handler on
+### /GetData.ashx, and converts the XML response back to JSON.
+###
+### The field names here must match the ELEMENT NAMES the SOAP handler reads. If
+### they don't, you typically get a 200 with an empty result rather than an error —
+### which reads as "no data" and is actually "wrong request".
+###
+### Expect 200, content-type application/json, AND a body with no angle brackets.
+POST {{GATEWAY}}/locations
+authorization: Bearer {{ACCESS_TOKEN}}
+content-type: application/json
+
+{"region":"EMEA","activeOnly":true}
+
+### curl equivalent:
+###   curl -i -X POST {{GATEWAY}}/locations \
+###     -H 'authorization: Bearer {{ACCESS_TOKEN}}' \
+###     -H 'content-type: application/json' \
+###     -d '{"region":"EMEA","activeOnly":true}'

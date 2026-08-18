@@ -1,0 +1,189 @@
+# Test plan — analytics that can answer a question.
+#
+# READ THE SPLIT BELOW BEFORE TRUSTING AN EXIT CODE.
+#
+# Cases 1-4 are executed by ../gateway/verify.sh: they verify the REQUEST PATH is
+# shaped correctly and seed a known, labelled traffic pattern.
+#
+# Cases 5-9 are MANUAL, and they are the ones that matter. Analytics is captured
+# asynchronously in the log phase and read from the portal or via the agent. No shell
+# script can assert that a chart is correct, so none of these is folded into a passing
+# exit code.
+#
+# Exit 0 from verify.sh means: the request path is correct AND a known pattern is
+# seeded. It does NOT mean analytics is verified.
+#
+# Substitute your own values:
+#   {{GATEWAY}}        gateway base URL, e.g. https://<YOUR_GATEWAY_HOST>
+#   {{CLIENT_ID}}      the app's client id (the credential key)
+#   {{CLIENT_SECRET}}  the app's client secret
+#   {{ACCESS_TOKEN}}   the JWT returned by the token-issue case
+#   {{REQUEST_ID}}     an X-Request-Id captured from a response
+
+meta:
+  solution: 04-analytics
+  version: 1.0.0
+  executor: gateway/verify.sh
+  automated_cases: 4
+  manual_cases: 5
+  note: >-
+    This package is unusual in that its most important assertions cannot be automated.
+    That is a property of analytics being capture-then-query, not a gap in the tests —
+    and it is recorded honestly rather than papered over with a script that checks
+    something easier.
+  status: >-
+    NOT EXECUTED for this package — no gateway connector was available in the session
+    that produced it. These are the assertions to make, not results that have been
+    obtained.
+
+cases:
+  # ---------------------------------------------------------------- automated
+  - id: identity-enforced
+    type: negative
+    intent: >-
+      An unauthenticated call to a protected route is rejected. This is the check that
+      matters most for analytics: if a route admits anonymous traffic, EVERY captured row
+      for it attributes to a source IP address, and no later query can recover who was
+      calling.
+    request: requests/unauthenticated.http
+    expected: expected/unauthenticated-401.json
+    expected_status: 401
+    notes: >-
+      A 200 here does not break the API — it silently makes per-app analytics impossible
+      for this route, permanently, for all data captured while it stays that way.
+
+  - id: token-issue
+    type: positive
+    intent: Identity exists at all — an app can obtain a token. See solution 01.
+    request: requests/token-request.http
+    expected: expected/token-200.json
+    expected_status: 200
+
+  - id: correlation-id-present
+    type: positive
+    intent: >-
+      An authenticated response carries X-Request-Id. This is the bridge from a row in a
+      chart to one specific request, and onward to the backend's own logs.
+    request: requests/valid-call.http
+    expected: expected/valid-200.json
+    expected_status: 200
+    assertions:
+      - the response carries an X-Request-Id header
+      - the value is non-empty
+    notes: >-
+      Presence at the gateway is necessary and not sufficient — see case
+      correlation-end-to-end, which is where the value actually is.
+
+  - id: seed-known-pattern
+    type: positive
+    intent: >-
+      Generate a deliberately labelled traffic pattern across several routes and status
+      codes — including failures — so the analytics queries that follow have specific,
+      known counts to check against rather than a vague look.
+    request: requests/seed-traffic.http
+    expected: expected/seeded-pattern.json
+    notes: >-
+      verify.sh prints the exact counts it seeded and the window timestamps. Analytics
+      is capture-then-query: without traffic there is nothing to verify, and without
+      KNOWN traffic there is nothing to verify AGAINST.
+
+  # ------------------------------------------------------------------- manual
+  - id: per-app-attribution
+    type: manual
+    intent: >-
+      The seeded traffic appears in analytics attributed to the calling app and developer
+      by name — not to a source IP address. This is the package's central claim.
+    procedure: >-
+      1) Run verify.sh and note the window start/end and the seeded counts.
+      2) Ask the agent: "Show me calls to <<your API>> since <<window start>>, broken
+         down by app and route, with status code counts."
+      3) Confirm the counts match, and that the app is identified by name.
+    expected: >-
+      Counts matching what verify.sh seeded, attributed to the named app. The forged-token
+      401s and the initial unauthenticated probe should appear in an unidentified bucket —
+      identity never resolved for those, which is correct, not a gap.
+    notes: >-
+      If rows show IP addresses instead of app names, identity is not resolved on that
+      route. That is not fixable by querying differently, and rows already captured stay
+      that way.
+
+  - id: path-templating
+    type: manual
+    intent: >-
+      THE MOST IMPORTANT CHECK IN THIS PACKAGE. The item route appears in a per-route
+      breakdown as the templated /orders/{orderId} and NOT as literal identifiers.
+    procedure: >-
+      1) verify.sh calls /orders/verify-probe-001 several times.
+      2) Ask the agent: "Show me the per-route breakdown for <<your API>> since
+         <<window start>>."
+      3) Look at how that route is represented.
+    expected: one row, /orders/{orderId}
+    failure_meaning: >-
+      A separate row per identifier means paths are not templated. Consequences: the
+      top-routes chart becomes a list of individual records; per-route p99 is computed
+      from one sample per row and is meaningless; cardinality grows with data volume
+      forever.
+    notes: >-
+      UNRECOVERABLE for data already captured. Fixing the spec fixes future data
+      immediately, with no migration — but everything captured beforehand stays
+      fragmented. This is why the check belongs on day one and not in a quarter.
+
+  - id: correlation-end-to-end
+    type: manual
+    intent: >-
+      The SAME X-Request-Id that the gateway recorded appears in the BACKEND's own logs
+      for that call. This is the half of correlation that people skip.
+    procedure: >-
+      1) Take an X-Request-Id from a verify.sh response (it prints one).
+      2) Ask the agent: "Find the request with X-Request-Id {{REQUEST_ID}}."
+      3) Search your backend service's logs for the same value.
+    expected: the same id found in both places
+    failure_meaning: >-
+      Found at the gateway but not downstream means your services are not recording the
+      forwarded header. You can then correlate the gateway with itself and nothing else.
+    notes: >-
+      The fix is a conversation with your teams, not a configuration change. It is the
+      cheapest observability work available and it is routinely skipped.
+
+  - id: latency-profile-separation
+    type: manual
+    intent: >-
+      Routes with very different latency profiles produce separate, meaningful rows — a
+      slow report does not get blended into a fast lookup's distribution.
+    procedure: >-
+      1) Call both a fast read route and POST /orders/report several times.
+      2) Ask the agent: "Give me p50, p95 and p99 per route for <<your API>>, with call
+         counts."
+      3) Confirm the two routes have visibly different distributions and that neither
+         number is an average of both.
+    expected: distinct per-route distributions; sample counts high enough to trust
+    notes: >-
+      Also confirms the sample-count habit. A p99 computed from a handful of requests is
+      noise presented as precision — always ask for the count alongside the percentile.
+
+  - id: charts-catalogue-spot-check
+    type: manual
+    intent: >-
+      The queries in ../charts.md actually return usable answers against your org, and
+      the field names they imply exist in your build.
+    procedure: >-
+      Run tier-1 charts 1-4 from ../charts.md as written. For each, if the agent returns
+      nothing or something surprising, ask it to show the field it filtered on rather
+      than accepting the empty result.
+    expected: four usable answers
+    notes: >-
+      Analytics field names and query syntax vary by build. charts.md is phrased for the
+      agent deliberately, because the agent knows your schema and a hardcoded query would
+      not. Charts 5-7 additionally require solution 03 deployed, since quota consumption
+      needs a quota to exist.
+
+coverage:
+  positive: [token-issue, correlation-id-present, seed-known-pattern, per-app-attribution]
+  negative: [identity-enforced]
+  boundary: [path-templating, latency-profile-separation]
+  failure:  [correlation-end-to-end]
+  note: >-
+    There is no gateway-failure case here, and that is deliberate: analytics runs in the
+    log phase and does not gate traffic, so it has no failure mode that affects a
+    request. Its failures are epistemic — the data is captured faithfully and cannot
+    answer you. Cases path-templating and correlation-end-to-end are those failures.

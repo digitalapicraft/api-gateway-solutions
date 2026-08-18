@@ -1,0 +1,10 @@
+### Case: identity-enforced — no Authorization header.
+### Expect 401.
+###
+### This is the most consequential check in the package. A 200 here does not break
+### the API — it silently makes per-app analytics impossible for this route,
+### permanently, for all data captured while it stays that way. Every row will
+### attribute to a source IP, and partners share NAT gateways, run in clouds, and
+### rotate egress addresses.
+GET {{GATEWAY}}/orders
+accept: application/json

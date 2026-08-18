@@ -1,0 +1,8 @@
+{
+  "_case": "empty-result-envelope",
+  "_status": 200,
+  "_content_type": "application/json",
+  "_note": "A legitimate no-results response. The point of this case is to distinguish 'no data' from 'the transform broke' — both can look like an empty body from a client. Valid, parseable, empty JSON is the correct outcome, not an error.",
+  "_watch_for": "An empty result is MORE often a request whose field names didn't match the elements the handler reads than a genuinely empty dataset. verify.sh warns rather than fails here for exactly that reason. Check what XML your JSON is producing before concluding there's no data.",
+  "_body_example": { "Locations": {} }
+}

@@ -1,0 +1,8 @@
+### Case: unauthenticated — no Authorization header.
+### Expect 401, in the access phase. The body is NOT transformed and the SOAP
+### handler is NOT contacted. If your SOAP system logs requests, this case should
+### leave no trace in it.
+POST {{GATEWAY}}/locations
+content-type: application/json
+
+{}

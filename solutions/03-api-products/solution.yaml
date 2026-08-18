@@ -1,0 +1,165 @@
+# Solution manifest — the traceability spine for this package.
+# Every artifact below corresponds to this one solution version. If the gateway
+# config changes, bump `version` and re-derive the docs and infographic from it
+# — never the other way round.
+
+solution:
+  name: "API Products: sell tiers you can actually enforce"
+  slug: 03-api-products
+  version: 1.0.0
+  category:
+    - API Products & Monetization
+    - Traffic Management
+  tags: [api-products, quota, rate-limiting, multi-tenant, noisy-neighbour, 429, monetization]
+
+problem:
+  statement: >-
+    API teams need per-caller throughput limits tied to what a customer bought,
+    because one misbehaving integration can exhaust capacity provisioned for
+    everyone and because plan tiers sold as "higher throughput" have no technical
+    enforcement, without over-provisioning for an unbounded worst case.
+
+business_need:
+  summary: >-
+    Bound the blast radius of a bad integration to the app responsible rather than
+    to every consumer; make sold tiers a real enforced difference so a ceiling
+    becomes an upgrade trigger; and change the basis of capacity planning from the
+    worst caller's hypothetical peak to the sum of committed quotas. Per-app
+    attribution also makes incident triage and chargeback possible.
+
+implementation:
+  gateway_capabilities:
+    - helix-auth (validate / key-auth)      # identity — resolves the app AND its product subscriptions
+    - api-product-enforcer                  # enforces the resolved product's quota, counted per app
+    - API Products                          # the tier + quota — the thing you sell (gateway/products.json)
+    - request-id                            # a disputed 429 needs something to search on
+    - cors                                  # browser access
+    - limit-count (route-scoped, per-IP)    # second, independent layer on POST /orders/search only
+  custom_code_required: false
+  notes: >-
+    Quota lives on the PRODUCT and is counted PER APP (the credential) by default.
+    Not per IP, not per developer, and never on consumer_name — that is the generic
+    gateway reflex and it meters the wrong thing here. quota_key_scope: developer
+    pools a developer's apps, which is a real trade-off rather than a tidier
+    default: pooling lets one of their apps starve their own production traffic.
+    Only the TOP-RANKED subscribed product covering the route's service_id is
+    evaluated, and there is NO fallback into a second product when its window is
+    spent. Rank is a routing decision, not a chain of budgets.
+    quota_policy (local vs redis) and the Redis connection are NOT on the route —
+    api-product-enforcer accepts only error_policy and ctx_namespace. They live in
+    plugin_attr.api-product-enforcer in the gateway's config.yaml. On more than one
+    node it MUST be redis, or each node counts separately and an N-node cluster
+    serves roughly N times the quota you sold. This is invisible from the route
+    config and is the most common way the solution fails to deliver its promise.
+    Note the inconsistency: limit-count DOES take policy and redis_host on the
+    route. That difference is what leads people to add Redis settings to the
+    enforcer, where they are rejected.
+    The per-IP limit-count on the search route requires real-ip in front if the
+    gateway sits behind a proxy, or every caller shares the balancer's address and
+    the ceiling becomes a global cap on that endpoint.
+
+validation:
+  # No gateway connector was available in the session that produced this public
+  # package, so no dry-run, deployment or functional test was performed FOR THIS
+  # ARTIFACT. See prior_art for what an earlier internal build established, and
+  # validation/gateway-validation.yaml for the full record.
+  local:
+    status: PASS
+    basis: >-
+      structural review of api-spec.yaml and products.json (valid JSON, every product
+      carries a quota object), plus verify.sh syntax-checked under bash and its
+      same-key guardrail and unreachable-host paths actually executed.
+    verified_this_session: true
+  gateway_dry_run:
+    status: NOT_RUN
+    verified_this_session: false
+    reason: no gateway connector available in the session that produced this package
+  deployment:
+    status: NOT_RUN
+    environment: null
+  functional_test:
+    status: NOT_RUN
+    verified_this_session: false
+    executor: gateway/verify.sh
+    reason: >-
+      written and reviewed; its argument handling and failure paths were exercised
+      locally, but no case has been run against a gateway from this package
+
+prior_art:
+  # Recorded so the reader knows which parts have run somewhere and which have not.
+  # This is provenance, NOT a validation status for this package.
+  status: PASS
+  scope: >-
+    An equivalent helix-auth (validate/key-auth) + api-product-enforcer
+    configuration, with four tiered products and a route-scoped per-IP limit-count,
+    was generated, dry-run and functionally tested against a live gateway in an
+    earlier internal build. The functional proof included the isolation case: a Free
+    app returning 429 after its window was spent while a second app on a different
+    product continued to receive 200s at that same moment.
+  not_established: >-
+    This repackaged spec — placeholder-parameterised, with the products carrying
+    <API_ID> placeholders, an added request-id block and a fourth route — has not
+    itself been dry-run or deployed. verify.sh as written here has never been executed
+    end to end against a gateway; its unreachable-host and same-key guardrails were
+    exercised locally, which establishes only that the script behaves, not that the
+    gateway does.
+  provenance: >-
+    Earlier internal build against a live non-production gateway. Host, organisation,
+    API, product, developer and app identifiers deliberately withheld from this
+    public package.
+  verified_this_session: false
+
+artifacts:
+  documentation: [README.md, architecture.md, business-need.md]
+  source_code: [gateway/api-spec.yaml, gateway/products.json, gateway/verify.sh]
+  agent_prompt: helix-agent-prompt.md
+  blog: blog.md
+  infographic: [infographic.md]
+  tests: [tests/test-plan.yaml, tests/requests/, tests/expected/]
+  validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
+
+assumptions:
+  - API name is "Orders API" and the metered paths are /orders* (illustrative — replace with yours).
+  - Measured upstream ceiling is ~3,000 req/min (illustrative — replace with yours, and
+    check it against the SUM of the quotas you have actually sold).
+  - Tier limits (Free 60, Pro 1000, Enterprise 10000, Internal -1 per minute) are
+    illustrative defaults. Free must be unusable for production or nobody upgrades;
+    Enterprise must match a contractual number rather than being scaled from Pro.
+  - A per-minute window is assumed. It ABSORBS bursts; a per-second window SHAPES
+    them. Requests-per-day windows are the worst of both.
+  - The route has a service_id. Without one the enforcer returns 403 regardless of
+    subscription, and nothing in the plugin config hints at it.
+  - Static API keys are the identity mechanism. For proof of possession, compose with
+    solution 01 (client-credentials JWTs) and keep the enforcer behind the auth block.
+  - The gateway is assumed single-node unless quota_policy is set to redis in
+    plugin_attr. On more than one node, redis is mandatory.
+  - real-ip is present in front of the gateway if it sits behind a proxy, for the
+    per-IP limiter on the search route to be meaningful.
+
+limitations:
+  - api-product-enforcer emits no X-RateLimit-* headers and no Retry-After. A client
+    cannot read its remaining quota from a response. The retry contract must live in
+    developer docs and must specify backoff WITH JITTER — without jitter every client
+    retries at the same instant at the top of each window, which is a scheduled
+    thundering herd. Remaining quota comes from the portal/analytics, not headers.
+  - One product is evaluated per request (the top-ranked one covering the route). There
+    is no fallback into a second subscribed product when the first is spent.
+  - Quota is per app (the credential) by default. Two keys on the same app share one
+    bucket, which is the most common false alarm when testing isolation.
+  - Multi-node correctness depends on quota_policy being set to redis in plugin_attr, which is
+    invisible from this route config. Default `local` counts per node.
+  - The quota is a request COUNT, not a cost. A cheap read and a 30-second report each
+    consume one unit. Split into per-endpoint-group products if cost varies widely.
+  - Not burst shaping. A caller can spend a full window's budget in the first seconds
+    of it unless the window is short.
+  - No per-end-user metering. The unit is the app; the platform has no notion of your
+    application's users.
+  - error_policy is a commercial decision disguised as a config field. fail_close
+    (default) returns 503 during a quota-backend outage, protecting metering accuracy
+    at the cost of availability. fail_open serves unmetered traffic you cannot account
+    for, and you may not notice it happened.
+  - A product with no quota object returns 403, NOT unlimited. Unlimited is limit: -1.
+  - It does not prevent overselling. It makes overselling visible as 429s rather than
+    as an outage, which is a better failure but still a failure.
+
+status: UNVALIDATED   # generated + locally reviewed; the enforcement model incl. the isolation case was proven in a prior internal build, this artifact not gateway-confirmed

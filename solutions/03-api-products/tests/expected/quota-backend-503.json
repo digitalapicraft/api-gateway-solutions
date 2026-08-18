@@ -1,0 +1,7 @@
+{
+  "_case": "quota-backend-unreachable",
+  "_status": 503,
+  "_note": "error_policy fail_close (the default) means the gateway refuses rather than serving traffic it cannot meter. Assert the status class; the exact body is build-dependent.",
+  "_the_choice": "fail_close protects the accuracy of your metering at the cost of availability during a backend incident. fail_open protects availability by serving unmetered traffic you cannot account for — and you may not notice it happened. Both are defensible. This is a commercial decision disguised as a config field, so make sure whoever owns the revenue line knows which one is live.",
+  "_where_to_look": "plugin_attr.api-product-enforcer in the gateway's config.yaml — NOT the route. The enforcer accepts only error_policy and ctx_namespace."
+}

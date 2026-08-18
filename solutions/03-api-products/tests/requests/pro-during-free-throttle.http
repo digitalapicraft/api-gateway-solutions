@@ -1,0 +1,14 @@
+### Case: isolation — THE CASE THAT MATTERS.
+###
+### Send this at the same moment the Free app is returning 429. A DIFFERENT app,
+### subscribed to a DIFFERENT product, must still get 200.
+###
+### {{PRO_KEY}} MUST belong to a separate app from {{FREE_KEY}}. Quota is counted
+### per app (the credential), so two keys on one app share a bucket and correct
+### isolation will look broken. verify.sh refuses to run if the keys are identical.
+###
+### Expect 200. Cases 1-4 prove a limit exists; only this one proves the blast
+### radius is a single app, which is the entire business case.
+GET {{GATEWAY}}/orders
+apikey: {{PRO_KEY}}
+accept: application/json

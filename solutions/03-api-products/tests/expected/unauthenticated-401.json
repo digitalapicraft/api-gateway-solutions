@@ -1,0 +1,7 @@
+{
+  "_case": "unauthenticated / unknown-key",
+  "_status": 401,
+  "_note": "helix-auth validate rejects before api-product-enforcer runs, so an unauthenticated request consumes no quota. The response body is whatever your gateway build emits for an auth rejection — assert the STATUS, not this shape.",
+  "_headers_present": ["X-Request-Id"],
+  "_distinguish": "401 = the gateway does not know who you are. 403 = it knows, but no product covers this route (or the route has no service_id). 429 = it knows, it found your product, and your window is spent. These look similar in a dashboard and mean entirely different things."
+}

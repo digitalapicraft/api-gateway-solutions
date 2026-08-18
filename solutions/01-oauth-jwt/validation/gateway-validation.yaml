@@ -1,0 +1,93 @@
+# Gateway validation — what a real gateway established about THIS package.
+#
+# For this package: nothing. No gateway connector was available in the session
+# that produced it, so no dry-run, no deployment and no functional test was
+# performed. That is recorded plainly below rather than softened.
+#
+# `prior_art` records what an earlier internal build did establish about the same
+# auth mechanism. It is PROVENANCE, not a validation status for this artifact —
+# the two are kept in separate blocks precisely so they cannot be confused.
+
+gateway_validation:
+  solution: 01-oauth-jwt
+  version: 1.0.0
+
+  target: null
+  host: null
+  environment: null
+
+  dry_run:
+    status: NOT_RUN
+    reason: no gateway connector available in the session that produced this public package
+    detail: >-
+      The configuration in gateway/api-spec.yaml has been structurally reviewed
+      (see local-validation.yaml) and nothing more. A structural review cannot
+      establish that a gateway accepts a configuration, that the plugin schemas
+      match this build, or that the environment variable resolves.
+
+  deployment:
+    status: NOT_RUN
+    environment: null
+
+  functional_tests:
+    executor: gateway/verify.sh
+    status: NOT_RUN
+    detail: >-
+      verify.sh is written and reviewed. Its six assertions are documented in
+      tests/test-plan.yaml. None of them has been executed against a gateway from
+      this package, so no case has a result.
+    cases:
+      - { id: unauthenticated,         expected_status: 401, result: NOT_RUN }
+      - { id: token-issue,             expected_status: 200, result: NOT_RUN }
+      - { id: valid-token,             expected_status: 200, result: NOT_RUN }
+      - { id: forged-token,            expected_status: 401, result: NOT_RUN }
+      - { id: wrong-secret,            expected_status: 401, result: NOT_RUN }
+      - { id: malformed-authorization, expected_status: 401, result: NOT_RUN }
+
+  cleanup:
+    status: NOT_REQUIRED   # nothing was provisioned
+
+  overall: UNVALIDATED
+
+# ---------------------------------------------------------------------------
+# Provenance only. NOT a validation status for this package.
+# ---------------------------------------------------------------------------
+prior_art:
+  status: PASS
+  what_ran: >-
+    In an earlier internal build, Helix Agent Mode generated, dry-ran and deployed
+    a configuration containing the same helix-auth pair this package uses: a token
+    endpoint in generate mode issuing a signed JWT, and a protected route in
+    validate mode with validate_auth_type jwt-auth sharing the signing secret.
+    Two revisions were deployed to a non-production test environment and live calls
+    to both the token endpoint and the protected route were observed and captured
+    by analytics.
+  what_this_supports:
+    - The generate + validate pairing is a configuration a real gateway accepts.
+    - The token endpoint issues a token; the protected route rejects callers without one.
+  what_this_does_NOT_support:
+    - That THIS spec dry-runs cleanly. It is a different document — standalone rather
+      than layered on a SOAP mediation, token_ttl 900 rather than the platform
+      default, validate scoped per route, plus a cors block and a third protected route.
+    - Any result for verify.sh, which has never been executed end to end anywhere.
+    - That helix-auth in YOUR org exposes these fields.
+  provenance: >-
+    Earlier internal Agent Mode build against a non-production test environment.
+    Host, organisation, API, developer and app identifiers are deliberately
+    withheld from this public package.
+  verified_this_session: false
+
+# ---------------------------------------------------------------------------
+what_you_should_do:
+  - Confirm helix-auth exists in your org and check its schema with get_plugin_config.
+  - Set JWT_SIGNING_SECRET on the target environment BEFORE deploying. A spec
+    referencing a secret that does not exist deploys cleanly and fails at request time.
+  - Import the spec, bind your upstream, then run validate_route and dry_run_deploy.
+    Do not let the first gateway interaction be a deploy.
+  - Deploy to a non-production environment and run gateway/verify.sh. Exit 0 is the
+    point at which "Functional test passed" becomes true for you.
+  - Run the manual expiry case (tests/test-plan.yaml, id expired-token) at least once
+    per environment. The TTL is the only bound on a leaked token, so an unenforced
+    exp would silently remove the security benefit.
+  - Record your own results here, with your own provenance, before publishing or
+    demoing this solution internally.

@@ -1,0 +1,5 @@
+{
+  "_case": "invalid-token",
+  "_status": 401,
+  "_note": "A JWT with a valid three-segment shape but a signature this gateway did not produce. Rejected in the access phase, so no transform ran and the SOAP handler was not contacted. Assert the status only — all four caller-side auth failures are indistinguishable by design."
+}

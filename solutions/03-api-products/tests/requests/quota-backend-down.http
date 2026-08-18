@@ -1,0 +1,11 @@
+### Case: quota-backend-unreachable — manual, controlled environments only.
+###
+### With the quota backend unreachable and error_policy fail_close (the default),
+### expect 503: the gateway refuses rather than silently serving unmetered traffic.
+###
+### Then flip error_policy to fail_open and repeat — the call should succeed,
+### unmetered. Run both halves once, deliberately. Which one you want is a
+### commercial decision, not a default to inherit.
+GET {{GATEWAY}}/orders
+apikey: {{FREE_KEY}}
+accept: application/json

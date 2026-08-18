@@ -1,0 +1,8 @@
+{
+  "_case": "identity-enforced",
+  "_status": 401,
+  "_note": "The response body is whatever your gateway build emits for an auth rejection — assert the STATUS, not this shape.",
+  "_headers_present": ["X-Request-Id"],
+  "_why_this_case_matters_most": "A 200 here would not break the API. It would silently make per-app analytics impossible for this route, for every request captured while it stays that way — and no later query recovers identity the gateway never resolved. Of all the checks in this package, this is the one whose failure is both invisible and permanent.",
+  "_in_analytics": "This request appears in analytics with NO app attribution, because identity never resolved. Expect it in an unidentified bucket. That is correct, not a gap — see tests/test-plan.yaml case per-app-attribution."
+}

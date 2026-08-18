@@ -1,0 +1,112 @@
+# Local (pre-gateway) validation — a structural review of the importable artifacts,
+# plus the parts of verify.sh that can honestly be exercised without a gateway. It
+# does not, and cannot, establish gateway behaviour or anything about analytics.
+
+local_validation:
+  solution: 04-analytics
+  version: 1.0.0
+  status: PASS
+
+  checks:
+    syntax:                  PASS   # api-spec.yaml parses as valid OpenAPI 3.0.3; verify.sh parses under bash
+    schema:                  PASS   # helix-auth, request-id, cors — all fields drawn from confirmed usage, none invented
+    no_analytics_plugin:     PASS   # CONFIRMED: there is no helix-analytics block anywhere in api-spec.yaml. Analytics is global; adding one is the mistake this package exists to prevent. The name appears only in explanatory YAML comments.
+    identity_coverage:       PASS   # helix-auth validate is present on every non-token route (/orders GET+POST, /orders/{orderId}, /orders/report). The token endpoint is deliberately unprotected — a caller there has no token yet.
+    path_templating:         PASS   # /orders/{orderId} is declared as a path parameter, not a literal. This is the modelling decision that determines whether a per-route breakdown is one row or one row per entity.
+    correlation_id:          PASS   # request-id applied API-wide with header_name X-Request-Id
+    latency_profile_split:   PASS   # POST /orders/report is a separate route from the fast reads, so a 30-second report is not blended into a 40ms lookup's distribution
+    required_fields:         PASS   # generate route carries token_ttl + signing_secret; every validate route carries validate_auth_type + signing_secret
+    references:              PASS   # token route and all validate routes reference the identical <ENV:JWT_SIGNING_SECRET>
+    plugin_ordering:         PASS   # helix-auth (access) -> request-id (rewrite) -> upstream -> analytics (log, global). Analytics runs last and records what earlier phases established; it cannot enrich a row with what was never resolved.
+    plugin_scoping:          PASS   # validate is per-route, NOT at the document root, so POST /oauth/token stays reachable without a token
+    auth_authz_dependencies: PASS   # nothing reads context helix-auth has not yet produced
+    request_response:        PASS   # documented 200/201/202/401/404/504 responses match the design
+    security:                PASS   # no literal secrets; signing_secret is <ENV:JWT_SIGNING_SECRET>; app credentials provisioned on the credential by the control plane
+    no_commentary_keys:      PASS   # plugin blocks contain schema fields only; all explanation is in YAML comments
+    tests_match_impl:        PASS   # the four automated verify.sh cases map to routes and plugins present in the spec; the five manual cases are flagged as manual in tests/test-plan.yaml, not folded into an exit code
+    placeholders:            PASS   # <YOUR_GATEWAY_HOST>, <ORG_ID>, <CLIENT_ID>, <CLIENT_SECRET>, <ENV:JWT_SIGNING_SECRET> — no real hosts, org ids or personas
+    charts_catalogue:        PASS   # charts.md phrases every query for the agent rather than hardcoding field names, which is correct given field names vary by build
+
+  executed_locally:
+    - description: verify.sh parsed with `bash -n`
+      result: PASS
+    - description: >-
+        verify.sh run with no environment variables set — confirms the required-variable
+        guards fire with usable guidance and a non-zero exit rather than proceeding
+      result: PASS
+    - description: >-
+        verify.sh run against an unreachable host — confirms it reports "could not reach
+        the gateway" rather than misattributing a connection failure to a missing plugin
+      result: PASS
+    - description: >-
+        api-spec.yaml grepped for helix-analytics — confirms the name appears only inside
+        comments and never as a plugin block
+      result: PASS
+    - description: all tests/expected/*.json parsed as JSON
+      result: PASS
+
+  executed_locally_note: >-
+    These establish that the SCRIPT behaves and the ARTIFACTS parse. They establish
+    nothing about the gateway, and nothing whatsoever about analytics. No case in
+    tests/test-plan.yaml has been executed.
+
+  warnings:
+    - >-
+      THE CENTRAL CLAIMS OF THIS PACKAGE CANNOT BE VALIDATED LOCALLY, and in one case
+      cannot be validated by a script at all. Whether identity resolution produces
+      per-app attribution, and whether templated paths aggregate into one row, are
+      answerable only by making real calls and then looking at the result. This is a
+      property of analytics being capture-then-query, not a gap in these tests.
+    - >-
+      Two of the three enabling decisions are UNRECOVERABLE for data already captured.
+      Traffic captured without resolved identity stays unattributable; literal paths stay
+      one-row-per-entity. Fixing the spec fixes future data immediately with no
+      migration, but nothing repairs what came before. Reviewers should treat this as the
+      reason the package exists rather than as a footnote.
+    - >-
+      The premise of the whole package is that analytics is enabled globally on the
+      target platform. Nothing in this document can confirm that for a given org. If it
+      is not enabled globally, the package needs revisiting rather than adjusting.
+    - >-
+      X-Request-Id being present at the gateway is half a feature. The value comes from
+      the BACKEND logging the same forwarded id, which is a conversation with your teams
+      rather than a configuration change, and is routinely skipped.
+    - >-
+      Analytics field names and exact query syntax vary by build. charts.md deliberately
+      phrases queries for the agent, which knows the org's schema. A reader who hardcodes
+      field names from this package will get empty results.
+    - >-
+      Retention is a platform setting and bounds which questions are answerable at all.
+      charts.md asks for windows up to 30 days and week-on-week comparisons; confirm
+      retention covers them before building a report that silently truncates.
+    - >-
+      Charts 5-7 in charts.md require solution 03 (api-product-enforcer and products with
+      quotas). They are labelled as such, but a reader without solution 03 will find
+      three of twelve charts inapplicable.
+    - >-
+      cors.allow_origins is "*" with allow_credential false, which is right for a public
+      partner API and wrong for anything carrying browser session state.
+    - >-
+      The upstream is bound on the service at import/bind time, not expressed in the
+      OpenAPI paths. Nothing here can confirm it is reachable.
+
+  assumptions:
+    - API "Orders API" with /orders, /orders/{orderId}, /orders/report and a token endpoint. Illustrative.
+    - Analytics is enabled globally on the target platform via helix-analytics.
+    - The gateway is the token issuer (solution 01). Any identity mechanism works so long
+      as identity IS resolved — that is the requirement, not the specific flow.
+    - JWT_SIGNING_SECRET exists on the target environment before the revision is deployed.
+    - Retention covers the windows charts.md asks for.
+
+  not_established_here:
+    - Whether a gateway accepts this configuration (that is a dry-run).
+    - Whether analytics is in fact enabled globally in your org.
+    - Whether captured rows attribute to an app — the package's central claim.
+    - Whether /orders/{orderId} aggregates as one row — the check that matters most, and
+      the one whose failure is unrecoverable.
+    - Whether X-Request-Id correlates end to end into a backend's own logs.
+    - Whether any of the twelve queries in charts.md returns a usable answer in your build.
+    - Any request/response behaviour whatsoever.
+
+  performed_by: helix-solution-builder
+  verified_this_session: true

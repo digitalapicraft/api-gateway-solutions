@@ -1,0 +1,7 @@
+{
+  "_case": "unauthenticated / malformed-authorization",
+  "_status": 401,
+  "_note": "helix-auth validate rejects in the access phase. The upstream is never contacted, so nothing appears in your backend logs. The response body is whatever your gateway build emits for an auth rejection — assert the STATUS, not this shape. All four caller-side failure causes (no header, no Bearer prefix, expired, bad signature) return an indistinguishable 401 by design.",
+  "_headers_present": ["X-Request-Id"],
+  "_headers_absent": ["WWW-Authenticate is build-dependent — do not assume it is present"]
+}

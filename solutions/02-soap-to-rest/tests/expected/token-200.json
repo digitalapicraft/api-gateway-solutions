@@ -1,0 +1,8 @@
+{
+  "_case": "token-issue",
+  "_status": 200,
+  "_note": "Shape of a successful client-credentials exchange. access_token must be a three-segment JWT. expires_in must match the configured token_ttl.",
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.<payload>.<signature>",
+  "token_type": "Bearer",
+  "expires_in": 900
+}

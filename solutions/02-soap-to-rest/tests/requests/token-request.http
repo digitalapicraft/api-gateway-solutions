@@ -1,0 +1,12 @@
+### Case: token-issue — exchange client credentials for a signed JWT.
+### The client id is the app's credential KEY; the secret is its SECRET.
+### Expect 200 with access_token / token_type / expires_in.
+### See solution 01 for the full treatment of this flow.
+POST {{GATEWAY}}/oauth/token
+authorization: Basic {{BASE64(CLIENT_ID:CLIENT_SECRET)}}
+content-type: application/json
+
+### curl equivalent:
+###   curl -i -X POST {{GATEWAY}}/oauth/token \
+###     -u '{{CLIENT_ID}}:{{CLIENT_SECRET}}' \
+###     -H 'content-type: application/json'

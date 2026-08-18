@@ -1,0 +1,10 @@
+{
+  "_case": "upstream-failure",
+  "_status": 502,
+  "_note": "The SOAP handler was unreachable or errored. The important property is that the gateway surfaces a 5xx rather than a malformed 200 — a partner must never receive a success status carrying a failure. Assert the status class, not the body; the exact payload is build-dependent.",
+  "_related_statuses": {
+    "504": "The handler was reached but answered too slowly. Legacy handlers built for batch use often do — check the route timeout before concluding the upstream is down.",
+    "415": "The handler rejected the content type. Confirm proxy-rewrite sets text/xml; SOAP 1.2 handlers want application/soap+xml.",
+    "500": "The handler errored. Suspect double conversion (a json-to-xml added alongside the bidirectional xml-to-json), a missing SOAPAction header, or request field names that don't match the elements it reads."
+  }
+}

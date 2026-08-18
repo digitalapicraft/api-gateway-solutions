@@ -1,0 +1,135 @@
+# Gateway validation — what a real gateway established about THIS package.
+#
+# For this package: nothing. No gateway connector was available in the session
+# that produced it, so no dry-run, no deployment and no functional test was
+# performed. That is recorded plainly below rather than softened.
+#
+# `prior_art` records what an earlier internal build established about the same
+# enforcement model. It is PROVENANCE, not a validation status for this artifact —
+# the two are kept in separate blocks precisely so they cannot be confused.
+
+gateway_validation:
+  solution: 03-api-products
+  version: 1.0.0
+
+  target: null
+  host: null
+  environment: null
+  products_deployed: []
+
+  dry_run:
+    status: NOT_RUN
+    reason: no gateway connector available in the session that produced this public package
+    detail: >-
+      The configuration in gateway/api-spec.yaml and gateway/products.json has been
+      structurally reviewed (see local-validation.yaml) and nothing more. A structural
+      review cannot establish that a gateway accepts this configuration, that the
+      route has a service_id, that the plugins exist in a given org, or whether the
+      quota is counted globally or per node.
+
+  deployment:
+    status: NOT_RUN
+    environment: null
+
+  functional_tests:
+    executor: gateway/verify.sh
+    status: NOT_RUN
+    detail: >-
+      verify.sh is written and reviewed, and its argument handling and failure paths
+      were exercised locally (see local-validation.yaml, executed_locally). No case has
+      been run against a gateway from this package. Case 5 in particular — that a
+      second app on a different product still succeeds while the first is throttled —
+      is the assertion this whole solution exists to make, and it has not been made
+      here.
+    cases:
+      - { id: unauthenticated,  expected_status: 401, result: NOT_RUN }
+      - { id: unknown-key,      expected_status: 401, result: NOT_RUN }
+      - { id: valid-free-call,  expected_status: 200, result: NOT_RUN }
+      - { id: quota-exhausted,  expected_status: 429, result: NOT_RUN }
+      - { id: isolation,        expected_status: 200, result: NOT_RUN, note: "the case that matters — proves the blast radius is one app" }
+
+  enforcement_behaviour:
+    # Called out separately because it is the behavioural heart of the solution and
+    # the thing a reader most needs to know is unconfirmed.
+    status: NOT_ESTABLISHED
+    unknowns:
+      - Whether the quota is enforced at all in your org.
+      - At what count 429 arrives, and whether that matches the configured limit.
+      - Whether the count is global or per gateway node — invisible from the route config,
+        and the most common way the promise silently fails.
+      - Whether isolation holds between two apps on different products.
+      - Whether the 429 body is {"error":"quota exceeded"} in your build.
+      - Whether Retry-After and X-RateLimit-* really are absent, as documented.
+      - Whether the per-IP limiter on the search route throttles per source or globally,
+        which depends on real-ip and your topology.
+    note: >-
+      Every one of these is answerable only by live calls, and the multi-node one needs
+      traffic through a load balancer. The manual cases in tests/test-plan.yaml exist
+      for exactly this reason.
+
+  cleanup:
+    status: NOT_REQUIRED   # nothing was provisioned
+
+  overall: UNVALIDATED
+
+# ---------------------------------------------------------------------------
+# Provenance only. NOT a validation status for this package.
+# ---------------------------------------------------------------------------
+prior_art:
+  status: PASS
+  what_ran: >-
+    In an earlier internal build, an equivalent configuration — helix-auth
+    (validate/key-auth) plus api-product-enforcer with error_policy fail_close, four
+    tiered products, and a route-scoped per-IP limit-count — was generated, dry-run and
+    functionally tested against a live non-production gateway. The functional proof
+    included the isolation case: a Free app returning 429 with {"error":"quota
+    exceeded"} once its window was spent, while a second app subscribed to a different
+    product continued to receive 200s at that same moment.
+  what_this_supports:
+    - The helix-auth + api-product-enforcer pairing is a configuration a real gateway accepts.
+    - Quota is enforced, and enforced per app — the isolation property held in that build.
+    - The 429 body is {"error":"quota exceeded"} and carries no Retry-After or
+      X-RateLimit-* headers.
+    - A product with no quota object returns 403 rather than meaning unlimited.
+    - api-product-enforcer accepts only error_policy and ctx_namespace; Redis settings on
+      the route are rejected.
+  what_this_does_NOT_support:
+    - That THIS spec dry-runs cleanly. It is a different document — placeholder
+      parameterised, products carrying <API_ID> placeholders, an added request-id block,
+      and a fourth route.
+    - Any result for verify.sh as written here, which has never been executed end to end
+      against a gateway. Its guardrails were exercised locally, which establishes that
+      the script behaves, not that the gateway does.
+    - Multi-node counting behaviour. The prior build does not establish what happens on
+      your cluster; that depends entirely on quota_policy in your plugin_attr.
+    - That these plugins exist in YOUR org, or that your route has a service_id.
+  provenance: >-
+    Earlier internal build against a live non-production gateway. Host, organisation,
+    API, product, developer and app identifiers deliberately withheld from this public
+    package.
+  verified_this_session: false
+
+# ---------------------------------------------------------------------------
+what_you_should_do:
+  - Confirm helix-auth and api-product-enforcer exist in your org, with get_plugin_config.
+  - Confirm the route has a service_id. Without one the enforcer returns 403 regardless
+    of subscription, and the error looks like a missing subscription.
+  - Set your own tier numbers. Free must be unusable for production; Enterprise must match
+    a contract. Then ADD UP the quotas across the tiers you have actually sold and compare
+    with what your upstream can take.
+  - If the gateway runs more than one node, set quota_policy to redis in
+    plugin_attr.api-product-enforcer in the gateway's config.yaml — not on the route.
+    Then run the multi-node counting case in tests/test-plan.yaml, because a
+    correctly-configured route can still serve N times the quota you sold.
+  - Create products AND deploy them to the environment. Creating them is not enough.
+  - Create TWO apps on different products. One app cannot prove isolation.
+  - Run validate_route and dry_run_deploy. Do not let the first gateway interaction be a
+    deploy.
+  - Run gateway/verify.sh and treat case 5 as the gate. Cases 1-4 only prove a limit
+    exists; any limiter does that.
+  - Decide error_policy deliberately, and run the fail_close/fail_open case once so you
+    have seen both behaviours.
+  - If you use the per-IP limiter, verify from two different source addresses. If
+    throttling one throttles the other, real-ip is missing.
+  - Record your own results here, with your own provenance, before publishing or demoing
+    this solution.

@@ -1,0 +1,5 @@
+### Case: unauthenticated — no apikey header at all.
+### Expect 401. helix-auth rejects before api-product-enforcer runs, so no quota
+### unit is consumed by an unauthenticated request.
+GET {{GATEWAY}}/orders
+accept: application/json

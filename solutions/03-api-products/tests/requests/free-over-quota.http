@@ -1,0 +1,17 @@
+### Case: quota-exhausted — the same Free app, after its window is spent.
+###
+### Send this {{FREE_LIMIT}}+1 times within one window. Expect 200 up to the limit,
+### then 429 with {"error":"quota exceeded"}.
+###
+### Assert the ABSENT headers too: no Retry-After, no X-RateLimit-*. Their absence
+### is part of the contract, so a future platform change that adds them should be
+### noticed deliberately rather than silently.
+GET {{GATEWAY}}/orders
+apikey: {{FREE_KEY}}
+accept: application/json
+
+### curl loop:
+###   for i in $(seq 1 $(({{FREE_LIMIT}} + 5))); do
+###     printf '%s ' "$(curl -s -o /dev/null -w '%{http_code}' \
+###       {{GATEWAY}}/orders -H 'apikey: {{FREE_KEY}}')"
+###   done; echo

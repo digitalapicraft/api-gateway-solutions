@@ -1,0 +1,180 @@
+# Solution 02 — Expose a SOAP/XML backend as a REST/JSON API.
+#
+# This is the importable artifact: an OpenAPI 3.0.3 document carrying
+# x-helix-gateway.plugins. Import it (OpenAPI import, or paste the agent prompt
+# into Agent Mode), bind your SOAP upstream, then deploy the revision.
+#
+# WHAT THIS DOES
+#   A partner sends JSON to POST /locations. The gateway converts that body to
+#   XML, retargets the path to the SOAP handler, and converts the XML response
+#   back to JSON on the way out. The SOAP service is not modified and does not
+#   know a REST client exists.
+#
+#   Authentication is included because a mediated legacy API is almost always
+#   also a newly-exposed one — see solution 01 for the full treatment of the
+#   token flow. Remove the helix-auth blocks if this API is internal-only.
+#
+# THE TRANSFORM IS ONE BIDIRECTIONAL PLUGIN.
+#   xml-to-json handles BOTH directions: JSON request body -> XML for the SOAP
+#   handler, and XML response -> JSON for the client. You do NOT add a separate
+#   json-to-xml plugin. Adding one is the most common way this is built wrong:
+#   the body gets converted twice and the SOAP handler receives nonsense.
+#
+# EXECUTION IS PRIORITY/PHASE-ORDERED, NOT DOCUMENT-ORDERED. On /locations:
+#   helix-auth (validate)  access phase  — reject before any transform work
+#   proxy-rewrite          rewrite phase — retarget the upstream path, set the
+#                                          content type the SOAP handler expects
+#   xml-to-json            request + response — the bidirectional conversion
+#
+# The ordering that matters: authentication runs BEFORE the transform, so an
+# unauthenticated request costs nothing. If you find yourself transforming a
+# body you're about to reject, the plugins are on the wrong route.
+#
+# PLUGIN SCHEMA WARNING
+#   xml-to-json's exact fields vary by build. It is left as a default (empty)
+#   block here rather than inventing unsupported fields. Confirm with
+#   get_plugin_config in YOUR org and set fields there. An empty block takes the
+#   plugin's defaults, which is correct for a simple element-to-object mapping
+#   and may not be for namespaced or attribute-heavy envelopes.
+#
+# UPSTREAM is bound on the service at import/bind time, NOT in the OpenAPI
+# paths. Replace <SOAP_UPSTREAM_URL> wherever your control plane asks for it.
+#
+# SECRETS NEVER APPEAR IN A SPEC. signing_secret is an <ENV:...> reference; the
+# app's client_id/client_secret are provisioned on the credential by the control
+# plane.
+
+openapi: 3.0.3
+
+info:
+  title: Partner Locations API
+  version: 1.0.0
+  description: >-
+    Partner-facing location lookup. A SOAP/XML system of record is exposed as a
+    REST/JSON endpoint at the edge: the gateway converts the request body to XML,
+    calls the SOAP handler, and converts the response back to JSON. The backend
+    service is unchanged. Access requires an OAuth 2.0 access token from
+    POST /oauth/token.
+
+paths:
+  /oauth/token:
+    post:
+      summary: Issue an OAuth 2.0 access token (client credentials grant)
+      description: >-
+        Exchange an app's client credentials for a short-lived JWT. Send
+        `Authorization: Basic base64(client_id:client_secret)`. Deliberately not
+        behind validation — a caller here has no token yet. See solution 01.
+      responses:
+        '200':
+          description: Access token issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token: { type: string }
+                  token_type:   { type: string, example: Bearer }
+                  expires_in:   { type: integer }
+        '401': { description: Unknown client_id, or client_secret does not match }
+      x-helix-gateway:
+        plugins:
+          # The gateway is the issuer, so this is helix-auth generate — not
+          # jwt-auth, which validates an EXTERNAL issuer's tokens. Solution 01
+          # covers the distinction and the failure modes in full.
+          helix-auth:
+            mode: generate
+            token_ttl: 900
+            signing_secret: "<ENV:JWT_SIGNING_SECRET>"
+
+  /locations:
+    post:
+      summary: Look up partner locations (JSON in, JSON out)
+      description: >-
+        Accepts a JSON body, proxies to the SOAP handler at
+        `/GetData.ashx` as XML, and returns the upstream's XML response
+        transformed to JSON. Requires a valid Bearer token from POST /oauth/token.
+
+        A partner integrating against this endpoint never sees XML, never
+        constructs a SOAP envelope, and does not need the WSDL.
+      requestBody:
+        required: false
+        description: >-
+          Query fields for the location lookup, as JSON. The gateway converts
+          this object to the XML the SOAP handler expects — the field names must
+          match the elements that handler reads.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                region:      { type: string, description: Region code to filter by }
+                activeOnly:  { type: boolean, description: Exclude decommissioned sites }
+      responses:
+        '200':
+          description: >-
+            Locations, as JSON transformed from the upstream XML. `content-type:
+            application/json` on this response is the proof the transform ran.
+          content:
+            application/json:
+              schema:
+                type: object
+        '401': { description: Missing, malformed, expired or badly signed Bearer token }
+        '502': { description: The SOAP backend was unreachable or returned an error }
+        '504': { description: The SOAP backend did not respond in time }
+      x-helix-gateway:
+        plugins:
+          # 1. Identity, access phase. Reject before doing any transform work —
+          #    there is no point converting a body you are about to discard.
+          #    signing_secret MUST match the value on /oauth/token.
+          helix-auth:
+            mode: validate
+            validate_auth_type: jwt-auth
+            signing_secret: "<ENV:JWT_SIGNING_SECRET>"
+
+          # 2. Retarget the upstream path and tell the SOAP handler the body is
+          #    XML. The client called /locations; the handler only answers on
+          #    /GetData.ashx.
+          #
+          #    If your SOAP service requires a SOAPAction header, add it here —
+          #    many .asmx and classic SOAP 1.1 endpoints will return a 500 with
+          #    an unhelpful envelope without it. Confirm what your handler wants
+          #    before assuming it doesn't need one.
+          proxy-rewrite:
+            uri: /GetData.ashx
+            headers:
+              set:
+                Content-Type: text/xml
+
+          # 3. The bidirectional transform. ONE plugin, BOTH directions:
+          #       request:  the client's JSON body -> XML for the SOAP handler
+          #       response: the handler's XML      -> JSON for the client
+          #
+          #    Do NOT add json-to-xml alongside this. Doing so converts the body
+          #    twice and the handler receives nonsense.
+          #
+          #    Left as a default block deliberately: this plugin's schema varies
+          #    by build. Confirm with get_plugin_config and set fields there if
+          #    your envelope is namespaced or attribute-heavy.
+          xml-to-json: {}
+
+# API-WIDE POLICY.
+#
+# Note what is NOT here: helix-auth validate is per route, so /oauth/token stays
+# reachable without a token. And there is no analytics plugin — analytics is
+# enabled globally on the platform and every call through this API is already
+# captured. See solution 04.
+x-helix-gateway:
+  plugins:
+    # Correlation id, stamped on every call. Worth more here than on a plain
+    # REST API: when a partner reports a bad response you need to correlate the
+    # JSON they saw with the XML the handler actually returned, across the
+    # gateway->SOAP hop.
+    request-id:
+      algorithm: uuid
+      header_name: X-Request-Id
+
+    cors:
+      allow_origins: "*"
+      allow_methods: "POST,OPTIONS"
+      allow_headers: "authorization,content-type"
+      allow_credential: false

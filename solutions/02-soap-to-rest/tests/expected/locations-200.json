@@ -1,0 +1,16 @@
+{
+  "_case": "valid-call-transformed / response-really-converted",
+  "_status": 200,
+  "_content_type": "application/json",
+  "_note": "ILLUSTRATIVE SHAPE ONLY — do not assert this structure. The JSON is a mechanical projection of whatever XML your handler returned, so the keys will be YOUR element names, including PascalCase and any vendor prefixes. What you SHOULD assert: content-type is application/json, the body parses, and the body contains no XML markup. The last one is the real test — a content-type header is a claim, a body with no angle brackets is evidence.",
+  "_watch_for": "If the handler returns exactly ONE <Site>, this may be an object rather than a one-element array. XML cannot distinguish an item from a list of one. Test both shapes and publish both — see tests/test-plan.yaml case single-vs-multiple-elements.",
+  "_headers_present": ["X-Request-Id"],
+  "_body_example": {
+    "Locations": {
+      "Site": [
+        { "id": "1", "name": "Frankfurt", "active": "true" },
+        { "id": "2", "name": "Dublin", "active": "true" }
+      ]
+    }
+  }
+}

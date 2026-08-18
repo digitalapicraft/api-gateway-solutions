@@ -1,0 +1,28 @@
+# Rendered infographic exports and recorded media. Commit the SOURCE
+# (infographic.md) and the built .html; large binaries generally do not belong here.
+solutions/*/assets/*.mp4
+solutions/*/assets/*.mov
+solutions/*/assets/*.psd
+solutions/*/assets/*.ai
+
+# Local environment — never commit these. Every credential in this repo is a
+# placeholder, and it stays that way.
+.env
+.env.*
+*.local
+secrets.*
+*.pem
+*.key
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
+
+# Scratch output from running verify.sh or ad hoc queries
+*.log
+/tmp/
+scratch/

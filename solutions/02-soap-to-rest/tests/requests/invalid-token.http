@@ -1,0 +1,7 @@
+### Case: invalid-token — a structurally valid JWT this gateway did not sign.
+### Expect 401, before the transform and before the SOAP hop.
+POST {{GATEWAY}}/locations
+authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJmb3JnZWQifQ.not-a-valid-signature
+content-type: application/json
+
+{}

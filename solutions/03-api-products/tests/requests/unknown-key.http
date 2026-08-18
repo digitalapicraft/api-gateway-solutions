@@ -1,0 +1,6 @@
+### Case: unknown-key — a plausible but unregistered credential key.
+### Expect 401. Distinguishes "no credential" from "not a credential I know" —
+### both are 401, and both stop before the enforcer.
+GET {{GATEWAY}}/orders
+apikey: definitely-not-a-real-client-id
+accept: application/json

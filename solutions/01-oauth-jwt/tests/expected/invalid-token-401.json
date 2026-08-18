@@ -1,0 +1,5 @@
+{
+  "_case": "forged-token",
+  "_status": 401,
+  "_note": "A JWT with a valid three-segment shape but a signature this gateway did not produce. Rejected in the access phase. Indistinguishable from the other 401s by design — assert the status only. If this returns 200, the route is passing everything through while appearing configured."
+}

@@ -1,0 +1,21 @@
+{
+  "_case": "seed-known-pattern",
+  "_note": "Not a single HTTP response — this describes the traffic pattern verify.sh generates and the analytics result you should then be able to retrieve. verify.sh prints the actual counts and the window timestamps; use those rather than the defaults below if you overrode SEED_OK / SEED_401 / SEED_404.",
+
+  "_seeded_defaults": {
+    "GET /orders": { "200": 13, "401": 4, "_401_breakdown": "1 unauthenticated probe + 3 forged-token calls" },
+    "GET /orders/{orderId}": { "200_or_404": 2, "_note": "against the literal path /orders/verify-probe-001" },
+    "POST /oauth/token": { "200": 1 }
+  },
+
+  "_expected_in_analytics": {
+    "attributed_to_the_app": "the 200s and the /orders/{orderId} calls — identity resolved, so these carry the app and developer by name",
+    "unidentified_bucket": "the 4x 401 — identity never resolved, so there is no app to attribute them to. Correct behaviour; do not read the absence as zero.",
+    "route_rows": "GET /orders, GET /orders/{orderId}, POST /oauth/token, POST /orders/report — FOUR rows",
+    "the_critical_assertion": "/orders/verify-probe-001 must NOT appear as its own row. If it does, paths are not templated, and that is unrecoverable for data already captured. See tests/test-plan.yaml case path-templating."
+  },
+
+  "_how_to_check": "Ask the agent: 'Show me calls to <<your API>> since <<window start>>, broken down by app and route, with status code counts.' Then: 'Show me the per-route breakdown for <<your API>> since <<window start>>.'",
+
+  "_this_is_manual": "verify.sh seeds and prints; it cannot assert. Analytics is captured asynchronously in the log phase and read from the portal or the agent, so no exit code can stand in for looking. Record what you actually observed in validation/gateway-validation.yaml."
+}

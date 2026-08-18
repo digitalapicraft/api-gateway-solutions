@@ -1,0 +1,184 @@
+# Solution 01 — OAuth 2.0 client credentials with gateway-issued JWTs.
+#
+# This is the importable artifact: an OpenAPI 3.0.3 document carrying
+# x-helix-gateway.plugins. Import it (OpenAPI import, or paste the agent prompt
+# into Agent Mode), bind your upstream, set JWT_SIGNING_SECRET on the
+# environment, then deploy the revision.
+#
+# WHAT THIS DOES
+#   POST /oauth/token  — the gateway verifies the app's client_id/client_secret
+#                        and signs a short-lived JWT. Deliberately NOT behind
+#                        validation: a caller has no token yet.
+#   everything else    — the gateway verifies the JWT it signed and rejects
+#                        anything else in the access phase, before the request
+#                        reaches your backend.
+#
+# The backend never learns about auth. No backend release is involved.
+#
+# EXECUTION IS PRIORITY/PHASE-ORDERED, NOT DOCUMENT-ORDERED. On the protected
+# routes helix-auth runs in the access phase, so a rejected request never
+# reaches the upstream at all.
+#
+# THE SIGNING SECRET MUST MATCH on the issue route and every validate route.
+# A mismatch rejects every freshly issued token with an opaque error, and it is
+# the single most common way this solution is deployed wrong.
+#
+# EXTERNAL ISSUER? Do not use this file as-is. If Keycloak / Auth0 / Entra ID /
+# Okta issues the tokens, the gateway is a verifier only: drop the /oauth/token
+# route and use the jwt-auth plugin pointed at the issuer's public key or JWKS
+# instead of helix-auth generate. helix-auth generate is for when the GATEWAY is
+# the issuer. See architecture.md § Who issues the token.
+#
+# UPSTREAM is bound on the service at import/bind time, NOT in the OpenAPI
+# paths. Replace <UPSTREAM_URL> wherever your control plane asks for it.
+#
+# SECRETS NEVER APPEAR IN A SPEC. signing_secret is an <ENV:...> reference; the
+# app's client_id/client_secret are provisioned on the credential by the control
+# plane and are never written here.
+
+openapi: 3.0.3
+
+info:
+  title: Orders API
+  version: 1.0.0
+  description: >-
+    Partner-facing order API. Access requires an OAuth 2.0 access token obtained
+    from POST /oauth/token using the client-credentials grant. Tokens are issued
+    and verified at the gateway; the backend service is unchanged.
+
+paths:
+  /oauth/token:
+    post:
+      summary: Issue an OAuth 2.0 access token (client credentials grant)
+      description: >-
+        Exchange an app's client credentials for a short-lived JWT. Send
+        `Authorization: Basic base64(client_id:client_secret)`. Returns
+        `access_token`, `token_type` and `expires_in`. Unknown or mismatched
+        credentials are rejected with 401.
+      responses:
+        '200':
+          description: Access token issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token: { type: string, description: Signed JWT }
+                  token_type:   { type: string, example: Bearer }
+                  expires_in:   { type: integer, description: Seconds until expiry }
+        '401': { description: Unknown client_id, or client_secret does not match }
+      x-helix-gateway:
+        plugins:
+          # Own-JWT issuance. generate mode verifies the credential's
+          # key (client_id) and secret (client_secret) and signs a JWT with
+          # signing_secret.
+          #
+          # Use helix-auth generate — NOT jwt-auth. jwt-auth is for validating
+          # tokens an EXTERNAL issuer signed; here the gateway is the issuer.
+          #
+          # This is also the only mode that checks the app's secret. key-auth
+          # validate resolves on the credential key alone, which is why a static
+          # key proves possession of an identifier but not of a secret.
+          helix-auth:
+            mode: generate
+            token_ttl: 900                          # 15 minutes — see README § Choosing a token lifetime
+            signing_secret: "<ENV:JWT_SIGNING_SECRET>"
+
+  /orders:
+    get:
+      summary: List orders
+      description: Requires a valid Bearer token issued by POST /oauth/token.
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [open, shipped, cancelled] } }
+        - { name: limit,  in: query, schema: { type: integer, default: 25, maximum: 100 } }
+      responses:
+        '200': { description: Array of orders }
+        '401': { description: Missing, malformed, expired or badly signed Bearer token }
+      x-helix-gateway:
+        plugins:
+          # Identity, access phase. Rejects anything without a valid JWT that
+          # this gateway signed, before the request reaches the upstream.
+          #
+          # signing_secret MUST be the same value used on /oauth/token.
+          helix-auth:
+            mode: validate
+            validate_auth_type: jwt-auth
+            signing_secret: "<ENV:JWT_SIGNING_SECRET>"
+
+    post:
+      summary: Create an order
+      description: Requires a valid Bearer token issued by POST /oauth/token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [customerRef, lines]
+              properties:
+                customerRef: { type: string }
+                lines:
+                  type: array
+                  items:
+                    type: object
+                    required: [sku, quantity]
+                    properties:
+                      sku:      { type: string }
+                      quantity: { type: integer, minimum: 1 }
+      responses:
+        '201': { description: Created }
+        '400': { description: Invalid payload }
+        '401': { description: Missing, malformed, expired or badly signed Bearer token }
+      x-helix-gateway:
+        plugins:
+          helix-auth:
+            mode: validate
+            validate_auth_type: jwt-auth
+            signing_secret: "<ENV:JWT_SIGNING_SECRET>"
+
+  /orders/{orderId}:
+    get:
+      summary: Get an order
+      description: Requires a valid Bearer token issued by POST /oauth/token.
+      parameters:
+        - { name: orderId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Order }
+        '401': { description: Missing, malformed, expired or badly signed Bearer token }
+        '404': { description: Not found }
+      x-helix-gateway:
+        plugins:
+          helix-auth:
+            mode: validate
+            validate_auth_type: jwt-auth
+            signing_secret: "<ENV:JWT_SIGNING_SECRET>"
+
+# API-WIDE POLICY.
+#
+# Note what is NOT here: helix-auth validate is applied per route rather than
+# API-wide, because /oauth/token must stay reachable without a token. Putting
+# validate at the document root would protect the token endpoint too, and no
+# caller could ever obtain a first token. That mistake produces an API where
+# every single request returns 401, including the one that should issue the
+# credential.
+#
+# If your API has many protected routes and one token route, applying validate
+# API-wide and disabling it on the token route is also viable — but be explicit
+# about it, and confirm the override actually takes effect before you rely on it.
+x-helix-gateway:
+  plugins:
+    # Correlation id on every call, including the token exchange, so an auth
+    # failure can be traced across the gateway and your backend logs.
+    request-id:
+      algorithm: uuid
+      header_name: X-Request-Id
+
+    # Browser access. Note authorization must be in allow_headers or a browser
+    # client cannot send the Bearer token at all — the preflight fails and you
+    # see a CORS error rather than a 401, which sends people debugging the wrong
+    # layer entirely.
+    cors:
+      allow_origins: "*"
+      allow_methods: "GET,POST,OPTIONS"
+      allow_headers: "authorization,content-type"
+      allow_credential: false

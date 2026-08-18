@@ -1,0 +1,154 @@
+# Test plan — OAuth 2.0 client credentials with gateway-issued JWTs.
+#
+# Cases 1-6 are executed in order by ../gateway/verify.sh, which exits 0 only if
+# all of them hold. The fixtures under requests/ and expected/ document each case
+# independently so you can run one by hand.
+#
+# Substitute your own values:
+#   {{GATEWAY}}        gateway base URL, e.g. https://<YOUR_GATEWAY_HOST>
+#   {{CLIENT_ID}}      the app's client id (the credential key)
+#   {{CLIENT_SECRET}}  the app's client secret
+#   {{ACCESS_TOKEN}}   the JWT returned by the token-issue case
+
+meta:
+  solution: 01-oauth-jwt
+  version: 1.0.0
+  executor: gateway/verify.sh
+  note: >-
+    Cases 1-6 are automated. Case 7 (expiry) requires waiting out the token
+    lifetime, and case 8 (rotation) mutates environment configuration, so both are
+    manual and deliberately outside verify.sh.
+  status: >-
+    NOT EXECUTED for this package — no gateway connector was available in the
+    session that produced it. These are the assertions verify.sh makes, not
+    results that have been obtained. Run it against your own environment.
+
+cases:
+  - id: unauthenticated
+    type: negative
+    intent: >-
+      helix-auth validate rejects a call to a protected route that carries no
+      Authorization header, in the access phase, before the upstream is contacted.
+    request: requests/unauthenticated.http
+    expected: expected/unauthenticated.json
+    expected_status: 401
+    notes: >-
+      If this returns 200 the route is not validating at all. If it returns 403,
+      something else is on the route ahead of the response — check for an
+      authorization or metering plugin.
+
+  - id: token-issue
+    type: positive
+    intent: >-
+      An app's client id and secret, sent as HTTP Basic credentials, are exchanged
+      for a signed JWT at the generate-mode token endpoint.
+    request: requests/token-request.http
+    expected: expected/token-200.json
+    expected_status: 200
+    assertions:
+      - body.access_token is present
+      - body.access_token has exactly three dot-separated base64url segments (it is a JWT, not an opaque string)
+      - body.token_type is "Bearer"
+      - body.expires_in matches the configured token_ttl (900 in this package)
+    notes: >-
+      An opaque (non-JWT) access_token means something other than helix-auth
+      generate answered this route.
+
+  - id: valid-token
+    type: positive
+    intent: A valid Bearer token issued by the token endpoint is accepted on a protected route.
+    request: requests/valid-call.http
+    expected: expected/valid-200.json
+    expected_status: 200
+    notes: >-
+      A 401 here, with a token issued seconds earlier, almost always means the
+      signing secret differs between the issue route and the validate route. A 403
+      means authentication passed but authorization did not.
+
+  - id: forged-token
+    type: negative
+    intent: >-
+      A structurally valid JWT that this gateway did not sign is rejected. This is
+      the check that proves the signature is actually verified rather than the
+      header merely being parsed.
+    request: requests/invalid-token.http
+    expected: expected/invalid-token-401.json
+    expected_status: 401
+    notes: >-
+      A 200 here is the most serious possible failure of this solution: the route
+      looks configured and is passing everything through.
+
+  - id: wrong-secret
+    type: negative
+    intent: >-
+      A correct client id with an incorrect client secret does NOT produce a token.
+      generate mode is the only mode that verifies the secret, so this is what
+      distinguishes a real credentials flow from a static-key flow.
+    request: requests/token-wrong-secret.http
+    expected: expected/token-401.json
+    expected_status: 401
+    notes: >-
+      Do not skip this case. If a wrong secret still issues a token, the secret is
+      decorative and the security model of the whole solution is void.
+
+  - id: malformed-authorization
+    type: boundary
+    intent: >-
+      A valid token sent without the "Bearer " scheme prefix is rejected. Tests the
+      header-parsing boundary rather than the signature.
+    request: requests/no-bearer-prefix.http
+    expected: expected/unauthenticated.json
+    expected_status: 401
+
+  - id: expired-token
+    type: boundary
+    intent: >-
+      A token is rejected once its exp has passed, proving the lifetime is enforced
+      and not merely advertised in expires_in.
+    type_of_execution: manual
+    procedure: >-
+      1) Obtain a token. 2) Confirm it returns 200 on a protected route.
+      3) Wait longer than token_ttl (900s in this package; reduce token_ttl
+      temporarily in a test environment if you don't want to wait).
+      4) Replay the SAME token.
+    expected_status: 401
+    notes: >-
+      Outside verify.sh because it requires waiting out the lifetime. Worth running
+      once per environment — the TTL is the only bound on a leaked token, so an
+      unenforced exp would silently remove the entire security benefit.
+
+  - id: signing-secret-mismatch
+    type: failure
+    intent: >-
+      Establish the symptom of the most common misconfiguration, so it is
+      recognisable in production: when the issue route and the validate route
+      reference different secrets, tokens are issued successfully and then rejected
+      immediately.
+    type_of_execution: manual
+    procedure: >-
+      In a THROWAWAY test environment only, point the validate route at a different
+      secret than the issue route. Request a token (still 200), then use it.
+    expected_status: 401
+    notes: >-
+      Exercise in a controlled environment only. The point is diagnostic
+      familiarity: "token issued fine, every call 401s" should immediately suggest
+      the shared secret rather than the client.
+
+  - id: cors-preflight
+    type: boundary
+    intent: >-
+      A browser preflight for a protected route permits the authorization header.
+      If it doesn't, browser clients fail before the request is made and the
+      symptom is a CORS error, not a 401.
+    type_of_execution: manual
+    procedure: >-
+      OPTIONS a protected route with Origin and
+      Access-Control-Request-Headers: authorization. Confirm the response's
+      Access-Control-Allow-Headers includes authorization.
+    notes: Only relevant if browser clients call this API directly.
+
+coverage:
+  positive: [token-issue, valid-token]
+  negative: [unauthenticated, forged-token, wrong-secret]
+  boundary: [malformed-authorization, expired-token, cors-preflight]
+  failure:  [signing-secret-mismatch]

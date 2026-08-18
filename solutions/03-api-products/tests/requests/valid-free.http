@@ -1,0 +1,13 @@
+### Case: valid-free-call — an app subscribed to the Free product.
+###
+### The value here is the app's CLIENT ID, i.e. the credential KEY. It is NOT the
+### app secret — key-auth validate resolves on the key and never consults the
+### secret. Sending the secret is the most common cause of a surprising 401.
+###
+### Expect 200, and one unit consumed from the Free product's window.
+GET {{GATEWAY}}/orders
+apikey: {{FREE_KEY}}
+accept: application/json
+
+### curl equivalent:
+###   curl -i {{GATEWAY}}/orders -H 'apikey: {{FREE_KEY}}'

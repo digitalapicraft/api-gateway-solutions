@@ -1,0 +1,211 @@
+# Solution 03 — API Products: package APIs into metered, sellable tiers.
+#
+# This is the importable artifact: an OpenAPI 3.0.3 document carrying
+# x-helix-gateway.plugins. Import it (OpenAPI import, or paste the agent prompt
+# into Agent Mode), bind your upstream, create the products in products.json,
+# deploy them to the environment, then subscribe apps to them.
+#
+# WHAT THIS DOES
+#   helix-auth resolves WHICH APP is calling and which products it subscribes to.
+#   api-product-enforcer consumes one unit of that product's quota and returns
+#   429 when the window is spent. A misbehaving integration exhausts its OWN
+#   budget and nobody else's.
+#
+# THE MODEL — get this right or the config is confidently wrong:
+#   Developer  = the organisation or person consuming your API   (a Consumer)
+#   App        = one integration, with its own key/secret        (a Credential)
+#   Product    = a bundle of APIs plus a quota — what you sell
+#   Subscription = an app subscribes to products, each with a RANK
+#
+#   QUOTA LIVES ON THE PRODUCT AND IS COUNTED PER APP. Not per IP, not per
+#   developer, and NEVER on consumer_name. A developer with three apps gets
+#   three independent buckets by default — usually what you want, since their
+#   staging integration misbehaving should not spend their production budget.
+#   To pool them, set quota_key_scope: developer on the product.
+#
+# EXECUTION IS PRIORITY-ORDERED, NOT DOCUMENT-ORDERED:
+#   helix-auth              resolves the credential, attaches the consumer
+#   [product resolution]    a shared step — picks the TOP-RANKED subscribed
+#                           product that also covers this route's service_id
+#   api-product-enforcer    enforces THAT product's quota; 429 when spent
+#
+#   ONE PRODUCT IS EVALUATED PER REQUEST AND THERE IS NO FALLBACK. If the
+#   top-ranked product's window is exhausted the request 429s — it does not
+#   spill into a second product the app also subscribes to. Rank is a routing
+#   decision, not a chain of budgets.
+#
+# THE ROUTE MUST HAVE A service_id. Without one api-product-enforcer returns 403
+# regardless of subscription, and nothing in the plugin config hints at it.
+#
+# QUOTA BACKEND IS NOT CONFIGURED HERE. api-product-enforcer accepts only
+# error_policy and ctx_namespace. The local-vs-redis choice and the connection
+# settings live in plugin_attr.api-product-enforcer in the gateway's config.yaml.
+# ON MORE THAN ONE GATEWAY NODE IT MUST BE redis — the default `local` counts in
+# each node's own memory, so an N-node cluster serves roughly N times the quota
+# you sold. This is the single most common way this solution is deployed wrong,
+# and it is invisible from the route config.
+#
+# SECRETS NEVER APPEAR IN A SPEC. App keys and secrets are provisioned on the
+# credential by the control plane.
+
+openapi: 3.0.3
+
+info:
+  title: Orders API
+  version: 1.0.0
+  description: >-
+    Partner-facing order lookup and creation. Access and throughput are governed
+    by the calling app's API Product subscription: each product carries a quota,
+    counted per app.
+
+paths:
+  /orders:
+    get:
+      summary: List orders
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [open, shipped, cancelled] } }
+        - { name: limit,  in: query, schema: { type: integer, default: 25, maximum: 100 } }
+      responses:
+        '200': { description: Array of orders }
+        '401': { description: Missing or unknown API key }
+        '403': { description: The calling app is not subscribed to a product covering this API, or the route has no service_id }
+        '429': { description: The subscribed product's quota for this window is exhausted }
+        '503': { description: The quota backend was unreachable and error_policy is fail_close }
+
+    post:
+      summary: Create an order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [customerRef, lines]
+              properties:
+                customerRef: { type: string }
+                lines:
+                  type: array
+                  items:
+                    type: object
+                    required: [sku, quantity]
+                    properties:
+                      sku:      { type: string }
+                      quantity: { type: integer, minimum: 1 }
+      responses:
+        '201': { description: Created }
+        '400': { description: Invalid payload }
+        '401': { description: Missing or unknown API key }
+        '403': { description: No product covering this API }
+        '429': { description: Quota exhausted }
+
+  /orders/{orderId}:
+    get:
+      summary: Get an order
+      parameters:
+        - { name: orderId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Order }
+        '401': { description: Missing or unknown API key }
+        '404': { description: Not found }
+        '429': { description: Quota exhausted }
+
+  /orders/search:
+    post:
+      summary: Search order history
+      description: >-
+        Full-text search across order history. Hits the reporting store, so it
+        carries a per-IP ceiling on top of the per-app product quota.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query: { type: string }
+                from:  { type: string, format: date }
+                to:    { type: string, format: date }
+      responses:
+        '200': { description: Search results }
+        '429': { description: Per-IP ceiling or product quota exhausted }
+      x-helix-gateway:
+        plugins:
+          # A SECOND, INDEPENDENT layer — deliberately not consumer-scoped.
+          #
+          # The product quota already counts per app. This protects the reporting
+          # store from any single SOURCE, including traffic that fails auth before
+          # the enforcer ever runs. remote_addr is the key precisely because
+          # per-caller metering is already handled above.
+          #
+          # Requires real-ip in front if the gateway sits behind a proxy or load
+          # balancer, otherwise every caller shares the balancer's address and
+          # this becomes a global 20/min ceiling on the endpoint.
+          #
+          # Unlike api-product-enforcer, limit-count DOES take its backend on the
+          # route, and needs redis_host when policy is redis.
+          limit-count:
+            count: 20
+            time_window: 60
+            key_type: var
+            key: remote_addr
+            rejected_code: 429
+            policy: redis
+            redis_host: "<ENV:REDIS_HOST>"
+            show_limit_quota_header: true
+
+# API-WIDE POLICY.
+#
+# Note what is NOT here: no analytics plugin. Analytics is enabled globally on the
+# platform and every call through this API is already captured — including which
+# app hit its quota and when. See solution 04 for the queries that matter here.
+x-helix-gateway:
+  plugins:
+    # 1. IDENTITY. helix-auth in validate/key-auth mode resolves the credential
+    #    (the App) by its `key` — the client id — and makes its product
+    #    subscriptions available to the enforcer.
+    #
+    #    Use helix-auth, NOT the raw key-auth plugin. key-auth authenticates the
+    #    caller but resolves NO product subscription, so the enforcer then 403s on
+    #    every request with nothing in context to enforce against. That failure
+    #    looks like a subscription problem and is actually a plugin choice.
+    #
+    #    key-auth validate does NOT check the app's secret — the value in the
+    #    apikey header is the credential KEY. The secret is only verified in
+    #    generate mode on a token endpoint (see solution 01).
+    helix-auth:
+      mode: validate
+      validate_auth_type: key-auth
+      apikey:
+        source: header
+        key: apikey
+
+    # 2. ENFORCEMENT. Reads the product chosen by the shared product-resolution
+    #    step and consumes one unit of that product's quota.
+    #
+    #    THE ROUTE MUST HAVE A service_id or this returns 403 regardless of
+    #    subscription.
+    #
+    #    error_policy fail_close (the default) means a quota-backend outage
+    #    returns 503. Switch to fail_open only as a deliberate commercial
+    #    decision: you are choosing to serve unmetered traffic during an incident
+    #    rather than serve errors. Know which one you picked and why.
+    #
+    #    The quota BACKEND (local vs redis) is NOT configurable here — this plugin
+    #    accepts only error_policy and ctx_namespace. It lives in
+    #    plugin_attr.api-product-enforcer in the gateway's config.yaml, and on a
+    #    multi-node gateway it MUST be redis. See the header comment.
+    api-product-enforcer:
+      error_policy: fail_close
+
+    # 3. Correlation id. Worth having on a metered API specifically: when a
+    #    partner disputes a 429 you want a request id to search on.
+    request-id:
+      algorithm: uuid
+      header_name: X-Request-Id
+
+    cors:
+      allow_origins: "*"
+      allow_methods: "GET,POST,OPTIONS"
+      allow_headers: "apikey,content-type"
+      allow_credential: false
