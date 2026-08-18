@@ -12,7 +12,7 @@ gateway_validation:
 
   deployment:
     status: DEPLOYED
-    detail: Two simple routes ACTIVE — /orders and the templated /orders/{orderId} — each returning a standard response via the mocking plugin.
+    detail: Two simple routes ACTIVE — /posts and the templated /posts/{postId} — each proxying the public jsonplaceholder upstream.
 
   functional_tests:
     executor: gateway/verify.sh
@@ -24,7 +24,7 @@ gateway_validation:
     method: control-plane analytics metrics API, filtered by api_name and grouped by dimensions.
     findings:
       - Analytics is global — with no analytics plugin in the spec, every call is captured and queryable.
-      - Path templating holds — several distinct /orders/{orderId} values aggregate to ONE row grouped by route_id, versus one row per id grouped by api_path. Group route-level charts by route_id.
+      - Path templating holds — several distinct /posts/{postId} values aggregate to ONE row grouped by route_id, versus one row per id grouped by api_path. Group route-level charts by route_id.
       - Per-app attribution is available WHEN identity is resolved (add helix-auth, see solution 01); without it, rows attribute to a source IP.
       - X-Request-Id is NOT an analytics dimension — correlate a single request in your own logs via the forwarded header.
 

@@ -58,7 +58,7 @@ The whole solution is three configuration decisions, and one property they share
 **Identity resolved** → rows attribute to an app rather than an IP. This single decision
 is the difference between analytics you *query* and analytics you *scroll*.
 
-**Paths templated** → `/orders/{orderId}` is one row you can trend, not one row per
+**Paths templated** → `/posts/{postId}` is one row you can trend, not one row per
 order. Get this wrong and a per-route breakdown becomes a list of individual customer
 records, per-route latency is computed from one sample per row, and cardinality grows with
 your order volume forever.

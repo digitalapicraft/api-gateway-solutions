@@ -35,7 +35,7 @@ their place, one gateway band, with a single lane through it:
 | Stage | Chip |
 |---|---|
 | 1 | `helix-auth` validate — *reject here* |
-| 2 | `proxy-rewrite` → `/GetData.ashx` |
+| 2 | `proxy-rewrite` → `<SOAP_HANDLER_PATH>` |
 | 3 | `xml-to-json` — **JSON⇄XML** |
 
 The four partner icons now connect straight through the band, each holding a

@@ -33,7 +33,7 @@ now behind a gateway band. Two clearly separated lanes pass through the band:
 | Lane | At the edge | Partner sees |
 |---|---|---|
 | `POST /oauth/token` | `helix-auth` **generate** — verifies client id **and secret** | `{ access_token, token_type, expires_in: 900 }` |
-| `GET /orders` | `helix-auth` **validate** (jwt-auth) — signature + expiry | `200`, or `401` before the backend |
+| `GET /posts` | `helix-auth` **validate** (jwt-auth) — signature + expiry | `200`, or `401` before the backend |
 
 Show a small **clock chip** on the token — `expires in 15 min` — because the
 bounded lifetime is the whole security argument. The partner icons now hold a

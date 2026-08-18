@@ -1,11 +1,17 @@
 # Solution 01 — OAuth 2.0 client credentials with gateway-issued JWTs.
 #
 # This is the importable artifact: an OpenAPI 3.0.3 document carrying
-# x-helix-gateway.plugins. Import it (OpenAPI import, or paste the agent prompt
-# into Agent Mode), bind your upstream, replace <YOUR_JWT_SIGNING_SECRET> with a
-# real secret value (see the SIGNING SECRET note below), then deploy the revision.
+# x-helix-gateway.plugins. Two ways to use it: paste the agent prompt into Agent
+# Mode (it creates the API and binds the upstream for you), or import this file,
+# bind the upstream, set a signing secret, and deploy the revision.
 #
-# This configuration has been validated against a gateway.
+# RUNNABLE ON A FRESH FREE-TRIAL ORG. The upstream is the public
+# https://jsonplaceholder.typicode.com, so GET /posts and GET /posts/{postId}
+# return real data with no backend of your own. Swap in your real upstream when
+# you have one — nothing else changes. Validated against a Helix gateway: no
+# token -> 401, a valid token -> 200 with real posts.
+#
+# ENVIRONMENT: a free-trial org gets a "test" environment by default — deploy here.
 #
 # WHAT THIS DOES
 #   POST /oauth/token  — the gateway verifies the app's client_id/client_secret
@@ -13,48 +19,39 @@
 #                        validation: a caller has no token yet.
 #   everything else    — the gateway verifies the JWT it signed and rejects
 #                        anything else in the access phase, before the request
-#                        reaches your backend.
+#                        reaches the upstream.
 #
-# The backend never learns about auth. No backend release is involved.
+# ROUTES MATCH THE UPSTREAM PATHS, so no proxy-rewrite is needed — a request to
+# /posts is forwarded to the upstream's /posts unchanged. (Validated.)
 #
-# EXECUTION IS PRIORITY/PHASE-ORDERED, NOT DOCUMENT-ORDERED. On the protected
-# routes helix-auth runs in the access phase, so a rejected request never
-# reaches the upstream at all.
+# EXECUTION IS PRIORITY/PHASE-ORDERED, NOT DOCUMENT-ORDERED. helix-auth validate
+# runs in the access phase, so a rejected request never reaches the upstream.
 #
 # THE SIGNING SECRET MUST MATCH on the issue route and every validate route.
-# A mismatch rejects every freshly issued token with an opaque error, and it is
-# the single most common way this solution is deployed wrong.
+# A mismatch rejects every freshly issued token with an opaque error — the single
+# most common way this is deployed wrong.
 #
-# EXTERNAL ISSUER? Do not use this file as-is. If Keycloak / Auth0 / Entra ID /
-# Okta issues the tokens, the gateway is a verifier only: drop the /oauth/token
-# route and keep helix-auth in validate mode with validate_auth_type jwt-auth,
-# pointed at the issuer's key material. NOTE: jwt-auth is
-# NOT a standalone plugin on this build — it is only a value of helix-auth's
-# validate_auth_type. helix-auth generate is for when the GATEWAY is the issuer.
-# See architecture.md § Who issues the token.
+# THE SIGNING SECRET IS A LITERAL — replace <YOUR_JWT_SIGNING_SECRET> with a real,
+# high-entropy value before deploy. The gateway does NOT resolve <ENV:...> or
+# ${...} syntax; the string is used verbatim as the HMAC key. Shipping the
+# placeholder makes your key a public constant. Keep the filled-in spec out of
+# version control. App client_id/client_secret are provisioned on the credential
+# by the control plane and never appear here.
 #
-# UPSTREAM is bound on the service at import/bind time, NOT in the OpenAPI
-# paths. Replace <UPSTREAM_URL> wherever your control plane asks for it.
-#
-# THE SIGNING SECRET IS A LITERAL — replace it, and never ship the placeholder.
-# On this build the gateway does NOT resolve <ENV:...> or ${...} syntax.
-# Whatever string sits in signing_secret is used verbatim as the HMAC key. So
-# <YOUR_JWT_SIGNING_SECRET> is a fill-in-the-blank, not an environment-variable
-# reference — replace it with a real, secret, high-entropy value before deploy.
-# If you ship the placeholder literally, your signing key is a public constant
-# and anyone can forge tokens. The app's client_id/client_secret are still
-# provisioned on the credential by the control plane and never written here.
-# Keep the real spec (with the secret filled in) out of version control.
+# EXTERNAL ISSUER? If Keycloak / Auth0 / Entra ID / Okta issues the tokens, drop
+# the /oauth/token route and keep helix-auth in validate mode with
+# validate_auth_type jwt-auth pointed at the issuer's key material. NOTE: jwt-auth
+# and key-auth are validate_auth_type VALUES of helix-auth, not standalone plugins.
 
 openapi: 3.0.3
 
 info:
-  title: Orders API
+  title: Posts API
   version: 1.0.0
   description: >-
-    Partner-facing order API. Access requires an OAuth 2.0 access token obtained
-    from POST /oauth/token using the client-credentials grant. Tokens are issued
-    and verified at the gateway; the backend service is unchanged.
+    A sample API protected with OAuth 2.0 client-credentials JWTs issued and
+    verified at the gateway. It proxies the public jsonplaceholder service, so it
+    returns real data on a fresh org; point it at your own upstream when ready.
 
 paths:
   /oauth/token:
@@ -79,67 +76,50 @@ paths:
         '401': { description: Unknown client_id, or client_secret does not match }
       x-helix-gateway:
         plugins:
-          # Own-JWT issuance. generate mode verifies the credential's
-          # key (client_id) and secret (client_secret) and signs a JWT with
-          # signing_secret.
-          #
-          # Use helix-auth generate. (validate_auth_type jwt-auth is for
-          # validating tokens an EXTERNAL issuer signed; here the gateway is the
-          # issuer. jwt-auth is a validate_auth_type value, not a separate plugin.)
-          #
-          # This is also the only mode that checks the app's secret. key-auth
-          # validate resolves on the credential key alone, which is why a static
-          # key proves possession of an identifier but not of a secret.
+          # Own-JWT issuance. generate mode verifies the credential's key
+          # (client_id) and secret (client_secret) and signs a JWT. It is also the
+          # only mode that checks the secret. Use helix-auth generate — not a
+          # standalone plugin, which does not exist on this build.
           helix-auth:
             mode: generate
             token_ttl: 900                          # 15 minutes — see README § Choosing a token lifetime
             signing_secret: "<YOUR_JWT_SIGNING_SECRET>"
 
-  /orders:
+  /posts:
     get:
-      summary: List orders
-      description: Requires a valid Bearer token issued by POST /oauth/token.
-      parameters:
-        - { name: status, in: query, schema: { type: string, enum: [open, shipped, cancelled] } }
-        - { name: limit,  in: query, schema: { type: integer, default: 25, maximum: 100 } }
+      summary: List posts
+      description: Requires a valid Bearer token issued by POST /oauth/token. Proxies the upstream's /posts.
       responses:
-        '200': { description: Array of orders }
+        '200': { description: Array of posts }
         '401': { description: Missing, malformed, expired or badly signed Bearer token }
       x-helix-gateway:
         plugins:
-          # Identity, access phase. Rejects anything without a valid JWT that
-          # this gateway signed, before the request reaches the upstream.
-          #
-          # signing_secret MUST be the same value used on /oauth/token.
+          # Identity, access phase. Rejects anything without a valid JWT this
+          # gateway signed, before the request reaches the upstream.
+          # signing_secret MUST equal the value on /oauth/token.
           helix-auth:
             mode: validate
             validate_auth_type: jwt-auth
             signing_secret: "<YOUR_JWT_SIGNING_SECRET>"
 
     post:
-      summary: Create an order
-      description: Requires a valid Bearer token issued by POST /oauth/token.
+      summary: Create a post
+      description: Requires a valid Bearer token. Proxies the upstream's POST /posts.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [customerRef, lines]
+              required: [title, body, userId]
               properties:
-                customerRef: { type: string }
-                lines:
-                  type: array
-                  items:
-                    type: object
-                    required: [sku, quantity]
-                    properties:
-                      sku:      { type: string }
-                      quantity: { type: integer, minimum: 1 }
+                title:  { type: string }
+                body:   { type: string }
+                userId: { type: integer }
       responses:
         '201': { description: Created }
         '400': { description: Invalid payload }
-        '401': { description: Missing, malformed, expired or badly signed Bearer token }
+        '401': { description: Missing or invalid Bearer token }
       x-helix-gateway:
         plugins:
           helix-auth:
@@ -147,14 +127,14 @@ paths:
             validate_auth_type: jwt-auth
             signing_secret: "<YOUR_JWT_SIGNING_SECRET>"
 
-  /orders/{orderId}:
+  /posts/{postId}:
     get:
-      summary: Get an order
-      description: Requires a valid Bearer token issued by POST /oauth/token.
+      summary: Get a post
+      description: Requires a valid Bearer token. Proxies the upstream's /posts/{postId}.
       parameters:
-        - { name: orderId, in: path, required: true, schema: { type: string } }
+        - { name: postId, in: path, required: true, schema: { type: string } }
       responses:
-        '200': { description: Order }
+        '200': { description: Post }
         '401': { description: Missing, malformed, expired or badly signed Bearer token }
         '404': { description: Not found }
       x-helix-gateway:
@@ -167,15 +147,10 @@ paths:
 # API-WIDE POLICY.
 #
 # Note what is NOT here: helix-auth validate is applied per route rather than
-# API-wide, because /oauth/token must stay reachable without a token. Putting
+# API-wide, because /oauth/token must stay reachable without a token. Applying
 # validate at the document root would protect the token endpoint too, and no
-# caller could ever obtain a first token. That mistake produces an API where
-# every single request returns 401, including the one that should issue the
-# credential.
-#
-# If your API has many protected routes and one token route, applying validate
-# API-wide and disabling it on the token route is also viable — but be explicit
-# about it, and confirm the override actually takes effect before you rely on it.
+# caller could ever obtain a first token — every request would return 401,
+# including the one that issues credentials.
 x-helix-gateway:
   plugins:
     # Correlation id on every call, including the token exchange, so an auth
@@ -184,10 +159,9 @@ x-helix-gateway:
       algorithm: uuid
       header_name: X-Request-Id
 
-    # Browser access. Note authorization must be in allow_headers or a browser
-    # client cannot send the Bearer token at all — the preflight fails and you
-    # see a CORS error rather than a 401, which sends people debugging the wrong
-    # layer entirely.
+    # Browser access. authorization MUST be in allow_headers or a browser client
+    # cannot send the Bearer token — the preflight fails and you see a CORS error
+    # rather than a 401, which sends people debugging the wrong layer.
     cors:
       allow_origins: "*"
       allow_methods: "GET,POST,OPTIONS"

@@ -6,6 +6,6 @@
 ### Then flip error_policy to fail_open and repeat — the call should succeed,
 ### unmetered. Run both halves once, deliberately. Which one you want is a
 ### commercial decision, not a default to inherit.
-GET {{GATEWAY}}/orders
+GET {{GATEWAY}}/posts
 apikey: {{FREE_KEY}}
 accept: application/json

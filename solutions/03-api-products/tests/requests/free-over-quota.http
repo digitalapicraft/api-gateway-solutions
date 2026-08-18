@@ -6,12 +6,12 @@
 ### Assert the ABSENT headers too: no Retry-After, no X-RateLimit-*. Their absence
 ### is part of the contract, so a future platform change that adds them should be
 ### noticed deliberately rather than silently.
-GET {{GATEWAY}}/orders
+GET {{GATEWAY}}/posts
 apikey: {{FREE_KEY}}
 accept: application/json
 
 ### curl loop:
 ###   for i in $(seq 1 $(({{FREE_LIMIT}} + 5))); do
 ###     printf '%s ' "$(curl -s -o /dev/null -w '%{http_code}' \
-###       {{GATEWAY}}/orders -H 'apikey: {{FREE_KEY}}')"
+###       {{GATEWAY}}/posts -H 'apikey: {{FREE_KEY}}')"
 ###   done; echo

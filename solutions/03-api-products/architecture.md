@@ -18,7 +18,7 @@ rather than aspirational.
 │ Client │      │                     Gateway                       │   │ Upstream │
 └───┬────┘      │                                                   │   └────┬─────┘
     │           │                                                   │        │
-    │ GET /orders                                                   │        │
+    │ GET /posts                                                   │        │
     │ apikey: <client id>                                           │        │
     ├──────────►│  ┌─────────────── helix-auth ─────────────────┐   │        │
     │           │  │ validate + key-auth                         │   │        │
@@ -70,7 +70,6 @@ dependency chain here is strict:
 | 1 | `helix-auth` (validate, key-auth) | the resolved credential and its product subscriptions | the `apikey` header |
 | 2 | product resolution *(shared platform step)* | the single product this request will be metered against | step 1's subscriptions + the route's `service_id` |
 | 3 | `api-product-enforcer` | a consumed quota unit, or a 429 | step 2's resolved product |
-| — | `limit-count` *(search route only)* | a per-IP ceiling | `remote_addr` |
 | — | `request-id` | `X-Request-Id` | — |
 | — | analytics *(platform-global)* | per-request telemetry attributed to the app | step 1's identity |
 
@@ -153,29 +152,6 @@ Note the inconsistency with `limit-count`, which *does* take `policy` and
 `redis_host` on the route. That difference is real, and it's what leads people to
 add Redis settings to the enforcer where they're rejected.
 
-## The two-layer design on the search route
-
-`POST /orders/search` carries a route-scoped `limit-count` keyed on `remote_addr`,
-**in addition** to the product quota. The reasoning generalises to any expensive
-endpoint:
-
-| | Product quota | The per-IP `limit-count` |
-|---|---|---|
-| **Keyed on** | the credential (the app) | `remote_addr` |
-| **Applies to** | authenticated traffic only | all traffic, including auth failures |
-| **Protects** | your commercial model | one specific expensive backend |
-| **Backend config** | off-route, in `plugin_attr` | on the route (`policy`, `redis_host`) |
-
-The key insight: **traffic that fails authentication never reaches the enforcer.** So
-the product quota, however well tuned, offers no protection against an unauthenticated
-flood hitting the reporting store. The per-IP layer does, and it is deliberately
-*not* consumer-scoped, because per-caller metering is already handled above.
-
-**This layer requires `real-ip` in front if the gateway sits behind a proxy or load
-balancer.** Otherwise every caller presents the balancer's address, the per-IP
-ceiling becomes a global 20/min cap on the endpoint, and you have built a
-self-inflicted outage that triggers on your next traffic spike.
-
 ## Native vs custom
 
 Everything here is native configuration. **No custom code is required, and writing
@@ -186,7 +162,6 @@ any would be actively harmful.**
 | Identify the caller | `helix-auth` validate/key-auth | Credential storage lives in the control plane. |
 | Resolve which product applies | the platform's shared product-resolution step | Rank ordering, service coverage and subscription state are platform state, not request state. |
 | Count and enforce | `api-product-enforcer` | Distributed counting with correct window semantics is genuinely hard. A custom counter is where off-by-one-window and race-condition bugs live. |
-| A second, per-source ceiling | route-scoped `limit-count` | — |
 | Attribute a disputed 429 | `request-id` + platform analytics | — |
 
 The temptation to write custom code here usually takes one of two forms, and both
@@ -246,8 +221,6 @@ Don't use it when:
   prove isolation rather than merely prove a limit exists.
 - If the gateway runs more than one node: `quota_policy: redis` in
   `plugin_attr.api-product-enforcer`.
-- If the gateway sits behind a proxy and you're using the per-IP layer: `real-ip` in
-  front.
 
 ## Failure behaviour
 
@@ -262,7 +235,6 @@ Don't use it when:
 | Product `limit: -1` | passes, uncounted | Yes |
 | Quota backend unreachable, `fail_close` (default) | 503 | No |
 | Quota backend unreachable, `fail_open` | passes, unmetered | Yes |
-| Per-IP ceiling hit on the search route | 429, with `X-RateLimit-*` headers from `limit-count` | No |
 
 Two rows deserve attention.
 

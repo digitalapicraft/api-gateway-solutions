@@ -47,7 +47,7 @@ requires already having one.
 ┌────────┐         ┌──────────────────────────────────────┐      ┌──────────┐
 │ Client │         │               Gateway                │      │ Upstream │
 └───┬────┘         │                                      │      └────┬─────┘
-    │ GET /orders  │  ┌─────────── access phase ────────┐ │           │
+    │ GET /posts  │  ┌─────────── access phase ────────┐ │           │
     │ Authorization│  │ helix-auth                      │ │           │
     │ Bearer eyJ...│  │ mode: validate                  │ │           │
     ├─────────────►│  │ validate_auth_type: jwt-auth    │ │           │

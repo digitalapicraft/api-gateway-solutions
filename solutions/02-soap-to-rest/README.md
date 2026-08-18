@@ -8,11 +8,16 @@ other.**
 > `proxy-rewrite` defeats it — this page reflects the working config. The short
 > version is in *The one thing everybody gets wrong*, below.
 
+> **You supply the SOAP backend.** Unlike the other solutions, this one can't run
+> on a public sample upstream — SOAP→REST needs a SOAP service. Replace
+> `<SOAP_UPSTREAM_URL>` with your backend and `<SOAP_HANDLER_PATH>` with the path
+> its handler answers on (e.g. `/Service.asmx`, `/soap/endpoint`).
+
 | | |
 |---|---|
 | **Setup time** | ~25 minutes |
 | **Difficulty** | 🟡 Intermediate |
-| **Needs** | A SOAP endpoint reachable from the gateway · a real signing-secret value for the spec (literal — see solution 01) · one developer + app · `xml-to-json` present in your org |
+| **Needs** | **Your own SOAP endpoint** reachable from the gateway (this is a SOAP use case — a REST placeholder like jsonplaceholder can't stand in) and its handler path · a real signing-secret value (literal — see solution 01) · one developer + app · `xml-to-json` in your org · a **test** environment |
 | **Plugins** | `xml-to-json` (`transform_request` + `transform_response`) · `proxy-rewrite` · `helix-auth` (generate + validate) · `request-id` · `cors` |
 | **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
 | **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Infographic](infographic.md) · ✅ [Manifest](solution.yaml) |
@@ -77,14 +82,14 @@ Partner                        Gateway                          SOAP system
   │              yes ▼
   │
   ├─► proxy-rewrite                            [rewrite phase]
-  │     uri: /locations ──► /GetData.ashx
+  │     uri: /locations ──► <SOAP_HANDLER_PATH>
   │     (do NOT set Content-Type here — it defeats the transform; see below)
   │              ▼
   │
   ├─► xml-to-json  (request direction)
   │     {"region":"EMEA"} ──► <region>EMEA</region>
   │              │
-  │              └──────────────────────────────────► POST /GetData.ashx
+  │              └──────────────────────────────────► POST <SOAP_HANDLER_PATH>
   │                                                    text/xml
   │                                                        │
   │                                                   ◄────┘
@@ -141,7 +146,7 @@ The corrected block:
 
 ```yaml
 proxy-rewrite:
-  uri: /GetData.ashx          # path only — no Content-Type override
+  uri: <SOAP_HANDLER_PATH>          # path only — no Content-Type override
 
 xml-to-json:
   transform_request: true     # DEFAULT IS false — the request is not converted without this
@@ -160,7 +165,7 @@ Build it in two acts. Act 1, get the mediation working with nothing in the way:
 ```text
 Create a REST API called "Partner Locations API" that fronts a SOAP backend.
 
-POST /locations should proxy to the upstream path /GetData.ashx, and a plugin
+POST /locations should proxy to the upstream path <SOAP_HANDLER_PATH>, and a plugin
 should transform the request and response bodies so partners send and receive
 JSON while the backend keeps speaking XML.
 
@@ -242,7 +247,7 @@ helix-auth:
 
 # 2. path only — NO Content-Type override (it runs before the transform and defeats it)
 proxy-rewrite:
-  uri: /GetData.ashx
+  uri: <SOAP_HANDLER_PATH>
 
 # 3. request conversion is OFF by default — turn it on; response fires on Accept: application/json
 xml-to-json:

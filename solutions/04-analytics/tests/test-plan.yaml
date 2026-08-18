@@ -1,8 +1,8 @@
 # Test plan — analytics on a deliberately minimal API (two routes, no auth).
 #
 # verify.sh (gateway/verify.sh) covers the automated part: both routes answer 200
-# with a standard response and carry X-Request-Id, and it seeds a labelled burst of
-# distinct /orders/{orderId} ids. The analytics assertions are MANUAL — analytics is
+# with real data and carry X-Request-Id, and it seeds a labelled burst of
+# distinct /posts/{postId} ids. The analytics assertions are MANUAL — analytics is
 # captured asynchronously and read from the analytics API or portal; no script can
 # assert a chart.
 #
@@ -14,14 +14,14 @@ meta:
   version: 1.0.0
   executor: gateway/verify.sh
   note: >-
-    The API is intentionally minimal — two routes returning a standard response via
-    the mocking plugin, no auth, no other plugins. It exists to generate traffic you
+    The API is intentionally minimal — two routes returning real data via
+    the jsonplaceholder upstream, no auth, no other plugins. It exists to generate traffic you
     then slice in analytics.
 
 cases:
   - id: list-route
     type: positive
-    intent: GET /orders returns the standard response and a correlation id.
+    intent: GET /posts returns the real data and a correlation id.
     request: requests/list.http
     expected: expected/list-200.json
     expected_status: 200
@@ -31,7 +31,7 @@ cases:
   - id: item-route-templated
     type: positive
     intent: >-
-      GET /orders/{orderId} returns the standard response. Several distinct ids are
+      GET /posts/{postId} returns the real data. Several distinct ids are
       sent so the templating check below has data.
     request: requests/item.http
     expected: expected/item-200.json
@@ -40,7 +40,7 @@ cases:
   - id: path-templating
     type: manual
     intent: >-
-      THE CHECK THAT MATTERS. The distinct /orders/{orderId} calls aggregate to ONE
+      THE CHECK THAT MATTERS. The distinct /posts/{postId} calls aggregate to ONE
       row when grouped by the route_id analytics dimension, versus one row per id
       when grouped by api_path.
     procedure: >-

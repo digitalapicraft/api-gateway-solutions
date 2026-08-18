@@ -2,10 +2,10 @@
 # Solution 04 — seed a known traffic pattern against the two simple routes, then
 # tell you the analytics queries to run.
 #
-# This API is deliberately minimal: two routes returning a standard response, no
+# This API is deliberately minimal: two routes returning real data, no
 # auth. So verify.sh does two things:
 #   1. Confirms both routes answer 200 and carry an X-Request-Id.
-#   2. Sends a labelled burst — several distinct /orders/{orderId} ids — so you can
+#   2. Sends a labelled burst — several distinct /posts/{postId} ids — so you can
 #      then confirm in the analytics tool that they aggregate to ONE row by
 #      route_id (templating), not one row per id.
 #
@@ -18,15 +18,15 @@
 #   GATEWAY=https://<YOUR_GATEWAY_HOST> ./verify.sh
 #
 # Optional overrides:
-#   LIST_PATH  default /orders
-#   ITEM_BASE  default /orders           (item route is <ITEM_BASE>/<id>)
+#   LIST_PATH  default /posts
+#   ITEM_BASE  default /posts           (item route is <ITEM_BASE>/<id>)
 #   SEED_IDS   default "a1 b2 c3 d4 e5"  (distinct ids to prove templating)
 
 set -uo pipefail
 
 GATEWAY="${GATEWAY:?set GATEWAY to the gateway base URL, e.g. https://<YOUR_GATEWAY_HOST>}"
-LIST_PATH="${LIST_PATH:-/orders}"
-ITEM_BASE="${ITEM_BASE:-/orders}"
+LIST_PATH="${LIST_PATH:-/posts}"
+ITEM_BASE="${ITEM_BASE:-/posts}"
 SEED_IDS="${SEED_IDS:-a1 b2 c3 d4 e5}"
 
 LIST_URL="${GATEWAY%/}${LIST_PATH}"
@@ -42,11 +42,11 @@ echo "→ List route: $LIST_URL"
 echo "→ Item route: ${GATEWAY%/}${ITEM_BASE}/{id}"
 echo
 
-# --- 1: list route answers with a standard response + correlation id ---------
+# --- 1: list route answers with real data + correlation id ---------
 status="$(curl -s -o "$BODY_FILE" -D "$HDR_FILE" -w '%{http_code}' "$LIST_URL")"
 [[ "$status" == "000" ]] && fail "could not reach ${LIST_URL} — check GATEWAY, DNS and reachability."
 [[ "$status" == "200" ]] \
-  && pass "GET ${LIST_PATH} → 200 (standard response)" \
+  && pass "GET ${LIST_PATH} → 200 (real data)" \
   || fail "GET ${LIST_PATH} → ${status} (expected 200). Is the API deployed and the upstream bound?"
 
 if grep -qi '^x-request-id:' "$HDR_FILE"; then

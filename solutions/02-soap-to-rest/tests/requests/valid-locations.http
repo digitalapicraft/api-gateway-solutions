@@ -1,7 +1,7 @@
 ### Case: valid-call-transformed / response-really-converted
 ###
 ### Plain JSON in. The gateway converts this body to XML, calls the handler on
-### /GetData.ashx, and converts the XML response back to JSON.
+### <SOAP_HANDLER_PATH>, and converts the XML response back to JSON.
 ###
 ### The field names here must match the ELEMENT NAMES the SOAP handler reads. If
 ### they don't, you typically get a 200 with an empty result rather than an error —

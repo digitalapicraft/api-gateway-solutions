@@ -1,10 +1,10 @@
 {
   "_case": "valid-free-call / isolation",
   "_status": 200,
-  "_note": "The upstream's own response body, passed through untouched — this solution adds identity and metering, not transformation. Assert the status and that the body is your backend's normal payload. The array below is illustrative for an Orders API.",
+  "_note": "The upstream's own response body, passed through untouched — this solution adds identity and metering, not transformation. Assert the status and that the body is your backend's normal payload. The array below is illustrative for an Posts API.",
   "_headers_present": ["X-Request-Id"],
   "_headers_absent": ["X-RateLimit-* — api-product-enforcer emits no budget headers on success either, so a client cannot track its own consumption from responses at all"],
   "_body_example": [
-    { "orderId": "ord_1a2b3c", "status": "open", "customerRef": "cust_9f8e" }
+    { "postId": "ord_1a2b3c", "status": "open", "customerRef": "cust_9f8e" }
   ]
 }

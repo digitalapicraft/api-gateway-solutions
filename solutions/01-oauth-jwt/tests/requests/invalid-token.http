@@ -1,6 +1,6 @@
 ### Case: forged-token — a structurally valid JWT this gateway did not sign.
 ### Expect 401. A 200 here means the route is not verifying signatures at all,
 ### which is the most serious way this solution can fail.
-GET {{GATEWAY}}/orders
+GET {{GATEWAY}}/posts
 authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJmb3JnZWQifQ.not-a-valid-signature
 accept: application/json

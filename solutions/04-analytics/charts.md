@@ -25,7 +25,7 @@ content-type: application/json
   "endTime":   "2026-01-02T00:00:00Z",
   "dimensions": ["route_id"],            // group by these (0..n)
   "filters":    [                        // AND-combined
-    { "column": "api_name", "operator": "EQ", "value": ["orders-api"] }
+    { "column": "api_name", "operator": "EQ", "value": ["posts-api"] }
   ],
   "aggregation": "AVG",                  // size/time metrics only (see below)
   "timeUnit": "HOURS",                   // bucket over time; omit + excludeTimeUnit:true for a single total
@@ -58,7 +58,7 @@ The response is `{ value, timeRange, groupedResults[], meta }`, where each
 Two rules carry most of the value:
 
 - **Group route-level charts by `route_id`, not `api_path`.** `route_id` collapses a
-  templated route (`/orders/{orderId}`) to one row; `api_path` gives one row per
+  templated route (`/posts/{postId}`) to one row; `api_path` gives one row per
   concrete path — a "top routes" chart that is really a list of individual records.
 - **Attribution needs identity.** `app_name` / `developer` / `product_name` are only
   populated when the route resolved identity (add `helix-auth`,
@@ -100,7 +100,7 @@ Group by route/status/method — no identity required.
 ```json
 POST /api/orgs/{orgId}/analytics/metrics/requests-count
 { "startTime":"…","endTime":"…",
-  "filters":[{"column":"api_name","operator":"EQ","value":["orders-api"]}],
+  "filters":[{"column":"api_name","operator":"EQ","value":["posts-api"]}],
   "timeUnit":"HOURS" }
 ```
 
@@ -113,7 +113,7 @@ whether errors rise *with* traffic (capacity) or *without* it (a deploy/dependen
 ```json
 POST /api/orgs/{orgId}/analytics/metrics/requests-count
 { "startTime":"…","endTime":"…",
-  "filters":[{"column":"api_name","operator":"EQ","value":["orders-api"]}],
+  "filters":[{"column":"api_name","operator":"EQ","value":["posts-api"]}],
   "dimensions":["route_id","response_status_code"],
   "excludeTimeUnit":true }
 ```
@@ -129,7 +129,7 @@ caller's or your docs'. Filter to a class with
 ```json
 POST /api/orgs/{orgId}/analytics/metrics/response-time
 { "startTime":"…","endTime":"…",
-  "filters":[{"column":"api_name","operator":"EQ","value":["orders-api"]}],
+  "filters":[{"column":"api_name","operator":"EQ","value":["posts-api"]}],
   "dimensions":["route_id"], "aggregation":"MAX", "excludeTimeUnit":true }
 ```
 
@@ -166,7 +166,7 @@ Add `helix-auth` to the routes and `app_name` / `developer` populate; then:
 ```json
 POST /api/orgs/{orgId}/analytics/metrics/requests-count
 { "startTime":"…","endTime":"…",
-  "filters":[{"column":"api_name","operator":"EQ","value":["orders-api"]}],
+  "filters":[{"column":"api_name","operator":"EQ","value":["posts-api"]}],
   "dimensions":["app_name"], "excludeTimeUnit":true }
 ```
 

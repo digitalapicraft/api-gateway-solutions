@@ -14,7 +14,7 @@ local_validation:
     required_fields:         PASS   # every product in products.json carries a quota object; the unlimited tier uses limit -1 rather than omitting quota
     references:              PASS   # products reference <API_ID>; limit-count references <ENV:REDIS_HOST>
     plugin_ordering:         PASS   # helix-auth (identity + subscriptions) -> product resolution -> api-product-enforcer. The enforcer can only work because helix-auth ran first.
-    plugin_scoping:          PASS   # helix-auth, api-product-enforcer, request-id and cors are API-wide; limit-count is route-scoped to POST /orders/search only
+    plugin_scoping:          PASS   # helix-auth, api-product-enforcer, request-id and cors are API-wide; limit-count is route-scoped to POST /posts/search only
     auth_authz_dependencies: PASS   # nothing reads context helix-auth has not yet produced; the per-IP limiter is deliberately independent of identity
     request_response:        PASS   # documented 401/403/429/503 responses match the design, and are distinguished from each other
     security:                PASS   # no literal secrets; app keys/secrets are provisioned on the credential by the control plane; REDIS_HOST is an <ENV:...> reference
@@ -69,7 +69,7 @@ local_validation:
       Without one api-product-enforcer returns 403 regardless of subscription, and the
       error is indistinguishable from a missing subscription.
     - >-
-      The per-IP limit-count on POST /orders/search requires real-ip in front if the
+      The per-IP limit-count on POST /posts/search requires real-ip in front if the
       gateway sits behind a proxy or load balancer. Otherwise every caller presents the
       balancer's address, the ceiling becomes a global 20/min cap on that endpoint, and
       you have a self-inflicted outage waiting for a traffic spike. Nothing here can
@@ -99,7 +99,7 @@ local_validation:
       OpenAPI paths. Nothing in this document can confirm it is reachable.
 
   assumptions:
-    - API "Orders API" with metered paths /orders*. Illustrative.
+    - API "Posts API" with metered paths /posts*. Illustrative.
     - Upstream ceiling ~3,000 req/min. Illustrative — and see the quota arithmetic warning.
     - Four tiers: Free 60, Pro 1000, Enterprise 10000, Internal -1, all per minute. Illustrative.
     - The route has a service_id.

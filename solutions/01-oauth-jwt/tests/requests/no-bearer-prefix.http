@@ -1,5 +1,5 @@
 ### Case: malformed-authorization — a VALID token sent without the "Bearer " scheme.
 ### Expect 401. Tests the header-parsing boundary rather than the signature.
-GET {{GATEWAY}}/orders
+GET {{GATEWAY}}/posts
 authorization: {{ACCESS_TOKEN}}
 accept: application/json

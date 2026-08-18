@@ -12,26 +12,26 @@ not an observability concern, and the distinction is the whole architecture.
 ## Where the data comes from
 
 This solution's API is deliberately minimal — two routes returning a standard
-response via the `mocking` plugin, no auth. Analytics still captures every call; the
+the two routes proxy the public jsonplaceholder upstream, no auth. Analytics still captures every call; the
 only question is how usefully. Here is a call to the templated route:
 
 ```
 ┌────────┐   ┌───────────────────────────────────────────────┐
 │ Client │   │                   Gateway                     │
 └───┬────┘   │                                               │
-    │ GET /orders/ord_1a2b3c                                 │
+    │ GET /posts/ord_1a2b3c                                 │
     ├────────►│  ┌──────────── rewrite phase ─────────────┐  │
     │        │  │ request-id → X-Request-Id: 7f3c…        │  │
     │        │  └──────────────┬─────────────────────────┘  │
-    │        │  ┌──────────── (mocking) ──────────────────┐  │
-    │  200   │  │ returns the standard response           │  │
+    │        │  ┌──────────── proxy ───────────────────────┐  │
+    │  200   │  │ forwards to jsonplaceholder, returns data│  │
     │◄───────┼──┴─────────────────────────────────────────┘  │
     │        │  ┌──────────── log phase ──────────────────┐  │
     │        │  │ helix-analytics  (GLOBAL — NOT in your   │  │
     │        │  │                   API's spec)            │  │
     │        │  │ writes one row:                          │  │
-    │        │  │   route      /orders/{orderId}  ← templated (group by route_id)
-    │        │  │   api_path   /orders/ord_1a2b3c ← the concrete path
+    │        │  │   route      /posts/{postId}  ← templated (group by route_id)
+    │        │  │   api_path   /posts/ord_1a2b3c ← the concrete path
     │        │  │   status     200                         │  │
     │        │  │   latency    2ms                         │  │
     │        │  │   request_id 7f3c…             ← correlation (log-side)
@@ -46,7 +46,7 @@ only question is how usefully. Here is a call to the templated route:
 ```
 
 Two fields in that row are useful *because of a request-path choice* baked into this
-API: **route** is templated (group by the `route_id` dimension and `/orders/{orderId}`
+API: **route** is templated (group by the `route_id` dimension and `/posts/{postId}`
 collapses to one row), and **request_id** is a correlation handle you match in your own
 logs. A third — **who called** — is a *source IP* here, because the API has no identity.
 Add `helix-auth` ([solution 01](../01-oauth-jwt/)) and that same row carries the app and
@@ -56,7 +56,7 @@ developer instead; you change nothing on the analytics side.
 
 | Field in the row | Comes from | Without it |
 |---|---|---|
-| `route` (by `route_id`) | The **templated** OpenAPI path `/orders/{orderId}` | Group by `api_path` and you get one row per order id — a per-route breakdown that is a list of individual records, with per-route latency from one sample each. |
+| `route` (by `route_id`) | The **templated** OpenAPI path `/posts/{postId}` | Group by `api_path` and you get one row per order id — a per-route breakdown that is a list of individual records, with per-route latency from one sample each. |
 | `request_id` | `request-id`, forwarded upstream | You can see 3% of calls failed but cannot reach the failing request, or the matching line in your backend's logs. |
 | `app` / `developer` *(compose-in)* | `helix-auth` ([solution 01](../01-oauth-jwt/)) resolving identity | Not present on this minimal API — the row attributes to a source IP. Add solution 01 when you need per-app numbers. |
 Templating and correlation are baked into this minimal API; identity is the one you
@@ -74,7 +74,7 @@ reading charts:
 - Analytics **cannot retroactively attribute** traffic captured without identity. The
   gateway didn't know who was calling; nothing recovers that later.
 - Analytics **cannot collapse** literal paths into a template after the fact. A year of
-  `/orders/ord_1a2b3c` rows stays a year of individual rows.
+  `/posts/ord_1a2b3c` rows stays a year of individual rows.
 - A correlation id **not written down by your backend** cannot be reconstructed.
 
 So the failure mode isn't "the dashboard is missing a feature". It's "the question was
@@ -105,7 +105,7 @@ unauthenticated route produces a permanently anonymous row.
 Two modelling choices in the spec exist purely for observability reasons, and neither
 is obvious as such.
 
-**Templating.** `/orders/{orderId}` declared as a parameter is one row. Declared as
+**Templating.** `/posts/{postId}` declared as a parameter is one row. Declared as
 literals, it's one row per order. The API behaves identically — this is invisible until
 you ask a route-level question.
 
@@ -145,7 +145,7 @@ Where custom work **would** be justified, and is out of scope here:
 
 Worth stating precisely, because assuming otherwise wastes an afternoon:
 
-- **Requests, not bodies.** Which app called `POST /orders` and what status came back —
+- **Requests, not bodies.** Which app called `POST /posts` and what status came back —
   yes. What was in the payload — no, and deliberately: capturing bodies means capturing
   customer data.
 - **The gateway's view of latency.** It includes your upstream's total time but cannot

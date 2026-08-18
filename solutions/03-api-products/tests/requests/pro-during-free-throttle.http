@@ -9,6 +9,6 @@
 ###
 ### Expect 200. Cases 1-4 prove a limit exists; only this one proves the blast
 ### radius is a single app, which is the entire business case.
-GET {{GATEWAY}}/orders
+GET {{GATEWAY}}/posts
 apikey: {{PRO_KEY}}
 accept: application/json

@@ -34,7 +34,6 @@ implementation:
     - API Products                          # the tier + quota — the thing you sell (gateway/products.json)
     - request-id                            # a disputed 429 needs something to search on
     - cors                                  # browser access
-    - limit-count (route-scoped, per-IP)    # second, independent layer on POST /orders/search only
   custom_code_required: false
   notes: >-
     Quota lives on the PRODUCT and is counted PER APP (the credential) by default.
@@ -51,12 +50,8 @@ implementation:
     node it MUST be redis, or each node counts separately and an N-node cluster
     serves roughly N times the quota you sold. This is invisible from the route
     config and is the most common way the solution fails to deliver its promise.
-    Note the inconsistency: limit-count DOES take policy and redis_host on the
-    route. That difference is what leads people to add Redis settings to the
-    enforcer, where they are rejected.
-    The per-IP limit-count on the search route requires real-ip in front if the
-    gateway sits behind a proxy, or every caller shares the balancer's address and
-    the ceiling becomes a global cap on that endpoint.
+    Rate limiting here is solely the product quota (api-product-enforcer); there is
+    no separate limiter in this simplified design.
 
 validation:
   # Validated against a gateway. See validation/gateway-validation.yaml.
@@ -91,7 +86,7 @@ artifacts:
   validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
 
 assumptions:
-  - API name is "Orders API" and the metered paths are /orders* (illustrative — replace with yours).
+  - API name is "Posts API" and the metered paths are /posts* (illustrative — replace with yours).
   - Measured upstream ceiling is ~3,000 req/min (illustrative — replace with yours, and
     check it against the SUM of the quotas you have actually sold).
   - Tier limits (Free 60, Pro 1000, Enterprise 10000, Internal -1 per minute) are
@@ -105,8 +100,6 @@ assumptions:
     solution 01 (client-credentials JWTs) and keep the enforcer behind the auth block.
   - The gateway is assumed single-node unless quota_policy is set to redis in
     plugin_attr. On more than one node, redis is mandatory.
-  - real-ip is present in front of the gateway if it sits behind a proxy, for the
-    per-IP limiter on the search route to be meaningful.
 
 limitations:
   - api-product-enforcer emits no X-RateLimit-* headers and no Retry-After. A client

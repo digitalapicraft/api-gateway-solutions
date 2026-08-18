@@ -2,6 +2,6 @@
 ### Expect 200.
 ### A 401 here with a freshly issued token means the signing secret differs
 ### between the issue route and the validate route.
-GET {{GATEWAY}}/orders
+GET {{GATEWAY}}/posts
 authorization: Bearer {{ACCESS_TOKEN}}
 accept: application/json

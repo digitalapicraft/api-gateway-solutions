@@ -7,8 +7,8 @@ exhausts their own budget and nobody else's.**
 |---|---|
 | **Setup time** | ~20 minutes |
 | **Difficulty** | 🟢 Beginner |
-| **Needs** | An API deployed to an environment · a developer with **two** apps to test with · Redis if the gateway runs more than one node |
-| **Plugins** | `helix-auth` (validate / key-auth) · `api-product-enforcer` · `request-id` · `cors` · route-scoped `limit-count` |
+| **Needs** | A fresh org (its default **test** environment) · a developer with **two** apps · Redis if the gateway runs more than one node. Upstream is public jsonplaceholder — no backend of your own. |
+| **Plugins** | `helix-auth` (validate / key-auth) · `api-product-enforcer` · `request-id` · `cors` |
 | **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) + [`products.json`](gateway/products.json) |
 | **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec + products](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Infographic](infographic.md) · ✅ [Manifest](solution.yaml) |
 
@@ -135,29 +135,27 @@ Better, but still worth knowing.
 
 ## Build it with the Helix Agent
 
-Recommended path. Full prompt with all the constraints:
+Recommended path, and it works on a **fresh org** — the agent *creates* the API on
+a public upstream, then rate-limits it with a product quota. Full prompt:
 [`helix-agent-prompt.md`](helix-agent-prompt.md).
 
 ```text
-Set up tiered throughput on my Orders API using API Products, so one partner's app
-can never exhaust capacity for the others.
+Create a new REST API called "Posts API" and rate-limit it per app with a product
+quota. This is a fresh org — I have no existing API.
 
-Identify the caller with helix-auth in validate mode, key-auth type, reading the
-credential key from the "apikey" header. Use helix-auth, not the raw key-auth
-plugin — I want the app's product subscription resolved, not just a static key
-checked.
+Upstream: https://jsonplaceholder.typicode.com (public, returns real data).
+Environment: test. Routes: GET /posts, GET /posts/{postId} (paths match the
+upstream, no rewrite). Confirm the route has a service_id.
 
-Create four API Products bundling this API, each with a quota: Free 60/min, Pro
-1000/min, Enterprise 10000/min, and Internal with limit -1 for unlimited. Every
-product must carry a quota object — a product without one is a 403, not
-"unlimited". Deploy all four to staging.
+Identify the caller with helix-auth validate, validate_auth_type key-auth, reading
+the credential key from the "apikey" header (key-auth is a value of helix-auth,
+not a standalone plugin — I want the product subscription resolved).
 
-Enforce it with api-product-enforcer, error_policy fail_close. Confirm the route
-has a service_id — without one the enforcer returns 403 regardless of subscription.
-
-Do NOT key any rate limit on consumer_name, and do NOT put Redis settings in the
-api-product-enforcer block — that plugin only accepts error_policy and
-ctx_namespace.
+Create two products, each with a quota: Free 5/min and Pro 1000/min. Every product
+must carry a quota object (a product without one is a 403, not "unlimited"). Deploy
+both to test. Add api-product-enforcer with error_policy fail_close — the product
+quota IS the rate limiter; do not add any other limiter or key anything on
+consumer_name. Do not put Redis settings in the enforcer.
 
 Show me the spec, dry-run it, and wait for me to confirm before deploying.
 ```
@@ -169,15 +167,13 @@ Create a test developer with TWO SEPARATE APPS — one subscribed to Free, one t
 — and give me both keys. They must be different apps: two keys on the same app
 share one quota bucket and would not prove isolation.
 
-Then give me a curl loop showing the Free app getting 429 after 60 requests while
-the Pro app still gets 200s in the same window.
+Then give me a curl loop showing the Free app getting 429 after 5 requests while
+the Pro app still gets 200s with real data in the same window.
 ```
 
-The agent will fetch the real plugin schemas from your org, propose the spec, and
-stop for your confirmation. See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for why the
-constraints are phrased that way and what to say when the agent reaches for
-`limit-count` + `consumer_name` anyway — which it will, because that's the generic
-answer.
+The agent creates the API and products, proposes the spec, and stops. See
+[AGENT-GUIDE.md](../../AGENT-GUIDE.md) for what to say if the agent reaches for a
+`limit-count` on `consumer_name` — the generic reflex this platform doesn't use.
 
 ## Install it directly
 
@@ -188,14 +184,16 @@ export BASE=https://<YOUR_GATEWAY_HOST>/api
 H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
 
 # 1. Import gateway/api-spec.yaml (OpenAPI import, or Agent Mode). It carries
-#    helix-auth + api-product-enforcer. Bind your upstream. CONFIRM THE ROUTE HAS
-#    A service_id — without one the enforcer 403s regardless of subscription.
+#    helix-auth + api-product-enforcer. Bind the upstream
+#    https://jsonplaceholder.typicode.com (swap in your own later). CONFIRM THE
+#    ROUTE HAS A service_id — without one the enforcer 403s regardless of
+#    subscription (import assigns one automatically).
 
 # 2. Create the products, then deploy each one to the environment.
 jq -c '.products[]' gateway/products.json | while read -r p; do
   curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/products" -d "$p" | jq -r '.id // .message'
 done
-curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/envs/<ENV_ID>/products/<PRODUCT_ID>/deploy"
+curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/envs/<TEST_ENV_ID>/products/<PRODUCT_ID>/deploy"   # test env
 
 # 3. Create a developer, then TWO apps, each subscribing to one product
 #    (products is a {productId: rank} map). Keep both app keys.
@@ -206,8 +204,8 @@ curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/envs/<ENV_ID>/products/<PRODUCT_ID>/d
 
 # 5. Prove it — including isolation
 GATEWAY=https://<YOUR_GATEWAY_HOST> \
-FREE_KEY=<free app client id> PRO_KEY=<pro app client id> FREE_LIMIT=60 \
-./gateway/verify.sh
+FREE_KEY=<free app client id> PRO_KEY=<pro app client id> FREE_LIMIT=5 \
+./gateway/verify.sh          # defaults to /posts
 ```
 
 > Revisions must be **INACTIVE** to accept a spec change. If it's live: undeploy
@@ -287,34 +285,12 @@ If you genuinely need budget headers on the response today, that's a `limit-coun
 with `show_limit_quota_header: true` — a *different* limiter with a different key.
 Don't try to make the product enforcer do it.
 
-## The second layer on the search route
-
-`POST /orders/search` carries a route-scoped `limit-count` of 20/60s keyed on
-`remote_addr`, **in addition** to the product quota. This is deliberate, and the
-reasoning generalises:
-
-- The product quota is **per app**, and it only applies to traffic that
-  authenticated. Anything that fails auth never reaches the enforcer.
-- This endpoint hits the reporting store, which is the expensive backend. It needs a
-  ceiling per *source*, including from traffic that never authenticates.
-- So the key is `remote_addr` — deliberately **not** consumer-scoped, because
-  per-caller metering is already handled above.
-
-**If the gateway sits behind a proxy or load balancer you need `real-ip` in front**,
-or every caller shares the balancer's address and your per-IP ceiling becomes a
-global 20/min cap on the endpoint. That's a self-inflicted outage waiting for a
-traffic spike.
-
-Note `limit-count` *does* take its backend on the route (`policy`, `redis_host`) —
-unlike the product enforcer. The inconsistency is real; don't let it lead you to
-put Redis settings in the enforcer.
-
 ## Testing
 
 ```bash
 GATEWAY=https://<YOUR_GATEWAY_HOST> \
-FREE_KEY=<free app client id> PRO_KEY=<pro app client id> FREE_LIMIT=60 \
-./gateway/verify.sh
+FREE_KEY=<free app client id> PRO_KEY=<pro app client id> FREE_LIMIT=5 \
+./gateway/verify.sh          # defaults to /posts
 ```
 
 Exit 0 means all five held:
@@ -355,8 +331,8 @@ Each of these has cost somebody an afternoon.
   to enforce against. The symptom looks like a subscription problem and is actually a
   plugin choice.
 - **Never key a rate limit on `consumer_name`.** Per-caller metering here is the
-  product quota, counted on the credential. The only `limit-count` in this design is
-  the per-IP one on the search route.
+  product quota, counted on the credential. Rate limiting here is the product
+  quota; there is no separate limiter in this design.
 - **`fail_close` is the default**, so a quota-backend outage returns 503. If
   unmetered traffic beats errors for your business, set `fail_open` deliberately —
   and know you're choosing to over-serve during an incident.
@@ -368,8 +344,6 @@ Each of these has cost somebody an afternoon.
 - **Only the top-ranked covering product is evaluated.** If a 429 arrives sooner
   than you expect, check which product actually won — the app may be subscribed to
   something you forgot about at a higher rank.
-- **`real-ip` is required in front of the per-IP limiter** if the gateway is behind
-  a proxy, or every caller shares the balancer's address.
 - **Use `filter_func`, not `vars`,** for conditional route matching — `vars` is
   typed incompatibly between the control plane and the gateway and fails at deploy.
 - **Confirm `api-product-enforcer` exists in your org** with `get_plugin_config`

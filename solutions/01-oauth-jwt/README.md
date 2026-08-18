@@ -7,7 +7,7 @@ authentication happened.**
 |---|---|
 | **Setup time** | ~15 minutes |
 | **Difficulty** | 🟢 Beginner |
-| **Needs** | An API deployed to an environment · a real signing-secret value to paste into the spec (used literally — see below) · one developer + app to test with |
+| **Needs** | A fresh org (its default **test** environment) · a real signing-secret value to paste into the spec (used literally — see below) · one developer + app to test with. The upstream is public jsonplaceholder, so no backend of your own. |
 | **Plugins** | `helix-auth` (generate + validate) · `request-id` · `cors` |
 | **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
 | **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Infographic](infographic.md) · ✅ [Manifest](solution.yaml) |
@@ -91,7 +91,7 @@ helix-auth  (mode: generate)
 
 ─── calling the API ────────────────────────────────────────────────────
 Client
-  │  GET /orders
+  │  GET /posts
   │  Authorization: Bearer eyJ...
   ▼
 helix-auth  (mode: validate, validate_auth_type: jwt-auth)   [access phase]
@@ -110,28 +110,31 @@ database doesn't see it, and it doesn't consume a connection from your pool.
 
 ## Build it with the Helix Agent
 
-This is the recommended path, and it's about four sentences of typing. Full
+Recommended path, and it works on a **fresh org** — the agent *creates* the API
+(nothing to find yet) on a public upstream so you get real data immediately. Full
 prompt with all the constraints: [`helix-agent-prompt.md`](helix-agent-prompt.md).
 
 ```text
-Add OAuth 2.0 client-credentials authentication to my Orders API.
+Create a new REST API called "Posts API" and protect it with OAuth 2.0
+client-credentials authentication. This is a fresh org — I have no existing API.
 
-Add an endpoint POST /oauth/token that verifies an app's client id and secret
-and issues a signed JWT access token, with a 15-minute lifetime.
+Upstream: https://jsonplaceholder.typicode.com (public, so it returns real data;
+I'll swap in my own later). Deploy to the "test" environment.
 
-Protect every other endpoint so it requires a valid Bearer token issued by that
-endpoint, and rejects anything else before it reaches the upstream.
+Routes (paths match the upstream, so no path rewrite): GET /posts,
+GET /posts/{postId}, POST /posts.
 
-The gateway is the token issuer here, so use helix-auth in generate mode for the
-token endpoint and validate mode with validate_auth_type jwt-auth for the
-protected routes.
+Add POST /oauth/token using helix-auth generate — it verifies an app's client id
+and secret and issues a signed JWT, 15-minute lifetime. Protect the /posts routes
+with helix-auth validate, validate_auth_type jwt-auth, referencing the SAME
+signing secret. Apply validate per route, not API-wide (or /oauth/token would be
+protected and nobody could get a first token).
 
-Both must use the SAME signing secret. On this gateway the signing_secret is a
-literal HMAC key on this build — there is no <ENV:...> resolution — so use one real, secret,
-high-entropy value in both places, and don't commit it.
+The signing secret is a LITERAL on this build — no <ENV:...> resolution — so use
+one real, high-entropy value in both places and don't commit it. jwt-auth is a
+validate_auth_type of helix-auth, not a standalone plugin.
 
-Show me the spec, run validate_route and dry_run_deploy, and wait for me to
-confirm before deploying.
+Show me the spec, run validate_route and dry_run_deploy, and wait before deploying.
 ```
 
 Then, in the same session:
@@ -141,8 +144,8 @@ Create a developer "Partner Integrations" with an app subscribed to this API,
 and give me the client id and secret so I can test the token exchange.
 ```
 
-The agent will look up the API, fetch the real `helix-auth` schema from your org,
-propose the spec, and stop. See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for why
+The agent creates the API, fetches the real `helix-auth` schema from your org,
+proposes the spec, and stops. See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for why
 the prompt is shaped this way and what to do when the agent takes a wrong turn.
 
 ## Install it directly
@@ -161,10 +164,10 @@ H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
 #    route. Do not commit the filled-in spec.
 
 # 2. Import gateway/api-spec.yaml (OpenAPI import in the portal, or Agent Mode)
-#    and bind your upstream <UPSTREAM_URL> to the service. (Importing assigns
-#    service_id automatically.)
+#    and bind the upstream https://jsonplaceholder.typicode.com to the service
+#    (swap in your own backend later). Importing assigns service_id automatically.
 
-# 3. Deploy the revision to your environment.
+# 3. Deploy the revision to the "test" environment (a free-trial org's default).
 
 # 4. Create a developer and an app. The control plane issues the app's
 #    client_id (the credential key) and client_secret. Keep both.
@@ -172,7 +175,7 @@ H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
 # 5. Prove it
 GATEWAY=https://<YOUR_GATEWAY_HOST> \
 CLIENT_ID=<CLIENT_ID> CLIENT_SECRET=<CLIENT_SECRET> EXPECT_TTL=900 \
-./gateway/verify.sh
+./gateway/verify.sh          # defaults to /posts and /oauth/token
 ```
 
 > An **ACTIVE** revision will not accept edits — you'll get `Only INACTIVE

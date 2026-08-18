@@ -9,13 +9,13 @@ local_validation:
 
   checks:
     syntax:                  PASS   # api-spec.yaml parses as valid OpenAPI 3.0.3; verify.sh parses under bash
-    schema:                  PASS   # mocking, request-id, cors — fields drawn from confirmed usage, none invented
+    schema:                  PASS   # request-id, cors — fields drawn from confirmed usage, none invented
     no_analytics_plugin:     PASS   # CONFIRMED: no helix-analytics block anywhere. Analytics is global; adding one is the mistake this package exists to prevent. The name appears only in explanatory comments.
-    minimal_surface:         PASS   # two routes only (/orders, /orders/{orderId}), each with just the mocking plugin returning a standard response — no auth, quota or transform on the routes
-    path_templating:         PASS   # /orders/{orderId} is a path PARAMETER, so it collapses to one row grouped by route_id (one row per id if grouped by api_path)
+    minimal_surface:         PASS   # two routes only (/posts, /posts/{postId}), each with just the jsonplaceholder upstream returning real data — no auth, quota or transform on the routes
+    path_templating:         PASS   # /posts/{postId} is a path PARAMETER, so it collapses to one row grouped by route_id (one row per id if grouped by api_path)
     correlation_id:          PASS   # request-id applied API-wide with header_name X-Request-Id; a correlation tool for a log-side join, not an analytics dimension
-    plugin_scoping:          PASS   # mocking per-route; request-id and cors API-wide
-    request_response:        PASS   # both routes return 200 with a standard canned response
+    plugin_scoping:          PASS   # request-id and cors are API-wide; routes have no plugins (plain proxy)
+    request_response:        PASS   # both routes return 200 with a real jsonplaceholder data
     security:                PASS   # no secrets, no auth, no literal credentials anywhere
     no_commentary_keys:      PASS   # plugin blocks contain schema fields only; explanation is in YAML comments
     tests_match_impl:        PASS   # verify.sh and test-plan cover the two routes; per-app attribution is flagged as a compose-in (solution 01), not asserted here
@@ -38,12 +38,12 @@ local_validation:
     - >-
       Charts 5-7 in charts.md need solution 03 (quota consumption requires a quota).
     - >-
-      With the mocking plugin the routes never proxy, but the platform still wants an
+      With the jsonplaceholder upstream the routes never proxy, but the platform still wants an
       upstream bound to the service. Bind any reachable placeholder.
 
   assumptions:
-    - API "Orders API" with /orders and /orders/{orderId}. Illustrative.
-    - Routes return a standard response via mocking; swap in a real upstream when you have one.
+    - API "Posts API" with /posts and /posts/{postId}. Illustrative.
+    - Routes proxy the public jsonplaceholder upstream; swap in your own when you have one.
     - Analytics is enabled globally via helix-analytics.
 
   not_established_here:

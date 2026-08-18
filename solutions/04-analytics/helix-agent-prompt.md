@@ -18,34 +18,34 @@ Read [AGENT-GUIDE.md](../../AGENT-GUIDE.md) § 7 first if you haven't.
 ## Part A — shape the request path
 
 ```text
-I want the platform's analytics to be able to answer per-route questions about my API,
-from a deliberately minimal API. Analytics is already enabled globally, so do NOT add
-an analytics plugin — there is nothing to turn on. Instead, keep the API simple and
-make sure the request path is shaped so the captured data is useful.
+I want to demonstrate the platform's always-on analytics on a deliberately minimal
+API. This is a fresh org — I have no existing API, so CREATE one. Analytics is
+already enabled globally, so do NOT add an analytics plugin — there is nothing to
+turn on. Keep the API simple and shape the request path so the captured data is
+useful.
 
 CONTEXT
-- API: <<Orders API>>   (find it with list_apis; if more than one matches, ask me
-  before changing anything)
-- Environment: <<staging>>
+- Create an API named <<Posts API>>.
+- Upstream: https://jsonplaceholder.typicode.com (public, returns real data).
+- Environment: test   (my free-trial org's default).
 
 WHAT I WANT
 
-1. KEEP THE API MINIMAL.
-   This API exists to generate analytics traffic, so keep the routes simple — a
-   standard response via the mocking plugin, and nothing else on them. Do NOT add
-   auth, quota or transforms here. (For per-APP attribution rather than per-IP, I add
-   identity later by composing solution 01 — tell me if any route currently resolves
-   identity, but don't add it as part of this.)
+1. CREATE A MINIMAL API.
+   Two routes that proxy the upstream and nothing else on them — this API exists to
+   generate analytics traffic, not to enforce policy:
+     - GET /posts
+     - GET /posts/{postId}
+   Route paths match the upstream, so no proxy-rewrite is needed. Do NOT add auth,
+   quota or transforms here. (For per-APP attribution rather than per-IP I compose in
+   identity later — solution 01 — but not as part of this.)
 
-2. REVIEW MY PATHS FOR TEMPLATING.
-   Go through the OpenAPI paths and find any route where a path segment is really an
-   identifier. Each of those must be declared as a path PARAMETER, not a literal.
-
-   Tell me if you find a path that would produce one analytics row per entity instead
-   of one row per route. This matters more than it looks: with literal paths, a
-   per-route breakdown becomes a list of individual records, per-route latency is computed
-   from one sample per row, and cardinality grows with my data volume forever. The API
-   works identically either way — only the analytics is ruined.
+2. USE TEMPLATED PATHS.
+   /posts/{postId} MUST be a path PARAMETER, not a literal id. Grouped by the
+   route_id analytics dimension it is ONE row; as literal paths it becomes one row
+   per id — a per-route breakdown that is a list of individual records, with
+   per-route latency from one sample each. The API works identically either way;
+   only the analytics is ruined.
 
 3. CORRELATION ID.
    Add request-id (uuid, header X-Request-Id) API-wide. Confirm it is forwarded to the
@@ -92,7 +92,7 @@ analytics queries. A query is a structured POST, e.g.:
 ```json
 POST /api/orgs/{orgId}/analytics/metrics/requests-count
 { "startTime":"…", "endTime":"…",
-  "filters":[{"column":"api_name","operator":"EQ","value":["orders-api"]}],
+  "filters":[{"column":"api_name","operator":"EQ","value":["posts-api"]}],
   "dimensions":["route_id","response_status_code"],
   "excludeTimeUnit":true }
 ```

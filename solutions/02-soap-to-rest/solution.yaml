@@ -30,7 +30,7 @@ business_need:
 implementation:
   gateway_capabilities:
     - xml-to-json (transform_request + transform_response)  # request needs transform_request:true (default false); response is content-negotiated on Accept: application/json
-    - proxy-rewrite                         # retarget /locations -> /GetData.ashx (path ONLY — no Content-Type override)
+    - proxy-rewrite                         # retarget /locations -> <SOAP_HANDLER_PATH> (path ONLY — no Content-Type override)
     - helix-auth (mode generate)            # POST /oauth/token — see solution 01
     - helix-auth (mode validate, jwt-auth)  # POST /locations — rejects in the access phase, BEFORE any transform
     - request-id                            # correlate the client's JSON with the handler's XML across the hop
@@ -85,7 +85,7 @@ artifacts:
   validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
 
 assumptions:
-  - API name "Partner Locations API"; mediated route POST /locations; SOAP handler path /GetData.ashx. All illustrative — replace with yours.
+  - API name "Partner Locations API"; mediated route POST /locations; SOAP handler path <SOAP_HANDLER_PATH>. All illustrative — replace with yours.
   - The handler expects content-type text/xml (SOAP 1.1 style). SOAP 1.2 handlers want application/soap+xml.
   - The handler does NOT require a SOAPAction header. Many classic SOAP 1.1 and .asmx
     endpoints DO; add it in proxy-rewrite.headers.set if yours is one of them.

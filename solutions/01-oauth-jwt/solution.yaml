@@ -75,7 +75,7 @@ artifacts:
   validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
 
 assumptions:
-  - API name is "Orders API" and the protected paths are /orders* (illustrative — replace with yours).
+  - API name is "Posts API" and the protected paths are /posts* (illustrative — replace with yours).
   - The token endpoint is POST /oauth/token (illustrative; any path works).
   - token_ttl is 900 seconds. This is a deliberate choice, not a platform default —
     it is the only bound on a leaked token's usefulness. Pick it for your own risk

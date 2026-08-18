@@ -36,7 +36,7 @@ truth** for what the solution does — but it is the *output* you should expect,
 not the input you should type.
 
 ```text
-You:    Create a REST API called Orders API that issues OAuth 2.0 access
+You:    Create a Posts API on jsonplaceholder that issues OAuth 2.0 access
         tokens and validates them on every other endpoint.
 Agent:  [looks up the API] [fetches the real plugin schemas]
         [shows the spec it proposes] [waits]

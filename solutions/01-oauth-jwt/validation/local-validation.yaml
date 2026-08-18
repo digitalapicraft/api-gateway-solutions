@@ -13,7 +13,7 @@ local_validation:
     required_fields:         PASS   # generate route carries token_ttl + signing_secret; every validate route carries validate_auth_type + signing_secret
     references:              PASS   # issue route and all three validate routes reference the identical <ENV:JWT_SIGNING_SECRET>
     plugin_ordering:         PASS   # helix-auth validate runs in the access phase, ahead of the upstream; request-id and cors are API-wide and order-independent here
-    plugin_scoping:          PASS   # validate is per-route on /orders*, deliberately NOT at the document root, so POST /oauth/token stays reachable without a token
+    plugin_scoping:          PASS   # validate is per-route on /posts*, deliberately NOT at the document root, so POST /oauth/token stays reachable without a token
     auth_authz_dependencies: PASS   # /oauth/token is intentionally unprotected; nothing on the protected routes depends on context helix-auth has not yet produced
     request_response:        PASS   # documented 200/401/403/404 responses match the design; every rejection path is a 401
     security:                PASS   # no literal secrets anywhere; signing_secret is <ENV:JWT_SIGNING_SECRET>; client_id/client_secret are provisioned on the credential by the control plane and never written to config
@@ -49,7 +49,7 @@ local_validation:
       party must verify independently.
 
   assumptions:
-    - API "Orders API" with protected paths /orders, /orders/{orderId}; token endpoint POST /oauth/token. All illustrative.
+    - API "Posts API" with protected paths /posts, /posts/{postId}; token endpoint POST /oauth/token. All illustrative.
     - The gateway is the token issuer; no external identity provider is involved.
     - JWT_SIGNING_SECRET exists on the target environment before the revision is deployed.
     - One developer with one app provides the client_id/client_secret used in testing.

@@ -188,27 +188,9 @@ cases:
       Pooling means one of that developer's apps CAN starve their own production traffic.
       Run this before choosing, so the trade-off is observed rather than assumed.
 
-  - id: per-ip-ceiling-on-search
-    type: boundary
-    intent: >-
-      The route-scoped limit-count on POST /orders/search caps a single source
-      independently of the product quota, and (unlike the enforcer) does emit
-      X-RateLimit-* headers.
-    type_of_execution: manual
-    procedure: >-
-      Send more than 20 requests in 60 seconds to POST /orders/search from one source
-      with a valid key whose product quota is nowhere near spent. Expect 429 from the
-      per-IP limiter, with X-RateLimit-* headers present.
-    expected_status: 429
-    notes: >-
-      CRITICAL: if the gateway sits behind a proxy or load balancer without real-ip in
-      front, every caller presents the balancer's address and this becomes a GLOBAL
-      20/min cap on the endpoint. Verify from two different source addresses — if
-      throttling one throttles the other, real-ip is missing and you have a
-      self-inflicted outage waiting for a traffic spike.
 
 coverage:
   positive: [valid-free-call, isolation]
   negative: [unauthenticated, unknown-key]
-  boundary: [quota-exhausted, unlimited-product, developer-scope-pooling, per-ip-ceiling-on-search]
+  boundary: [quota-exhausted, unlimited-product, developer-scope-pooling]
   failure:  [product-without-quota, quota-backend-unreachable, multi-node-counting]

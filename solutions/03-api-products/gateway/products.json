@@ -1,54 +1,30 @@
 {
-  "_comment": "The four API Products for solution 03. POST each to /api/orgs/<ORG_ID>/products, then deploy each one per environment with POST /api/orgs/<ORG_ID>/envs/<ENV_ID>/products/<PRODUCT_ID>/deploy. apiIds come from GET /api/orgs/<ORG_ID>/apis. Or just ask the Helix Agent to create them — see ../helix-agent-prompt.md.",
+  "_comment": "The API Products for solution 03 — rate limiting is the quota on the product. POST each to /api/orgs/<ORG_ID>/products, then deploy per environment with POST /api/orgs/<ORG_ID>/envs/<ENV_ID>/products/<PRODUCT_ID>/deploy. apiIds come from GET /api/orgs/<ORG_ID>/apis. Or just ask the Helix Agent to create them — see ../helix-agent-prompt.md.",
 
-  "_the_model": "Developer = Consumer. App = Credential (carries key/client_id and secret). Product = a bundle of APIs plus a quota. An app subscribes to products via a {productId: rank} map. QUOTA LIVES HERE, ON THE PRODUCT, AND IS COUNTED PER APP.",
+  "_the_model": "Developer = Consumer. App = Credential (key/client_id + secret). Product = a bundle of APIs + a quota. An app subscribes via a {productId: rank} map. THE QUOTA IS THE RATE LIMIT, counted PER APP by default.",
 
-  "_quota_is_mandatory": "Every product MUST carry a quota object. A product with no quota returns 403 'product missing quota configuration' under the default fail_close — it does NOT mean unlimited. Unlimited is limit: -1, which marks the request absorbed and skips the counter entirely.",
+  "_quota_is_mandatory": "Every product MUST carry a quota object. A product with no quota returns 403 'product missing quota configuration' under the default fail_close — it does NOT mean unlimited. Unlimited is limit: -1.",
 
-  "_one_product_per_request": "Only the TOP-RANKED subscribed product that also covers this route's service_id is evaluated. When its window is spent the request 429s — it does NOT spill into another product the app subscribes to. Rank is a routing decision, not a chain of budgets.",
+  "_counting_scope": "quota_key_scope defaults to app: a developer with three apps gets three independent buckets. Set it to developer to pool them. Two keys on the SAME app share one bucket, which is why proving isolation needs two separate apps.",
 
-  "_counting_scope": "quota_key_scope defaults to app: a developer with three apps gets three independent buckets. That is usually right — their staging integration misbehaving should not spend their production budget. Set it to developer to pool a developer's apps into one bucket. Two keys on the SAME app always share one bucket, which is why testing isolation needs two separate apps.",
+  "_demo_note": "The Free tier here is a deliberately tiny 5/min so a 429 appears in six calls and the demo is snappy. Size your real Free tier for evaluation (e.g. 60/min) and add tiers (Enterprise, an unlimited Internal at limit -1) as more products; they are just more entries in this list.",
 
-  "_window_choice": "Pick the window with intent. A per-minute window ABSORBS bursts; a per-second window SHAPES them. Contracts written in requests/day are the worst of both — one app can spend the whole day's budget in 40 seconds and then go dark until midnight.",
+  "_window_choice": "A per-minute window ABSORBS bursts; a per-second window SHAPES them. Contracts written in requests/day are the worst of both — a day's budget can go in seconds.",
 
   "products": [
     {
-      "name": "orders-free",
-      "displayName": "Orders API — Free",
-      "description": "Evaluation access to the Orders API. Low enough that production use is impossible, which is the point: it exists to let someone try the API, not to run on.",
+      "name": "posts-free",
+      "displayName": "Posts API — Free",
+      "description": "Evaluation access. Deliberately tiny (5/min) so the quota is easy to hit in a demo.",
       "apiIds": ["<API_ID>"],
-      "quota": { "limit": 60, "interval": 1, "interval_unit": "minute" }
+      "quota": { "limit": 5, "interval": 1, "interval_unit": "minute" }
     },
     {
-      "name": "orders-pro",
-      "displayName": "Orders API — Pro",
-      "description": "Normal production access. Sized at roughly 2x a healthy integration's p95 so a legitimate traffic spike does not page anyone, while a runaway retry loop still hits a ceiling.",
+      "name": "posts-pro",
+      "displayName": "Posts API — Pro",
+      "description": "Normal production access. Sized well above a healthy integration's peak so a legitimate spike does not page anyone, while a runaway loop still hits a ceiling.",
       "apiIds": ["<API_ID>"],
       "quota": { "limit": 1000, "interval": 1, "interval_unit": "minute" }
-    },
-    {
-      "name": "orders-enterprise",
-      "displayName": "Orders API — Enterprise",
-      "description": "Committed accounts. This number must match a contractual figure — it is the one tier where the quota is a promise you have made in writing, so do not pick it by scaling the tier below.",
-      "apiIds": ["<API_ID>"],
-      "quota": { "limit": 10000, "interval": 1, "interval_unit": "minute" }
-    },
-    {
-      "name": "orders-internal",
-      "displayName": "Orders API — Internal",
-      "description": "First-party services and health checks. Unmetered, but still authenticated and still attributed — you want internal traffic identified in analytics even though you are not capping it.",
-      "apiIds": ["<API_ID>"],
-      "quota": { "limit": -1 }
     }
-  ],
-
-  "_tier_design_notes": {
-    "free": "Deliberately unusable for production. If Free is generous enough to build on, nobody upgrades and you have given away the product.",
-    "pro": "Derive it from your own measurements, not from this file. Roughly 2x a healthy integration's p95 is a reasonable starting point.",
-    "enterprise": "Back it with a contract. This is the number a customer will quote at you during an incident.",
-    "internal": "limit -1 is genuinely unlimited. Keep first-party traffic on a named product anyway so it shows up separately in analytics rather than blending into a partner tier.",
-    "sum_check": "Add up the committed quotas across the tiers you have actually sold and compare that with what your upstream can take. Provisioning for the sum of committed quotas is the cost saving this solution buys — but only if the sum is smaller than your capacity. If it is not, you have oversold, and the quota will surface that as 429s rather than as an outage."
-  },
-
-  "_upgrade_path": "The quota is also a commercial signal. An app repeatedly hitting its Free ceiling is a qualified upgrade lead, and an Enterprise account that never approaches its quota is either over-provisioned or not integrated yet. See solution 04 for the queries that surface both."
+  ]
 }

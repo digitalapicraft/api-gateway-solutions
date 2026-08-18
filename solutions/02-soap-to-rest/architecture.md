@@ -29,7 +29,7 @@ representation.
      │  nothing was      │                          ▼           │          │
      │  transformed,     │  ┌──────── rewrite phase ─────────┐  │          │
      │  nothing was      │  │ proxy-rewrite                  │  │          │
-     │  called           │  │ uri → /GetData.ashx            │  │          │
+     │  called           │  │ uri → <SOAP_HANDLER_PATH>            │  │          │
      │                   │  │ Content-Type → text/xml        │  │          │
      │                   │  └──────────────┬─────────────────┘  │          │
      │                   │                 ▼                    │          │
@@ -69,7 +69,7 @@ Plugins run by **priority**, not in the order they appear in the document.
 | Order | Plugin | Phase | Does | Depends on |
 |---|---|---|---|---|
 | 1 | `helix-auth` (validate) | access | Verifies the JWT; resolves the calling app | the `Authorization` header, `JWT_SIGNING_SECRET` |
-| 2 | `proxy-rewrite` | rewrite | Retargets `/locations` → `/GetData.ashx`; sets `Content-Type: text/xml` | nothing |
+| 2 | `proxy-rewrite` | rewrite | Retargets `/locations` → `<SOAP_HANDLER_PATH>`; sets `Content-Type: text/xml` | nothing |
 | 3 | `xml-to-json` | request body | JSON → XML | the rewritten content type being consistent with what it emits |
 | 4 | *(upstream call)* | — | — | — |
 | 5 | `xml-to-json` | response body | XML → JSON | the upstream having returned XML |
@@ -182,7 +182,7 @@ Service binding (set at import/bind time, NOT in the OpenAPI paths)
    <SOAP_UPSTREAM_URL>  ──► the SOAP system
 
 Route configuration (in gateway/api-spec.yaml)
-   proxy-rewrite  uri: /GetData.ashx      ← the handler's real path
+   proxy-rewrite  uri: <SOAP_HANDLER_PATH>      ← the handler's real path
    xml-to-json    {}                      ← defaults; confirm fields per build
 ```
 

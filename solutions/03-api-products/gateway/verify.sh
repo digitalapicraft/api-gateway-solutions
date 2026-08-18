@@ -25,7 +25,7 @@
 #   ./verify.sh
 #
 # Optional overrides:
-#   API_PATH     default /orders
+#   API_PATH     default /posts
 #   HEADER       default apikey
 #   MAX_TRIES    default = FREE_LIMIT * 2 + 10 (safety stop)
 
@@ -35,7 +35,7 @@ GATEWAY="${GATEWAY:?set GATEWAY to the gateway base URL, e.g. https://<YOUR_GATE
 FREE_KEY="${FREE_KEY:?set FREE_KEY to the client id of the app subscribed to the Free product}"
 PRO_KEY="${PRO_KEY:?set PRO_KEY to the client id of a DIFFERENT app subscribed to the Pro product}"
 FREE_LIMIT="${FREE_LIMIT:?set FREE_LIMIT to the Free product quota limit, e.g. 60}"
-API_PATH="${API_PATH:-/orders}"
+API_PATH="${API_PATH:-/posts}"
 HEADER="${HEADER:-apikey}"
 MAX_TRIES="${MAX_TRIES:-$(( FREE_LIMIT * 2 + 10 ))}"
 

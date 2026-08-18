@@ -23,10 +23,10 @@ Beneath it, the analytics table it can actually produce:
 
 ```
 route              caller            status   latency
-/orders/ord_1a2b3c  203.0.113.47      200      41ms
-/orders/ord_4d5e6f  203.0.113.47      200      38ms
-/orders/ord_7g8h9i  198.51.100.22     500      2.1s
-/orders/ord_2j3k4l  203.0.113.47      200      44ms
+/posts/ord_1a2b3c  203.0.113.47      200      41ms
+/posts/ord_4d5e6f  203.0.113.47      200      38ms
+/posts/ord_7g8h9i  198.51.100.22     500      2.1s
+/posts/ord_2j3k4l  203.0.113.47      200      44ms
 …
 ```
 
@@ -44,10 +44,10 @@ The same table, same window, transformed:
 
 ```
 route                   app               calls   errors   max ms
-/orders/{orderId}       partner-b-prod    1,204   0.1%     52ms
-/orders/{orderId}       partner-c-batch     318   0.0%     61ms
-/orders                 partner-b-prod      892   0.2%     44ms
-/orders/report          partner-d-analytics  14   0.0%     28s
+/posts/{postId}       partner-b-prod    1,204   0.1%     52ms
+/posts/{postId}       partner-c-batch     318   0.0%     61ms
+/posts                 partner-b-prod      892   0.2%     44ms
+/posts/report          partner-d-analytics  14   0.0%     28s
 ```
 
 Four rows. Named apps. Templated routes. A max-latency that means something — and note the
@@ -86,7 +86,7 @@ important sentence in the graphic:**
                             Every request is being captured right now.
 
 + helix-auth              identity, so rows have a name
-+ /orders/{orderId}       templated, so a route is one row
++ /posts/{postId}       templated, so a route is one row
 + request-id              correlation, so a row leads to a request
 ```
 
@@ -117,7 +117,7 @@ One pair. Keep it stark. This is the reflex to break: on most platforms observab
 - **Panel 2b is the hero of the piece.** Panels 1 and 2 show the symptom and the cure;
   2b is the mechanism and the urgency. The "BEFORE the data is captured" band is the line
   most worth someone remembering.
-- **Show the templated route with braces literally** — `/orders/{orderId}`. The braces
+- **Show the templated route with braces literally** — `/posts/{postId}`. The braces
   are the whole visual difference between the two tables, so don't let a designer
   prettify them away.
 - **Keep the `28s` report row in panel 2.** It makes the latency-profile-separation

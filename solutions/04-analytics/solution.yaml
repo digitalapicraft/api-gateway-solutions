@@ -30,8 +30,8 @@ business_need:
 
 implementation:
   gateway_capabilities:
-    - mocking                               # both routes return a standard response with no backend
-    - templated OpenAPI paths               # /orders/{orderId} is ONE row by route_id, not one per order
+    - (no route plugins)                    # both routes proxy the public jsonplaceholder upstream
+    - templated OpenAPI paths               # /posts/{postId} is ONE row by route_id, not one per order
     - request-id                            # CORRELATION — a chart row -> a single request in your logs
     - cors                                  # browser access
   explicitly_not_used:
@@ -49,8 +49,8 @@ implementation:
   notes: >-
     This solution turns nothing on. Analytics is already capturing every request. What
     it does is make the capture useful, and the API is deliberately minimal to keep the
-    focus on querying, not on building policy: two routes returning a standard response
-    via the mocking plugin, plus request-id and cors. Do NOT add auth, quota or
+    focus on querying, not on building policy: two routes returning real data
+    by proxying jsonplaceholder, plus request-id and cors. Do NOT add auth, quota or
     transforms here — compose solutions 01 and 03 when you actually need them.
     Two request-path facts make the captured data useful, and both are here: paths are
     TEMPLATED (group route-level analytics by the route_id dimension — a template
@@ -71,7 +71,7 @@ validation:
     status: PASS
     basis: >-
       structural review of api-spec.yaml (confirmed no helix-analytics block, two simple
-      routes returning a standard response via mocking, /orders/{orderId} templated,
+      two routes proxying the public jsonplaceholder upstream, /posts/{postId} templated,
       request-id API-wide), plus verify.sh syntax-checked and its guard paths executed.
     verified_this_session: true
   gateway_dry_run:
@@ -81,7 +81,7 @@ validation:
   deployment:
     status: DEPLOYED
     environment: a Helix test environment (identifiers withheld)
-    detail: two routes ACTIVE — /orders and templated /orders/{orderId} — each via the mocking plugin.
+    detail: two routes ACTIVE — /posts and templated /posts/{postId} — each by proxying jsonplaceholder.
   functional_test:
     status: PASS
     verified_this_session: true
@@ -94,7 +94,7 @@ analytics_verification:
   method: POST /api/orgs/{orgId}/analytics/metrics/requests-count and /response-time, grouped by dimensions.
   results:
     - Global capture CONFIRMED — with no analytics plugin in the spec, every call was captured and queryable.
-    - Path templating CONFIRMED — distinct /orders/{orderId} values collapse to ONE row grouped by route_id, versus one row per id grouped by api_path.
+    - Path templating CONFIRMED — distinct /posts/{postId} values collapse to ONE row grouped by route_id, versus one row per id grouped by api_path.
     - Per-app attribution AVAILABLE when identity is resolved (helix-auth, solution 01); without it rows attribute to a source IP.
   correction: >-
     X-Request-Id is NOT an analytics dimension. Correlating a single request is a
@@ -117,8 +117,8 @@ artifacts:
     makes it useless. It is listed under documentation but it is the deliverable.
 
 assumptions:
-  - API name is "Orders API" with paths /orders and /orders/{orderId}. Illustrative — replace with yours.
-  - The routes return a standard canned response via the mocking plugin; swap in a real upstream when you have one.
+  - API name is "Posts API" with paths /posts and /posts/{postId}. Illustrative — replace with yours.
+  - The routes return a real jsonplaceholder data by proxying jsonplaceholder; swap in a real upstream when you have one.
   - Analytics is enabled globally on the target platform via helix-analytics. If it is
     not, this solution's premise does not hold and the whole package needs revisiting.
   - Per-app attribution requires identity on the routes (helix-auth, solution 01). This

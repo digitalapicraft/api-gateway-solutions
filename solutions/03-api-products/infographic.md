@@ -12,7 +12,7 @@ contrast isn't readable at that size, it fails — that's how it appears in a fe
 
 ### Panel 1 — BEFORE (muted, with one red actor)
 
-A single API box labelled **Orders API**, sized `3,000 rpm`. Four partner apps feed
+A single API box labelled **Posts API**, sized `3,000 rpm`. Four partner apps feed
 into it. One of them — and only one — is rendered in **red**, labelled
 `retry loop · 40,000 rpm`.
 
@@ -35,7 +35,7 @@ tight it can be dropped, but the piece is weaker without it.
 
 ### Panel 2 — AFTER (signal / healthy)
 
-Same **Orders API** box, drawn identically. Now behind a gateway band containing two
+Same **Posts API** box, drawn identically. Now behind a gateway band containing two
 chips in order:
 
 | Stage | Chip |
@@ -111,7 +111,7 @@ invisible from the route config and silently multiplies your quota by your node 
   used **twice and only twice** — the misbehaving app in panel 1, and its 429 in
   panel 2. Everything else muted. Red is the scarce resource in this piece; spending
   it on anything else weakens both uses.
-- **The Orders API box must be drawn identically in panels 1, 1b and 2.** The claim
+- **The Posts API box must be drawn identically in panels 1, 1b and 2.** The claim
   is that the backend didn't change; a redrawn box contradicts it visually.
 - **The single most important visual is the vertical stack in panel 2**: one red 429
   adjacent to three green 200s, simultaneously. If a reader takes one thing from the

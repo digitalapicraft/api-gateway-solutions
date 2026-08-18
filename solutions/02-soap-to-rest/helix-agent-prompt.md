@@ -32,15 +32,15 @@ service must not be modified.
 
 CONTEXT
 - API name: <<Partner Locations API>>
-- Environment: <<staging>>
+- Environment: test   (my free-trial org's default environment)
 - SOAP upstream: <<SOAP_UPSTREAM_URL>>
-- The SOAP handler answers on the path <<GetData.ashx>> and expects
+- The SOAP handler answers on the path <<SOAP_HANDLER_PATH>> and expects
   content-type text/xml.
 
 WHAT I WANT
 
 1. An endpoint POST /locations that proxies to the upstream path
-   <</GetData.ashx>>.
+   <<SOAP_HANDLER_PATH>>.
 
 2. Use the xml-to-json plugin to transform BOTH the request and response bodies,
    so the client sends JSON, the handler receives XML, and the handler's XML

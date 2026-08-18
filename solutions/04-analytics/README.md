@@ -2,14 +2,14 @@
 
 **Analytics is on. Every request is captured. This is about making it answer
 questions worth asking — and the request-path choices that determine whether it
-can.** The API here is deliberately tiny: two routes, a standard response, no auth.
+can.** The API here is deliberately tiny: two routes, real data, no auth.
 
 | | |
 |---|---|
 | **Setup time** | ~10 minutes (there is no analytics plugin to add) |
 | **Difficulty** | 🟢 Beginner |
 | **Needs** | An API deployed to an environment (this one is two simple routes) · a little traffic to query |
-| **Plugins** | `mocking` (standard response) · `request-id` · `cors` — **and deliberately no analytics plugin** |
+| **Plugins** | `request-id` · `cors` — **and deliberately no analytics plugin** (the two routes just proxy jsonplaceholder) |
 | **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
 | **The actual content** | 📊 **[`charts.md`](charts.md)** — the real metrics-API queries (and the limits: no percentiles, no quota metric) |
 | **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Chart catalogue](charts.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Infographic](infographic.md) · ✅ [Manifest](solution.yaml) |
@@ -56,7 +56,7 @@ need per-app numbers.
 
 ### 1. Paths are templated (in this API)
 
-`/orders/{orderId}` is **one row** in a per-route breakdown when you group by the
+`/posts/{postId}` is **one row** in a per-route breakdown when you group by the
 `route_id` dimension: one latency distribution, one error rate, one count you can
 trend. Group by `api_path` instead and you get **one row per order id** — a top-routes
 chart that is really a list of individual customer orders, and per-route latency
@@ -136,7 +136,7 @@ Note what this prompt does **not** ask for:
 
 ```text
 I want the platform's analytics to be able to answer per-app and per-route questions
-about my Orders API. Analytics is already enabled globally, so do NOT add an
+about my Posts API. Analytics is already enabled globally, so do NOT add an
 analytics plugin — instead make sure the request path is shaped so the captured data
 is useful.
 
@@ -161,7 +161,7 @@ requests-count grouped by route and status:
 ```json
 POST /api/orgs/{orgId}/analytics/metrics/requests-count
 { "startTime":"…", "endTime":"…",
-  "filters":[{"column":"api_name","operator":"EQ","value":["orders-api"]}],
+  "filters":[{"column":"api_name","operator":"EQ","value":["posts-api"]}],
   "dimensions":["route_id","response_status_code"], "excludeTimeUnit":true }
 ```
 
@@ -177,19 +177,17 @@ export ORG=<ORG_ID>
 export BASE=https://<YOUR_GATEWAY_HOST>/api
 
 # 1. Import gateway/api-spec.yaml. There is NO analytics plugin in it — that is
-#    correct. Bind your upstream.
+#    correct. Bind the upstream https://jsonplaceholder.typicode.com (swap in your
+#    own later); the two routes proxy it directly.
 
-# 2. Deploy the revision. (No secrets or auth on this minimal API.)
+# 2. Deploy the revision to the "test" environment (a free-trial org's default).
+#    No secrets or auth on this minimal API.
 
-# 3. Create a developer and an app; keep the client_id and client_secret.
+# 3. Seed a known traffic pattern and check the request path is correctly shaped
+GATEWAY=https://<YOUR_GATEWAY_HOST> ./gateway/verify.sh   # defaults to /posts
 
-# 4. Seed a known traffic pattern and check the request path is correctly shaped
-GATEWAY=https://<YOUR_GATEWAY_HOST> \
-CLIENT_ID=<CLIENT_ID> CLIENT_SECRET=<CLIENT_SECRET> \
-./gateway/verify.sh
-
-# 5. Then VERIFY ANALYTICS MANUALLY, using the queries verify.sh prints. Analytics
-#    is verified by observation, never by assertion — see § Testing.
+# 4. Then READ ANALYTICS via the metrics API (or the portal), using the queries
+#    verify.sh prints and the catalogue in charts.md — NOT by prompting the agent.
 ```
 
 ## Configuration
@@ -214,7 +212,7 @@ x-helix-gateway:
     # mistake this solution exists to prevent.
 ```
 
-The only route-level plugin is `mocking`, returning a standard response. Templated
+There are no route-level plugins — the routes proxy jsonplaceholder directly. Templated
 paths are a modelling decision, not a plugin. Add `helix-auth` per route
 ([solution 01](../01-oauth-jwt/)) when you want per-app attribution rather than per-IP.
 
@@ -241,12 +239,12 @@ does:
 
 | # | Check | Automated? |
 |---|---|---|
-| 1 | Both routes → 200 with a standard response | ✅ |
+| 1 | Both routes → 200 with real data | ✅ |
 | 2 | `X-Request-Id` present on responses | ✅ |
 | 3 | Seeds a **known, labelled** traffic pattern across routes and status codes — deliberately including failures | ✅ |
 | 4 | Prints the exact queries to run and the counts to expect | ✅ |
 | 5 | **Analytics reflects that pattern, attributed per app** | ❌ manual |
-| 6 | **The templated route appears as `/orders/{orderId}`, not as literal ids** | ❌ manual |
+| 6 | **The templated route appears as `/posts/{postId}`, not as literal ids** | ❌ manual |
 | 7 | **The same `X-Request-Id` appears in your backend's logs** | ❌ manual |
 
 Exit 0 means *the request path is correctly shaped and a known pattern is seeded.* It
@@ -342,7 +340,7 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 | Configuration generated | **YES** | [`gateway/api-spec.yaml`](gateway/api-spec.yaml) — no analytics plugin, by design |
 | Local validation | **PASS** | [`validation/local-validation.yaml`](validation/local-validation.yaml) |
 | Gateway dry-run | **PASS** | Non-destructive validation on a gateway. |
-| Gateway deployed | **DEPLOYED** | Four routes ACTIVE, including the templated `/orders/{orderId}`. |
+| Gateway deployed | **DEPLOYED** | Four routes ACTIVE, including the templated `/posts/{postId}`. |
 | Functional tests | **PASS** | `gateway/verify.sh` seeded a labelled pattern; identity and correlation id confirmed. |
 | Analytics verified | **VERIFIED** | Queried the control-plane analytics API — see below. |
 
@@ -353,7 +351,7 @@ Overall: **READY.** Confirmed live, by querying the analytics API:
   `product_name` returned the calling app by name, and counts matched the seed.
 - **Without identity, rows attribute to a source IP** — expected on this minimal API;
   add [solution 01](../01-oauth-jwt/) to attribute per app.
-- **Path templating works at `route_id`** — five distinct `/orders/{orderId}`
+- **Path templating works at `route_id`** — five distinct `/posts/{postId}`
   values aggregate to **one** row by `route_id`, versus five by `api_path`. Group
   route-level charts by `route_id`.
 - **Latency separation works** — the slow report route showed ~1000ms vs ~0ms for

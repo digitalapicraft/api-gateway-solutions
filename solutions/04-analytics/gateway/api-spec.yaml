@@ -2,102 +2,85 @@
 #
 # READ THIS FIRST — IT IS THE POINT OF THE WHOLE SOLUTION.
 #
-#   Analytics is enabled GLOBALLY on the platform via helix-analytics. Every
-#   request through every API is already captured. YOU DO NOT ADD AN ANALYTICS
-#   PLUGIN, and there is deliberately no helix-analytics block anywhere in this
-#   document. If an agent proposes one, that is the thing to correct.
+#   Analytics is enabled GLOBALLY on the platform. Every request through every API
+#   is already captured. YOU DO NOT ADD AN ANALYTICS PLUGIN, and there is
+#   deliberately none in this document. If an agent proposes one, correct it.
+#
+#   You do NOT query analytics by prompting the agent, either. Analytics is read
+#   through a structured metrics API (and the portal over it) — see charts.md for
+#   the real query shapes, the supported metrics/dimensions, and the limits
+#   (no percentiles; no quota-consumption metric).
+#
+# RUNNABLE ON A FRESH FREE-TRIAL ORG. Upstream is public
+# https://jsonplaceholder.typicode.com, so the two routes return real data with no
+# backend of your own. Deploy to the "test" environment (the free-trial default).
 #
 # WHY THIS API IS SO SIMPLE.
+#   This solution is about QUERYING analytics, so the API is minimal: two routes
+#   that proxy the upstream, and nothing else on them. Do not bolt auth, quota or
+#   transforms onto it here — those live in solutions 01 and 03, composed in when
+#   you need them.
 #
-#   This solution is about QUERYING analytics, not about building a rich API. So
-#   the API is deliberately minimal: two routes that return a standard canned
-#   response via the `mocking` plugin, and nothing else on the routes. It exists
-#   only to generate traffic you can then slice in the analytics tool. Keep it
-#   this plain — do not bolt auth, quota or transforms onto it here. Those live in
-#   solutions 01 and 03, and you compose them when you actually need them.
+#   PATH TEMPLATING is the one modelling decision that matters for analytics:
+#   /posts/{postId} is a path PARAMETER, so every id collapses into ONE row when
+#   you group by the route_id dimension (one row per id if you group by api_path).
+#   Route paths match the upstream, so no proxy-rewrite is needed.
 #
-#   The one modelling decision that matters for analytics is PATH TEMPLATING:
-#   /orders/{orderId} is declared as a path PARAMETER, so every order id collapses
-#   into ONE route in a per-route breakdown. Declared as literal paths you would
-#   get one row per order, and route-level charts become useless. Group route-level
-#   analytics by the `route_id` dimension (a template collapses to one row there),
-#   not by `api_path` (which is the concrete path).
-#
-#   Per-app attribution (which app/developer called) needs identity to be resolved
-#   on the route — that is solution 01's helix-auth. It is intentionally NOT here,
-#   to keep this API simple. Without it, analytics rows attribute to a source IP
-#   rather than an app. Add helix-auth (see solution 01) when you need per-app
-#   charts; the analytics side then attributes automatically.
-#
-# UPSTREAM: with the mocking plugin the routes never proxy, but the platform still
-# wants an upstream bound to the service. Bind any reachable placeholder.
+#   Per-app attribution (which app/developer called) needs identity on the route —
+#   that is solution 01's helix-auth. It is intentionally NOT here, to keep this
+#   API simple. Without it, analytics rows attribute to a source IP.
 
 openapi: 3.0.3
 
 info:
-  title: Orders API
+  title: Posts API
   version: 1.0.0
   description: >-
     A deliberately minimal API used to demonstrate the platform's always-on
-    analytics. Two routes return a standard response; every call is captured and
-    can be sliced by app, route, status and latency in the analytics tool.
+    analytics. Two routes proxy the public jsonplaceholder service (real data on a
+    fresh org); every call is captured and can be sliced by app, route, status and
+    latency through the metrics API.
 
 paths:
-  /orders:
+  /posts:
     get:
-      summary: List orders
+      summary: List posts
       description: >-
         A collection route with no path parameter — naturally one row in a
-        per-route breakdown. Returns a standard canned response.
+        per-route breakdown. Proxies the upstream's /posts.
       responses:
         '200':
-          description: Array of orders
+          description: Array of posts
           content:
             application/json:
-              schema:
-                type: array
-                items: { type: object }
-      x-helix-gateway:
-        plugins:
-          # Return a standard response without a backend. Nothing else on the
-          # route — this API is for generating analytics traffic, not for policy.
-          mocking:
-            content_type: application/json
-            response_status: 200
-            response_example: '[{"orderId":"ord_1a2b3c","status":"open"},{"orderId":"ord_4d5e6f","status":"shipped"}]'
+              schema: { type: array, items: { type: object } }
 
   # TEMPLATED PATH — the one analytics-relevant modelling decision.
-  # Declared as /orders/{orderId}, every order id aggregates into ONE row when you
-  # group by route_id. Declared as a literal path, you would get one row per order.
-  /orders/{orderId}:
+  # Grouped by route_id it is ONE row; grouped by api_path it is one row per id.
+  /posts/{postId}:
     get:
-      summary: Get an order
-      description: Returns a standard canned response. The path parameter is what makes this one templated route rather than one row per id.
+      summary: Get a post
+      description: Proxies the upstream's /posts/{postId}. The path parameter is what makes this one templated route rather than one row per id.
       parameters:
-        - { name: orderId, in: path, required: true, schema: { type: string } }
+        - { name: postId, in: path, required: true, schema: { type: string } }
       responses:
         '200':
-          description: Order
+          description: Post
           content:
             application/json:
               schema: { type: object }
-      x-helix-gateway:
-        plugins:
-          mocking:
-            content_type: application/json
-            response_status: 200
-            response_example: '{"orderId":"ord_1a2b3c","status":"open"}'
+        '404': { description: Not found }
 
 # API-WIDE POLICY.
 #
 # NOTE THE ABSENCE. There is no helix-analytics block and there should not be one:
-# analytics is enabled globally and every route above is already captured. The only
-# API-wide plugins are a correlation id and CORS — both light, neither analytics.
+# analytics is global and every route above is already captured. The only API-wide
+# plugins are a correlation id and CORS — both light, neither analytics.
 x-helix-gateway:
   plugins:
     # Correlation id, forwarded upstream, so a row in a chart can be joined to a
     # single request in your backend's own logs. (X-Request-Id is a correlation
-    # tool, not an analytics dimension — you filter analytics down to a slice, then
+    # tool, NOT an analytics dimension — you narrow analytics to a slice, then
     # match the id in your logs.)
     request-id:
       algorithm: uuid

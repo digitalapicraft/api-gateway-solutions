@@ -59,7 +59,7 @@ local_validation:
     - >-
       The upstream is bound on the service at import/bind time, not expressed in the
       OpenAPI paths. Nothing in this document can confirm it is reachable, nor that
-      /GetData.ashx exists on it.
+      <SOAP_HANDLER_PATH> exists on it.
     - >-
       Applying helix-auth validate API-wide instead of per-route would protect
       POST /oauth/token and make obtaining a first token impossible. The spec is
@@ -67,7 +67,7 @@ local_validation:
       most likely to make for tidiness.
 
   assumptions:
-    - API "Partner Locations API"; mediated route POST /locations; handler path /GetData.ashx. All illustrative.
+    - API "Partner Locations API"; mediated route POST /locations; handler path <SOAP_HANDLER_PATH>. All illustrative.
     - The handler expects text/xml and does not require SOAPAction.
     - Request field names match the elements the handler reads.
     - The gateway is the token issuer; no external identity provider is involved.

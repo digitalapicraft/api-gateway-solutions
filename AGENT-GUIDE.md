@@ -159,7 +159,7 @@ natural language.** A query is a POST to
 Two configuration decisions, made *while you build the API*, are what make those
 queries useful later: **identity must be resolved** (so rows attribute to an app
 rather than an IP — that's `helix-auth`, solution 01) and **paths must be
-templated** (`/orders/{orderId}`, so you group by `route_id` and get one row, not
+templated** (`/posts/{postId}`, so you group by `route_id` and get one row, not
 one per id). Know the limits, too: the metrics API does **averages/min/max, not
 percentiles**, and has **no quota-consumption metric**. Solution 04 covers all of
 this.

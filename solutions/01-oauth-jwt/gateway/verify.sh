@@ -20,7 +20,7 @@
 #
 # Optional overrides:
 #   TOKEN_PATH   default /oauth/token
-#   API_PATH     default /orders
+#   API_PATH     default /posts
 #   EXPECT_TTL   if set, assert expires_in equals this value (e.g. 900)
 
 set -uo pipefail
@@ -29,7 +29,7 @@ GATEWAY="${GATEWAY:?set GATEWAY to the gateway base URL, e.g. https://<YOUR_GATE
 CLIENT_ID="${CLIENT_ID:?set CLIENT_ID to the app client id, i.e. the credential key}"
 CLIENT_SECRET="${CLIENT_SECRET:?set CLIENT_SECRET to the app client secret}"
 TOKEN_PATH="${TOKEN_PATH:-/oauth/token}"
-API_PATH="${API_PATH:-/orders}"
+API_PATH="${API_PATH:-/posts}"
 EXPECT_TTL="${EXPECT_TTL:-}"
 
 TOKEN_URL="${GATEWAY%/}${TOKEN_PATH}"

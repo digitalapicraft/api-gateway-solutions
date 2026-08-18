@@ -1,4 +1,4 @@
 ### Case: unauthenticated — no Authorization header at all.
 ### Expect 401. Rejected in the access phase; the upstream is never contacted.
-GET {{GATEWAY}}/orders
+GET {{GATEWAY}}/posts
 accept: application/json
