@@ -47,7 +47,7 @@ can answer something.
 | "Which partner's integration is broken?" | You find out when they call you | An app failing every call since 02:14 — you call them |
 | "Who should we bill for this traffic?" | Unanswerable | Per-app request counts |
 | "Has this partner outgrown their tier?" | A hunch | Peak consumption as a percentage of their limit |
-| "Is p99 on this route getting worse?" | An API-wide average that describes nothing | Per-route percentiles, with sample counts |
+| "Is this route getting slower?" | An API-wide average that describes nothing | Per-route `AVG`/`MAX` latency (the API has no percentiles) |
 | "Show me *that* failing request" | Not possible | One correlation id, joined to your backend's own logs |
 | "Who stopped calling us?" | Silence | A week-on-week diff |
 
@@ -60,7 +60,7 @@ is the difference between analytics you *query* and analytics you *scroll*.
 
 **Paths templated** → `/orders/{orderId}` is one row you can trend, not one row per
 order. Get this wrong and a per-route breakdown becomes a list of individual customer
-records, per-route p99 is computed from one sample per row, and cardinality grows with
+records, per-route latency is computed from one sample per row, and cardinality grows with
 your order volume forever.
 
 **A correlation id, logged downstream** → the bridge from "3% of calls failed" to "*this*
@@ -153,6 +153,6 @@ You'd call this done when:
   the same call. This is the half people skip.
 - You can name the apps within 10% of their quota, and someone owns following up.
 - You can name the apps that stopped calling this week.
-- Per-route p99 is a number you'd act on, with a sample count you'd trust.
+- Per-route latency (`AVG`/`MAX`) is a number you'd act on, over a trustworthy request count.
 - Your standing dashboard is five panels, and when one moves, somebody does something —
   and writes down what.

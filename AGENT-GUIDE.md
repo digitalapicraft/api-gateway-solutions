@@ -146,23 +146,23 @@ If the answer is vague, the config is probably wrong in a way that will only sho
 up as a 403 under load. This is also the fastest way to catch a plugin that's
 been placed on the wrong route or at the wrong scope.
 
-## 7. Read analytics by asking
+## 7. Analytics is captured for you — but you query it through the API, not the agent
 
 Analytics is **already on**. Every request through the gateway is captured — you
-don't add a plugin, and a prompt that asks you to is a prompt to correct. What
-you do instead is query it:
+don't add a plugin, and a prompt that asks you to is a prompt to correct. But the
+agent's job is building APIs, not reading charts: **analytics is queried through a
+structured metrics API (and the portal over it), not by asking the agent in
+natural language.** A query is a POST to
+`/api/orgs/{orgId}/analytics/metrics/{metric}` with dimensions and filters — see
+[solution 04's catalogue](solutions/04-analytics/charts.md) for the real shapes.
 
-> *"Show me calls to Orders API in the last hour, broken down by app, and tell
-> me which app sent the most."*
->
-> *"Which routes returned 5xx yesterday, and what was the p99 latency on each?"*
->
-> *"Which apps came within 10% of their product quota this week?"*
-
-Two things make those answers useful, and both are configuration decisions you
-make earlier: **identity must be resolved** (so calls attribute to an app rather
-than an IP), and **paths must be templated** (`/orders/{orderId}`, not a
-thousand distinct URLs). Solution 04 is about exactly this.
+Two configuration decisions, made *while you build the API*, are what make those
+queries useful later: **identity must be resolved** (so rows attribute to an app
+rather than an IP — that's `helix-auth`, solution 01) and **paths must be
+templated** (`/orders/{orderId}`, so you group by `route_id` and get one row, not
+one per id). Know the limits, too: the metrics API does **averages/min/max, not
+percentiles**, and has **no quota-consumption metric**. Solution 04 covers all of
+this.
 
 ## 8. What the agent won't do
 

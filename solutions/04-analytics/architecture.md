@@ -56,7 +56,7 @@ developer instead; you change nothing on the analytics side.
 
 | Field in the row | Comes from | Without it |
 |---|---|---|
-| `route` (by `route_id`) | The **templated** OpenAPI path `/orders/{orderId}` | Group by `api_path` and you get one row per order id — a per-route breakdown that is a list of individual records, with per-route p99 from one sample each. |
+| `route` (by `route_id`) | The **templated** OpenAPI path `/orders/{orderId}` | Group by `api_path` and you get one row per order id — a per-route breakdown that is a list of individual records, with per-route latency from one sample each. |
 | `request_id` | `request-id`, forwarded upstream | You can see 3% of calls failed but cannot reach the failing request, or the matching line in your backend's logs. |
 | `app` / `developer` *(compose-in)* | `helix-auth` ([solution 01](../01-oauth-jwt/)) resolving identity | Not present on this minimal API — the row attributes to a source IP. Add solution 01 when you need per-app numbers. |
 Templating and correlation are baked into this minimal API; identity is the one you
@@ -111,8 +111,8 @@ you ask a route-level question.
 
 **Splitting by latency profile.** If you later add routes with very different latency
 profiles — say a 30-second report and a 40ms lookup — keep them as separate routes. Sharing
-one path pattern gives a per-route latency distribution that describes neither: p50 dragged
-up, p99 dragged down, a number worse than useless because it looks authoritative.
+one path pattern gives a per-route latency (`AVG`/`MAX`) that describes neither — a number
+worse than useless because it looks authoritative.
 
 > **If two routes have wildly different latency profiles, they want separate rows.**
 
@@ -200,7 +200,7 @@ faithfully and cannot answer you.
 | Every row is an IP address | Identity not resolved on that route | **No** for existing data. Fix the route; future data is fine. |
 | One row per order id | Path not templated | **No** for existing data. Fix the spec; future data is fine. |
 | `X-Request-Id` found at the gateway but not in backend logs | Your services aren't recording the forwarded header | Yes — ask your teams |
-| Per-route p99 looks implausible | Too few samples in that row | Yes — ask for the sample count alongside |
+| Per-route `AVG`/`MAX` looks implausible | Too few samples in that row | Yes — check the row's request count |
 | A route's latency describes nothing | Fast and slow operations share one path pattern | Yes — split the routes |
 | Query returns nothing | No traffic yet, or outside the retention window | Yes — seed traffic; check retention |
 | A 401 spike attributes to no app | Identity never resolved for those requests — correct behaviour | N/A — expect the unidentified bucket |

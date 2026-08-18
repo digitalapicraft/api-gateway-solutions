@@ -112,7 +112,7 @@ artifacts:
   tests: [tests/test-plan.yaml, tests/requests/, tests/expected/]
   validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
   note: >-
-    charts.md is the substance of this package — twelve questions worth asking, each
+    charts.md is the substance of this package — the real metrics-API queries, each
     with the agent prompt, the decision it informs, and the configuration mistake that
     makes it useless. It is listed under documentation but it is the deliverable.
 
@@ -123,9 +123,10 @@ assumptions:
     not, this solution's premise does not hold and the whole package needs revisiting.
   - Per-app attribution requires identity on the routes (helix-auth, solution 01). This
     minimal API omits it deliberately; without it, rows attribute to a source IP.
-  - Analytics field names and exact query syntax vary by build. The prompts in charts.md
-    are phrased for the agent, which knows the org's schema; ask it to show the field it
-    filtered on rather than guessing.
+  - Analytics is queried through the metrics API (POST /api/orgs/{orgId}/analytics/metrics/{metric})
+    or the portal — NOT through the agent in natural language. charts.md gives the real
+    request bodies, dimensions and filter operators. Field names may vary by build; the
+    metadata endpoint (analytics/custom-reports/metadata) lists what the org supports.
   - Retention covers the windows the charts ask for (charts.md uses up to 30 days and
     week-on-week comparisons). Retention is a platform setting — confirm it.
   - Charts 5-7 assume solution 03 is deployed, since quota consumption requires a quota.

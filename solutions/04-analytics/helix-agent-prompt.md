@@ -43,7 +43,7 @@ WHAT I WANT
 
    Tell me if you find a path that would produce one analytics row per entity instead
    of one row per route. This matters more than it looks: with literal paths, a
-   per-route breakdown becomes a list of individual records, per-route p99 is computed
+   per-route breakdown becomes a list of individual records, per-route latency is computed
    from one sample per row, and cardinality grows with my data volume forever. The API
    works identically either way — only the analytics is ruined.
 
@@ -83,37 +83,30 @@ capture-then-query — there is nothing to look at until calls have been made.
 (successes, 401s, 404s, across several routes) and prints the exact counts to expect,
 which makes the first query a real check rather than a vague look.
 
-## Part B — the queries
+## Part B — the queries (NOT via the agent)
 
-Start with these four. The full catalogue, with what each answer is *for* and what
-breaks it, is in **[`charts.md`](charts.md)**.
+Once the API is built and traffic exists, you read analytics through the **metrics
+API or the portal** — not by asking the agent. The agent builds APIs; it does not run
+analytics queries. A query is a structured POST, e.g.:
 
-```text
-Show me calls to <<Orders API>> in the last hour, broken down by app and route, with
-status code counts. Tell me which app sent the most and what percentage of total
-traffic that represents.
+```json
+POST /api/orgs/{orgId}/analytics/metrics/requests-count
+{ "startTime":"…", "endTime":"…",
+  "filters":[{"column":"api_name","operator":"EQ","value":["orders-api"]}],
+  "dimensions":["route_id","response_status_code"],
+  "excludeTimeUnit":true }
 ```
 
-```text
-Show me the per-route breakdown for <<Orders API>> over the last hour. I am checking
-that /orders/{orderId} appears as ONE templated row rather than a separate row per
-order id — tell me plainly which it is.
-```
-
-```text
-Which routes on <<Orders API>> returned 4xx or 5xx yesterday? Give me the count by
-status code and the error rate per route, and keep 4xx separate from 5xx — I care
-about them differently.
-```
-
-```text
-Give me p50, p95 and p99 latency per route on <<Orders API>> for the last 7 days.
-Include the call count per route so I know which percentiles have enough samples to
-trust, and flag any route where p99 is more than 10x p50.
-```
+The full catalogue — traffic over time, errors by route/status, latency (`AVG`/`MAX`
+— the API has no percentiles), data transfer, per-app views once you add identity —
+with the exact request bodies, dimensions and filter operators, is in
+**[`charts.md`](charts.md)**. It also lists what analytics *cannot* do (percentiles,
+quota-consumption, per-request lookup), so you don't build a report around a metric
+that isn't there.
 
 ---
 
+## Why the prompts are shaped this way
 ## Why the prompts are shaped this way
 
 | Block | Why it's there |
@@ -124,55 +117,21 @@ trust, and flag any route where p99 is more than 10x p50.
 | **"Confirm it is forwarded to the upstream"** | A correlation id the gateway keeps to itself correlates the gateway with itself. The value comes from your backend logging the same id, and that's a conversation with your teams rather than a config change. |
 | **"LATENCY-PROFILE REVIEW"** | Route design has analytics consequences. Nobody thinks of "should these be two routes?" as an observability question, and it is one. |
 | **"Be explicit about anything now unrecoverable"** | The honest framing. Two of the three decisions can't be applied retroactively, and a reader should learn that from the agent's summary rather than from a disappointing query in six months. |
-| **Part B asks for sample counts** | A p99 from twelve requests is noise presented as precision. Asking for the count alongside is the difference between a number and a trustworthy number. |
-| **Part B keeps 4xx and 5xx separate** | They mean different things and drive different actions — 5xx is engineering, 4xx is usually a partner or your documentation. A single "error rate" is a number you can't act on. |
 
-## Tweak knobs
+## Reading the analytics afterwards
 
-**One partner's integration looks broken**
-```text
-App <<name>> is returning 401 on <<Orders API>>. Tell me whether it is failing EVERY
-call or only some, since when, and whether the failures started at a specific time.
-Every call means broken configuration on their side; some calls usually means expired
-tokens and a client that is not refreshing before expiry.
-```
+Everything you'd want to *ask* of analytics — traffic over time, errors by route and
+status, latency (`AVG`/`MAX`), data transfer, and per-app views once you add identity
+— is a query against the **metrics API** (or the portal), not a prompt to the agent.
+The agent built the API; it does not read charts.
 
-**Find the clients that aren't caching tokens**
-```text
-Show me token requests per app over the last 24 hours alongside each app's total API
-calls. With a 900-second token lifetime a well-behaved client needs about four tokens
-an hour regardless of volume — flag anything approaching one token per API call, since
-that client has doubled its own latency and made my token endpoint my busiest route.
-```
-
-**Build the upgrade pipeline** (needs [solution 03](../03-api-products/))
-```text
-For <<Orders API>>, show me each app's peak quota consumption as a percentage of its
-product limit over the last 7 days. List anything above 80%, with the product and the
-peak percentage. I want to open upgrade conversations with evidence rather than a hunch.
-```
-
-**Find quiet churn**
-```text
-Compare apps calling <<Orders API>> this week against last week. List apps that
-appeared for the first time, and — more importantly — apps that called last week but
-not this week. A partner who stopped calling is either churn, a broken integration, or
-an expired credential, and all three deserve a phone call.
-```
-
-**Catch degradation early**
-```text
-Compare p95 latency per route on <<Orders API>> this week against the same period last
-week. List any route where p95 increased by more than 20%, with both values and the
-change window.
-```
-
-**Set up the standing dashboard**
-```text
-I want five panels, not twenty. Set up: traffic per hour with error rate overlaid; error
-rate by route split 4xx/5xx; p95 per route with call counts; top apps by volume; and
-apps above 80% of quota. Everything else I will ask ad hoc.
-```
+The real request bodies, dimensions and filter operators are in
+[`charts.md`](charts.md), which also states plainly what the API cannot do:
+**no percentiles** (only `AVG`/`MIN`/`MAX`/`SUM`), **no quota-consumption metric**
+(you can count 429s, not "% of limit used"), and **no per-request lookup** (that's a
+log-side join on `X-Request-Id`). Per-app, per-developer and 429/throttle views need
+identity ([solution 01](../01-oauth-jwt/)) and, for anything quota-related,
+[solution 03](../03-api-products/).
 
 ## Known failure modes when running this prompt
 
@@ -190,17 +149,17 @@ apps above 80% of quota. Everything else I will ask ad hoc.
   spec so future data is usable; the existing data is not recoverable.
 - **The agent invents a field name and the query returns nothing.** Reply: `show me the
   field you filtered on, from the actual schema.` Field names vary by build.
-- **A latency number looks implausible.** Ask for the sample count. A p99 from a handful
-  of requests is noise.
+- **A latency number looks implausible.** Check the request count for that row — an
+  `AVG`/`MAX` over a handful of requests is noise.
 - **`X-Request-Id` doesn't appear in your backend logs.** The gateway is forwarding it;
   your services aren't recording it. That's a conversation with your teams, and it is
   the cheapest observability work available.
 
 ## Related
 
-- **[`charts.md`](charts.md)** — the full catalogue: twelve questions, what each answer
+- **[`charts.md`](charts.md)** — the full catalogue: the real metrics-API queries, what each answer
   is for, what breaks it, and a five-panel dashboard layout.
 - **[Solution 01 — OAuth 2.0 with JWT](../01-oauth-jwt/helix-agent-prompt.md)** — the
   prerequisite. Attribution needs identity, and identity can't be added retroactively.
 - **[Solution 03 — API Products](../03-api-products/helix-agent-prompt.md)** — deploy
-  this and charts 5–7 start working.
+  this and the quota/429 recipes start working.

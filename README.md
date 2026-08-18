@@ -21,7 +21,7 @@ it, and an honest record of what was and wasn't validated.
 | **01** | [OAuth 2.0 with JWT](solutions/01-oauth-jwt/) | *"Partners want OAuth. Adding it to the backend is a six-week release."* Issue and validate JWTs at the edge — the backend never learns about auth. | [prompt](solutions/01-oauth-jwt/helix-agent-prompt.md) |
 | **02** | [SOAP to REST](solutions/02-soap-to-rest/) | *"Our core system speaks SOAP/XML and every partner wants JSON."* Mediate both directions at the gateway; the SOAP service is untouched. | [prompt](solutions/02-soap-to-rest/helix-agent-prompt.md) |
 | **03** | [API Products](solutions/03-api-products/) | *"We sell an 'Enterprise tier' with no way to enforce it, and one partner's retry loop can take down everyone."* Bundle APIs into products with quotas, enforced per app. | [prompt](solutions/03-api-products/helix-agent-prompt.md) |
-| **04** | [Analytics](solutions/04-analytics/) | *"We can't tell which of our 400 integrations caused the 3am pager."* Analytics is already capturing every call — this is how you ask it the right questions. | [prompt](solutions/04-analytics/helix-agent-prompt.md) · [charts](solutions/04-analytics/charts.md) |
+| **04** | [Analytics](solutions/04-analytics/) | *"We can't tell which of our 400 integrations caused the 3am pager."* Analytics is already capturing every call — this is how you query it, through the metrics API, for the answers that matter. | [prompt](solutions/04-analytics/helix-agent-prompt.md) · [charts](solutions/04-analytics/charts.md) |
 
 They compose. 01 gives you identity, 02 gives you the protocol bridge, 03 turns
 the result into something sellable, and 04 tells you what happened. Running all
@@ -71,7 +71,7 @@ solutions/<NN>-<slug>/
 Only files that apply are present — a solution needing no API Products has no
 `products.json`. Some packages carry an extra file where the subject warrants it:
 solution 04 has [`charts.md`](solutions/04-analytics/charts.md), a catalogue of
-twelve questions worth asking, which is that package's real deliverable.
+the real analytics-API queries for the library, which is that package's deliverable.
 
 Two ways in: paste `helix-agent-prompt.md` into Agent Mode, or import
 `gateway/api-spec.yaml` directly through OpenAPI import. Both land in the same

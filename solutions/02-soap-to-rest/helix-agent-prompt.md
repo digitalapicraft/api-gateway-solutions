@@ -214,10 +214,15 @@ already counts per app.
 
 ## Follow-up prompts for the same session
 
-1. `Show me calls to the Partner Locations API in the last hour, broken down by app, and the p99 latency of the SOAP hop.`
-2. `Which calls returned 5xx today? For each, tell me whether the gateway or the SOAP handler produced it.`
-3. `Write the developer-portal documentation for POST /locations, including real example payloads for BOTH a single-result and a multi-result response — partners need to see the shape difference.`
-4. `A partner says they're getting XML back. Walk me through what to check.`
+These are things the agent can actually do (build, document, diagnose). Note that
+*reading analytics* — traffic by app, latency, 5xx counts — is not one of them:
+that's the metrics API / portal, covered in
+[solution 04's catalogue](../04-analytics/charts.md).
+
+1. `Write the developer-portal documentation for POST /locations, including real example payloads for BOTH a single-result and a multi-result response — partners need to see the shape difference.`
+2. `A partner says they're getting XML back. Walk me through what to check.`
+3. `Add request-validation on POST /locations so malformed input is a clean 400 from the gateway instead of a 500 from the handler.`
+4. `Show me the applied plugins on /locations and their execution order, so I can confirm the transform runs on both directions.`
 
 ## Known failure modes when running this prompt
 

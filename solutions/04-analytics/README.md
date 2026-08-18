@@ -11,7 +11,7 @@ can.** The API here is deliberately tiny: two routes, a standard response, no au
 | **Needs** | An API deployed to an environment (this one is two simple routes) · a little traffic to query |
 | **Plugins** | `mocking` (standard response) · `request-id` · `cors` — **and deliberately no analytics plugin** |
 | **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| **The actual content** | 📊 **[`charts.md`](charts.md)** — twelve questions worth asking, with the prompts to ask them |
+| **The actual content** | 📊 **[`charts.md`](charts.md)** — the real metrics-API queries (and the limits: no percentiles, no quota metric) |
 | **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Chart catalogue](charts.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Infographic](infographic.md) · ✅ [Manifest](solution.yaml) |
 
 ---
@@ -59,7 +59,7 @@ need per-app numbers.
 `/orders/{orderId}` is **one row** in a per-route breakdown when you group by the
 `route_id` dimension: one latency distribution, one error rate, one count you can
 trend. Group by `api_path` instead and you get **one row per order id** — a top-routes
-chart that is really a list of individual customer orders, and per-route percentiles
+chart that is really a list of individual customer orders, and per-route latency
 computed from one sample each.
 
 Nothing warns you about this. **The API works identically either way** — only the
@@ -106,7 +106,7 @@ right before the data you want to query is generated.
 
 ## What to actually ask
 
-**[`charts.md`](charts.md) is the substance of this package.** Twelve questions, each
+**[`charts.md`](charts.md) is the substance of this package.** The real queries, each
 with the agent prompt to ask it, what the answer looks like, the decision it informs,
 and the configuration mistake that makes it useless.
 
@@ -116,13 +116,13 @@ A sample of the ones that earn their place immediately:
 |---|---|---|
 | 1 | Calls by app, last 24h | Your baseline. You can't spot an anomaly without knowing normal. |
 | 2 | Error rate by route, **4xx split from 5xx** | 5xx is your problem; 4xx is usually your partner's, or your docs'. Conflating them gives you a number you can't act on. |
-| 3 | p50/p95/p99 per route, **with sample counts** | The p99/p50 *ratio* is the signal. A p99 from 12 requests is noise. |
+| 3 | Latency per route, **`AVG` and `MAX`** | The metrics API has no percentiles — `MAX` well above `AVG` is your tail signal. |
 | 4 | Narrow to a slice, then match `X-Request-Id` in your logs | The bridge from "3% failed" to "*this* call failed" — a log-side join, not an analytics query. |
-| 5 | Apps above 80% of quota | **A sales pipeline, not an ops chart.** Upgrade leads with numbers attached. |
+| 8 | 429s by app (needs [01](../01-oauth-jwt/) + [03](../03-api-products/)) | Who is being throttled. Note: analytics counts rejections; it has **no** quota-%-used metric. |
 | 9 | Errors by route/status (or by app, once identity is added) | Every call failing = broken config; some = intermittent. 4xx vs 5xx tells you whose problem it is. |
 | 11 | Apps that **stopped** calling | The signal nobody watches. Churn, a broken integration, or an expired credential. |
 
-Charts 5–7 need [solution 03](../03-api-products/) deployed, because quota consumption
+The per-app recipes need identity ([solution 01](../01-oauth-jwt/)); the 429/throttle recipe also needs [solution 03](../03-api-products/), because quota consumption
 requires a quota to exist.
 
 `charts.md` also has a five-panel dashboard layout, and an argument for why the other
@@ -154,16 +154,21 @@ is useful.
 Then show me the spec, dry-run it, and wait for my confirmation.
 ```
 
-Then, once traffic exists:
+Then, once traffic exists, **you query analytics through the metrics API or the
+portal — not through the agent.** A query is a structured POST, for example
+requests-count grouped by route and status:
 
-```text
-Show me calls to Orders API in the last hour, broken down by app and route, with
-status code counts. Tell me which app sent the most.
+```json
+POST /api/orgs/{orgId}/analytics/metrics/requests-count
+{ "startTime":"…", "endTime":"…",
+  "filters":[{"column":"api_name","operator":"EQ","value":["orders-api"]}],
+  "dimensions":["route_id","response_status_code"], "excludeTimeUnit":true }
 ```
 
-**That's the pattern worth internalising: analytics is capture-then-query.** You don't
-assert it on the request path. You make real calls and then ask. See
-[AGENT-GUIDE.md](../../AGENT-GUIDE.md) § 7.
+**The pattern to internalise: analytics is capture-then-query.** You don't assert it
+on the request path — you make real calls, then query. The full set of real queries
+(and the limits — no percentiles, no quota metric) is in
+[`charts.md`](charts.md).
 
 ## Install it directly
 
@@ -320,11 +325,11 @@ Don't use it when:
 - **Latency is edge-measured**, not per-hop.
 - **Bodies are not captured**, by design.
 - **Retention is a platform setting**, and it bounds which questions are answerable.
-- **Quota charts need [solution 03](../03-api-products/).** Charts 5–7 in
+- **Quota-related views need [solution 03](../03-api-products/).** The 429/throttle recipe in
   `charts.md` assume `api-product-enforcer` and products with quotas.
 - **Exact query syntax and field names vary by build.** The prompts in `charts.md` are
-  phrased for the agent, which knows your org's schema; ask it to show you the field it
-  filtered on rather than guessing.
+  a structured metrics API — see [`charts.md`](charts.md) for the exact request bodies,
+  dimensions and filter operators.
 
 Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 

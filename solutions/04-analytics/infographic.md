@@ -43,14 +43,14 @@ just unanswerable."*
 The same table, same window, transformed:
 
 ```
-route                   app               calls   errors   p99
+route                   app               calls   errors   max ms
 /orders/{orderId}       partner-b-prod    1,204   0.1%     52ms
 /orders/{orderId}       partner-c-batch     318   0.0%     61ms
 /orders                 partner-b-prod      892   0.2%     44ms
 /orders/report          partner-d-analytics  14   0.0%     28s
 ```
 
-Four rows. Named apps. Templated routes. A p99 that means something — and note the
+Four rows. Named apps. Templated routes. A max-latency that means something — and note the
 report route's 28s sitting visibly apart from the 44ms reads, which is the
 latency-profile point made without a word.
 
@@ -96,7 +96,7 @@ One pair. Keep it stark. This is the reflex to break: on most platforms observab
 ### Footer
 
 `analytics: already on` · `helix-auth · request-id · templated paths` · `~10 min` ·
-`12 questions worth asking → charts.md` · Solution 04 · repo URL.
+`real metrics-API queries → charts.md` · Solution 04 · repo URL.
 
 ---
 
@@ -131,7 +131,7 @@ One pair. Keep it stark. This is the reflex to break: on most platforms observab
   would advertise something the platform deliberately doesn't do, and for a good reason.
 - **Do not imply per-hop / internal tracing.** No span waterfalls inside the backend.
   Latency here is edge-measured; a waterfall diagram would promise distributed tracing.
-- **Do not show quota consumption as if it came free.** Charts 5-7 need solution 03. If a
+- **Do not show quota consumption as if it came free.** There is no quota-% metric; the 429/throttle recipe needs solution 03. If a
   quota gauge appears, tag it `+ solution 03`.
 - **Use placeholder IPs from the documentation ranges only** (`203.0.113.x`,
   `198.51.100.x`) and invented app names (`partner-b-prod`). No real addresses, hosts, org
