@@ -14,35 +14,46 @@
 #   also a newly-exposed one — see solution 01 for the full treatment of the
 #   token flow. Remove the helix-auth blocks if this API is internal-only.
 #
-# THE TRANSFORM IS ONE BIDIRECTIONAL PLUGIN.
-#   xml-to-json handles BOTH directions: JSON request body -> XML for the SOAP
-#   handler, and XML response -> JSON for the client. You do NOT add a separate
-#   json-to-xml plugin. Adding one is the most common way this is built wrong:
-#   the body gets converted twice and the SOAP handler receives nonsense.
+# THE TRANSFORM IS ONE PLUGIN, BUT NEITHER DIRECTION IS ON BY DEFAULT AS YOU
+# MIGHT ASSUME. VERIFIED 2026-08-18 against a live gateway:
+#   - transform_request DEFAULTS TO false. An empty `xml-to-json: {}` does NOT
+#     convert the request body — the client's JSON reaches the SOAP handler as
+#     JSON. You MUST set transform_request: true (done below).
+#   - transform_response defaults to true but is CONTENT-NEGOTIATED: it only
+#     fires when the client sends `Accept: application/json`. Tell integrators.
+#   You do NOT add json-to-xml. That is a SEPARATE plugin solving the OPPOSITE
+#   problem (JSON upstream response -> XML for XML-wanting clients), not the
+#   request-side counterpart. Adding it would not help and could double-convert.
 #
-# EXECUTION IS PRIORITY/PHASE-ORDERED, NOT DOCUMENT-ORDERED. On /locations:
-#   helix-auth (validate)  access phase  — reject before any transform work
-#   proxy-rewrite          rewrite phase — retarget the upstream path, set the
-#                                          content type the SOAP handler expects
-#   xml-to-json            request + response — the bidirectional conversion
+# EXECUTION IS PRIORITY/PHASE-ORDERED, NOT DOCUMENT-ORDERED (verified priorities
+# on this build). On /locations:
+#   helix-auth (validate, prio 2450)  access phase  — reject before transform work
+#   proxy-rewrite (prio 1008)         rewrite phase — retarget the upstream path
+#                                     ONLY. Do NOT set Content-Type here: it runs
+#                                     BEFORE xml-to-json (997) and would hide the
+#                                     JSON body from the request transform.
+#   xml-to-json (prio 997)            request + response conversion
 #
 # The ordering that matters: authentication runs BEFORE the transform, so an
 # unauthenticated request costs nothing. If you find yourself transforming a
 # body you're about to reject, the plugins are on the wrong route.
 #
-# PLUGIN SCHEMA WARNING
-#   xml-to-json's exact fields vary by build. It is left as a default (empty)
-#   block here rather than inventing unsupported fields. Confirm with
-#   get_plugin_config in YOUR org and set fields there. An empty block takes the
-#   plugin's defaults, which is correct for a simple element-to-object mapping
-#   and may not be for namespaced or attribute-heavy envelopes.
+# PLUGIN SCHEMA NOTE
+#   xml-to-json's fields vary by build; confirm with get_plugin_config in YOUR
+#   org. On the verified build the useful ones are: transform_request (default
+#   false), transform_response (default true), content_types (which upstream
+#   types to convert), request_content_types (which request bodies to convert),
+#   property_naming (camelCase|PascalCase), array_item_name, max_body_size.
 #
 # UPSTREAM is bound on the service at import/bind time, NOT in the OpenAPI
 # paths. Replace <SOAP_UPSTREAM_URL> wherever your control plane asks for it.
 #
-# SECRETS NEVER APPEAR IN A SPEC. signing_secret is an <ENV:...> reference; the
-# app's client_id/client_secret are provisioned on the credential by the control
-# plane.
+# THE SIGNING SECRET IS A LITERAL — replace <YOUR_JWT_SIGNING_SECRET> with a real
+# secret value before deploy. VERIFIED 2026-08-18: this build does not resolve
+# <ENV:...>/${...} syntax; the string is used verbatim as the HMAC key. Shipping
+# the placeholder makes your key a public constant. See solution 01 for the full
+# treatment. The app's client_id/client_secret are provisioned on the credential
+# by the control plane. Keep the filled-in spec out of version control.
 
 openapi: 3.0.3
 
@@ -84,7 +95,7 @@ paths:
           helix-auth:
             mode: generate
             token_ttl: 900
-            signing_secret: "<ENV:JWT_SIGNING_SECRET>"
+            signing_secret: "<YOUR_JWT_SIGNING_SECRET>"
 
   /locations:
     post:
@@ -129,33 +140,57 @@ paths:
           helix-auth:
             mode: validate
             validate_auth_type: jwt-auth
-            signing_secret: "<ENV:JWT_SIGNING_SECRET>"
+            signing_secret: "<YOUR_JWT_SIGNING_SECRET>"
 
-          # 2. Retarget the upstream path and tell the SOAP handler the body is
-          #    XML. The client called /locations; the handler only answers on
-          #    /GetData.ashx.
+          # 2. Retarget the upstream path. The client called /locations; the
+          #    handler only answers on /GetData.ashx.
+          #
+          #    DO NOT set Content-Type here. It is tempting — the SOAP handler
+          #    wants text/xml — and it BREAKS the request transform. proxy-rewrite
+          #    runs at priority 1008, xml-to-json at 997, so proxy-rewrite goes
+          #    FIRST: it would rewrite the content type to text/xml before
+          #    xml-to-json inspects it, the body would no longer match
+          #    request_content_types (default application/json), and the request
+          #    direction would silently never fire. Verified against a live
+          #    gateway. Let the transform own the content type.
           #
           #    If your SOAP service requires a SOAPAction header, add it here —
-          #    many .asmx and classic SOAP 1.1 endpoints will return a 500 with
-          #    an unhelpful envelope without it. Confirm what your handler wants
-          #    before assuming it doesn't need one.
+          #    many .asmx and classic SOAP 1.1 endpoints return a 500 with an
+          #    unhelpful envelope without one. That header is safe to set; the
+          #    content type is not.
           proxy-rewrite:
             uri: /GetData.ashx
-            headers:
-              set:
-                Content-Type: text/xml
 
-          # 3. The bidirectional transform. ONE plugin, BOTH directions:
-          #       request:  the client's JSON body -> XML for the SOAP handler
-          #       response: the handler's XML      -> JSON for the client
+          # 3. The bidirectional transform. ONE plugin, BOTH directions — but
+          #    NEITHER direction is on by default in the way you would assume:
           #
-          #    Do NOT add json-to-xml alongside this. Doing so converts the body
-          #    twice and the handler receives nonsense.
+          #      transform_request  DEFAULTS TO false. An empty `xml-to-json: {}`
+          #                         block does NOT convert the request body. The
+          #                         client's JSON would reach the SOAP handler as
+          #                         JSON. Verified against a live gateway.
           #
-          #    Left as a default block deliberately: this plugin's schema varies
-          #    by build. Confirm with get_plugin_config and set fields there if
-          #    your envelope is namespaced or attribute-heavy.
-          xml-to-json: {}
+          #      transform_response defaults to true, but is CONTENT-NEGOTIATED:
+          #                         it only fires when the client sends
+          #                         `Accept: application/json`. Without that
+          #                         header the upstream XML passes straight
+          #                         through as text/xml. Tell your integrators.
+          #
+          #    Do NOT add json-to-xml alongside this. That plugin is not the
+          #    request-side counterpart — it converts a JSON *upstream* response
+          #    to XML for clients that ask for XML. It solves the opposite
+          #    problem and has no place here.
+          #
+          #    Other fields worth knowing (confirm with get_plugin_config):
+          #      content_types          which upstream types to convert
+          #                             (default application/xml, text/xml)
+          #      request_content_types  which request bodies to convert
+          #                             (default application/json)
+          #      property_naming        camelCase | PascalCase
+          #      array_item_name        element name for array items (default item)
+          #      max_body_size          default 1048576
+          xml-to-json:
+            transform_request: true
+            transform_response: true
 
 # API-WIDE POLICY.
 #

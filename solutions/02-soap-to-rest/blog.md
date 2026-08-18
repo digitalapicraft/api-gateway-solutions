@@ -49,7 +49,7 @@ Three blocks on one route:
 helix-auth:
   mode: validate
   validate_auth_type: jwt-auth
-  signing_secret: "<ENV:JWT_SIGNING_SECRET>"
+  signing_secret: "<YOUR_JWT_SIGNING_SECRET>"
 
 # 2. the client called /locations; the handler only answers on /GetData.ashx
 proxy-rewrite:

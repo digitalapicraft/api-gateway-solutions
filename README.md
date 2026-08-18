@@ -8,6 +8,13 @@ Each solution is a self-contained package: one real problem, one importable
 gateway configuration, the agent prompt that produces it, the tests that prove
 it, and an honest record of what was and wasn't validated.
 
+> **✅ Verified against a live gateway on 2026-08-18.** All four solutions were
+> deployed and their `verify.sh` scripts run end to end. Three passed as shipped;
+> SOAP→REST needed three real fixes (now applied). The live build also corrected
+> three repo claims — most importantly, `<ENV:...>` is **not** resolved, so a
+> signing secret placeholder is a literal you must replace. Full details:
+> **[VERIFICATION.md](VERIFICATION.md)**.
+
 ---
 
 ## The four solutions
@@ -89,9 +96,12 @@ account for most early mistakes:
   already produced. Listing plugins in the order you want them to run does
   nothing.
 - **Identity is `helix-auth`.** In `validate` mode it resolves the calling app
-  *and* the product it's subscribed to. Raw `key-auth` authenticates but resolves
-  no subscription, which quietly breaks quota enforcement downstream. Use
-  `jwt-auth` only when an external identity provider issues the tokens.
+  *and* the product it's subscribed to. It takes a `validate_auth_type` of
+  `key-auth` (static app key) or `jwt-auth` (a JWT — issued by the gateway itself
+  in `generate` mode, or by an external IdP). Note: `key-auth` and `jwt-auth` are
+  **not** standalone plugins on this build (verified 2026-08-18) — they exist only
+  as `validate_auth_type` values of `helix-auth`. Use `jwt-auth` mode when an
+  external identity provider issues the tokens.
 - **Per-caller metering is API Products, counted per app.** The quota lives on
   the product, not on the route, and is keyed on the credential — not on an IP,
   not on `consumer_name`. Solution 03 covers this in full.
@@ -140,11 +150,21 @@ repo. You will see:
 | `<ORG_ID>` · `<ENV_ID>` · `<API_ID>` | identifiers from your control plane |
 | `<CLIENT_ID>` · `<CLIENT_SECRET>` | your app's credentials — the control plane issues these |
 | `<UPSTREAM_URL>` · `<SOAP_UPSTREAM_URL>` | your backend |
-| `<ENV:JWT_SIGNING_SECRET>` | an environment variable on the gateway, never a literal |
+| `<YOUR_JWT_SIGNING_SECRET>` · `<YOUR_REDIS_HOST>` | a **literal** value you fill in — see the warning below |
 
-App keys and secrets are provisioned on the credential by the control plane.
-**They never belong in a spec**, and the agent should never be asked to put them
-there.
+App **keys and secrets** (the `client_id`/`client_secret` on an app) are
+provisioned on the credential by the control plane and never belong in a spec.
+
+> **⚠️ The signing secret is different, and this matters.** Verified against a live
+> gateway on 2026-08-18: this build does **not** resolve `<ENV:...>` or `${...}`
+> syntax. Whatever string sits in `signing_secret` is used *verbatim* as the HMAC
+> key. So `<YOUR_JWT_SIGNING_SECRET>` is a fill-in-the-blank, **not** an
+> environment-variable reference — replace it with a real, high-entropy secret
+> before deploy, and keep the filled-in spec out of version control. If you ship
+> the placeholder literally, your signing key is a publicly known constant and
+> anyone can forge tokens. (An earlier version of this repo described `<ENV:...>`
+> as a resolved reference; that was wrong for this build and has been corrected —
+> see [VERIFICATION.md](VERIFICATION.md).)
 
 ## Prerequisites
 

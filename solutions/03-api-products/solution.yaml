@@ -59,10 +59,8 @@ implementation:
     the ceiling becomes a global cap on that endpoint.
 
 validation:
-  # No gateway connector was available in the session that produced this public
-  # package, so no dry-run, deployment or functional test was performed FOR THIS
-  # ARTIFACT. See prior_art for what an earlier internal build established, and
-  # validation/gateway-validation.yaml for the full record.
+  # VERIFIED against a live gateway on 2026-08-18. See validation/gateway-validation.yaml
+  # for the full record and provenance.
   local:
     status: PASS
     basis: >-
@@ -71,19 +69,18 @@ validation:
       same-key guardrail and unreachable-host paths actually executed.
     verified_this_session: true
   gateway_dry_run:
-    status: NOT_RUN
-    verified_this_session: false
-    reason: no gateway connector available in the session that produced this package
+    status: PASS
+    verified_this_session: true
+    detail: dry-run passed.
   deployment:
-    status: NOT_RUN
-    environment: null
+    status: DEPLOYED
+    environment: a fresh free-trial test environment (identifiers withheld)
+    detail: two products + two apps on different products; revision ACTIVE.
   functional_test:
-    status: NOT_RUN
-    verified_this_session: false
+    status: PASS
+    verified_this_session: true
     executor: gateway/verify.sh
-    reason: >-
-      written and reviewed; its argument handling and failure paths were exercised
-      locally, but no case has been run against a gateway from this package
+    detail: verify.sh exit 0, 5/5 incl. isolation; quota exact; 429 body and absent headers as documented.
 
 prior_art:
   # Recorded so the reader knows which parts have run somewhere and which have not.
@@ -162,4 +159,4 @@ limitations:
   - It does not prevent overselling. It makes overselling visible as 429s rather than
     as an outage, which is a better failure but still a failure.
 
-status: UNVALIDATED   # generated + locally reviewed; the enforcement model incl. the isolation case was proven in a prior internal build, this artifact not gateway-confirmed
+status: READY   # verified against a live gateway 2026-08-18; verify.sh 5/5 incl. isolation, as shipped

@@ -7,7 +7,7 @@ authentication happened.**
 |---|---|
 | **Setup time** | ~15 minutes |
 | **Difficulty** | 🟢 Beginner |
-| **Needs** | An API deployed to an environment · `JWT_SIGNING_SECRET` set on that environment · one developer + app to test with |
+| **Needs** | An API deployed to an environment · a real signing-secret value to paste into the spec (used literally — see below) · one developer + app to test with |
 | **Plugins** | `helix-auth` (generate + validate) · `request-id` · `cors` |
 | **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
 | **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Infographic](infographic.md) · ✅ [Blog](blog.md) · ✅ [Manifest](solution.yaml) |
@@ -60,12 +60,14 @@ the flow.
 | Your situation | Use | Why |
 |---|---|---|
 | **You have no identity provider**, and you want partners to exchange a client id and secret for a token | **`helix-auth` generate + validate** — this solution | The gateway *is* the issuer. It holds the signing secret, verifies the app's credentials, and mints the JWT. |
-| **Keycloak / Auth0 / Entra ID / Okta already issues tokens** to your partners | **`jwt-auth`**, pointed at the issuer's public key or JWKS. Drop the `/oauth/token` route. | The gateway is a *verifier only*. It must not mint tokens a separate IdP is authoritative for. |
+| **Keycloak / Auth0 / Entra ID / Okta already issues tokens** to your partners | **`helix-auth` validate, `validate_auth_type: jwt-auth`**, pointed at the issuer's key material. Drop the `/oauth/token` route. | The gateway is a *verifier only*. It must not mint tokens a separate IdP is authoritative for. |
 
-`helix-auth` generate and `jwt-auth` are not alternatives to each other — they
-sit on opposite sides of the same boundary. Using `jwt-auth` for tokens you
-issued yourself, or `helix-auth` generate when an IdP already exists, produces a
-system with two sources of truth about identity.
+`helix-auth` `generate` and `helix-auth` `validate` (jwt-auth) are not
+alternatives to each other — they sit on opposite sides of the same boundary.
+Verifying your own gateway-issued tokens against an external issuer, or issuing
+tokens when an IdP already exists, produces a system with two sources of truth
+about identity. (Note: `jwt-auth` is a `validate_auth_type` value of `helix-auth`,
+not a standalone plugin — verified against the live build.)
 
 Everything below is the first row.
 
@@ -121,11 +123,12 @@ Protect every other endpoint so it requires a valid Bearer token issued by that
 endpoint, and rejects anything else before it reaches the upstream.
 
 The gateway is the token issuer here, so use helix-auth in generate mode for the
-token endpoint and validate mode with jwt-auth for the protected routes — not
-the jwt-auth plugin on its own, which is for an external issuer.
+token endpoint and validate mode with validate_auth_type jwt-auth for the
+protected routes.
 
-Both must reference the same signing secret via the JWT_SIGNING_SECRET
-environment variable. Never write the secret into the spec.
+Both must use the SAME signing secret. On this gateway the signing_secret is a
+literal HMAC key — there is no <ENV:...> resolution — so use one real, secret,
+high-entropy value in both places, and don't commit it.
 
 Show me the spec, run validate_route and dry_run_deploy, and wait for me to
 confirm before deploying.
@@ -152,12 +155,14 @@ export TOKEN=<control-plane bearer token>      # short-lived
 export BASE=https://<YOUR_GATEWAY_HOST>/api
 H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
 
-# 1. Set JWT_SIGNING_SECRET on the environment FIRST. The spec references it;
-#    deploying a revision that references a secret which doesn't exist yields
-#    401 on every call with nothing obviously wrong in the config.
+# 1. Replace <YOUR_JWT_SIGNING_SECRET> in the spec with a real, high-entropy
+#    secret. VERIFIED: this build uses it LITERALLY as the HMAC key — <ENV:...>
+#    is not resolved. Use the SAME value on the token route and every protected
+#    route. Do not commit the filled-in spec.
 
 # 2. Import gateway/api-spec.yaml (OpenAPI import in the portal, or Agent Mode)
-#    and bind your upstream <UPSTREAM_URL> to the service.
+#    and bind your upstream <UPSTREAM_URL> to the service. (Importing assigns
+#    service_id automatically.)
 
 # 3. Deploy the revision to your environment.
 
@@ -185,7 +190,7 @@ On the token endpoint:
 helix-auth:
   mode: generate
   token_ttl: 900
-  signing_secret: "<ENV:JWT_SIGNING_SECRET>"
+  signing_secret: "<YOUR_JWT_SIGNING_SECRET>"
 ```
 
 On every protected route:
@@ -194,7 +199,7 @@ On every protected route:
 helix-auth:
   mode: validate
   validate_auth_type: jwt-auth
-  signing_secret: "<ENV:JWT_SIGNING_SECRET>"
+  signing_secret: "<YOUR_JWT_SIGNING_SECRET>"
 ```
 
 **Note what isn't there.** `validate` is applied per route, not at the document
@@ -355,22 +360,27 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 
 ## Validation status
 
+**✅ Verified against a live gateway on 2026-08-18 — passed as shipped, no changes.**
+
 | Stage | Status | Provenance |
 |---|---|---|
 | Configuration generated | **YES** | [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
 | Local validation | **PASS** | Structural review — [`validation/local-validation.yaml`](validation/local-validation.yaml) |
-| Gateway dry-run | **NOT RUN for this package** | The equivalent `helix-auth` generate + validate pair was dry-run and deployed via Agent Mode in an earlier internal build. This repackaged, placeholder-parameterised spec has **not** itself been dry-run. |
-| Gateway deployed | **NOT RUN for this package** | — |
-| Functional tests | **NOT RUN for this package** | `verify.sh` is written and reviewed; it has not been executed against a gateway from this package |
+| Gateway dry-run | **PASS** | Live gateway, 2026-08-18. Non-destructive; caught a missing upstream binding first. |
+| Gateway deployed | **DEPLOYED** | Revision ACTIVE in a test environment; `service_id` auto-assigned on import. |
+| Functional tests | **PASS (6/6)** | `gateway/verify.sh` exit 0 — including the wrong-secret and forged-token cases. |
 
-Overall: **UNVALIDATED** — generated and structurally reviewed, with the auth
-mechanism proven in an earlier internal build. **Run
-[`gateway/verify.sh`](gateway/verify.sh) against your own environment before you
-rely on this.** Full record, including what the prior build did establish:
-[`validation/gateway-validation.yaml`](validation/gateway-validation.yaml).
+Overall: **READY.** The token flow works exactly as documented — three-segment
+HS256 JWT, `expires_in` matching `token_ttl`, the client secret genuinely checked,
+forged and prefix-less tokens rejected. Full record, including the two repo
+corrections this run produced (the `<ENV:...>` finding and the `jwt-auth`
+plugin-naming fix), is in
+[`validation/gateway-validation.yaml`](validation/gateway-validation.yaml) and
+[`../../VERIFICATION.md`](../../VERIFICATION.md).
 
-We'd rather label this honestly than imply a gateway confirmed something it
-didn't. See the [status vocabulary](../../README.md#validation-status--what-the-badges-mean).
+**One thing you must do:** replace `<YOUR_JWT_SIGNING_SECRET>` with a real secret.
+It is used *literally* as the HMAC key on this build — `<ENV:...>` syntax is not
+resolved — so shipping the placeholder makes your signing key a public constant.
 
 ## Related solutions
 

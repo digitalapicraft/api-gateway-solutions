@@ -45,8 +45,17 @@
 # you sold. This is the single most common way this solution is deployed wrong,
 # and it is invisible from the route config.
 #
+# VERIFIED 2026-08-18 against a live gateway: verify.sh passes 5/5, including the
+# isolation case. A Free app at 5/min returned exactly five 200s then 429 with
+# {"error":"quota exceeded"} (no Retry-After, no X-RateLimit-* headers), while a
+# second app on a different product kept getting 200s in the same window. Note the
+# 429 body is JSON but carries content-type text/plain, and the quota window is a
+# fixed calendar minute (not sliding), so a burst across the boundary can briefly
+# serve up to 2x.
+#
 # SECRETS NEVER APPEAR IN A SPEC. App keys and secrets are provisioned on the
-# credential by the control plane.
+# credential by the control plane. Any <YOUR_*> placeholder (e.g. redis_host) is a
+# literal to replace — this build does not resolve <ENV:...> or ${...} syntax.
 
 openapi: 3.0.3
 
@@ -151,7 +160,7 @@ paths:
             key: remote_addr
             rejected_code: 429
             policy: redis
-            redis_host: "<ENV:REDIS_HOST>"
+            redis_host: "<YOUR_REDIS_HOST>"   # literal value; replace it (no <ENV:...> resolution on this build)
             show_limit_quota_header: true
 
 # API-WIDE POLICY.

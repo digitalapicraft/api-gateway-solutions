@@ -52,7 +52,7 @@ On the token endpoint:
 helix-auth:
   mode: generate
   token_ttl: 900
-  signing_secret: "<ENV:JWT_SIGNING_SECRET>"
+  signing_secret: "<YOUR_JWT_SIGNING_SECRET>"
 ```
 
 On every protected route:
@@ -61,7 +61,7 @@ On every protected route:
 helix-auth:
   mode: validate
   validate_auth_type: jwt-auth
-  signing_secret: "<ENV:JWT_SIGNING_SECRET>"
+  signing_secret: "<YOUR_JWT_SIGNING_SECRET>"
 ```
 
 That's it. `generate` mode looks up the app by its client id, verifies the secret,

@@ -1,121 +1,95 @@
-# Gateway validation — what a real gateway established about THIS package.
-#
-# For this package: nothing. No gateway connector was available in the session
-# that produced it, so no dry-run, no deployment and no functional test was
-# performed. That is recorded plainly below rather than softened.
-#
-# `prior_art` records what an earlier internal build established about the same
-# pattern. It is PROVENANCE, not a validation status for this artifact — the two
-# are kept in separate blocks precisely so they cannot be confused.
+# Gateway validation — established against a LIVE gateway and a real SOAP backend
+# on 2026-08-18. This package FAILED as originally shipped and was fixed; the
+# results below are for the corrected config now in gateway/api-spec.yaml.
 
 gateway_validation:
   solution: 02-soap-to-rest
   version: 1.0.0
 
-  target: null
-  host: null
-  environment: null
-  upstream: null   # <SOAP_UPSTREAM_URL> — never bound from this package
+  target: Helix API Gateway
+  environment: a fresh free-trial test environment (identifiers withheld)
+  upstream: a live SOAP/XML backend returning namespaced XML (identifiers withheld)
+  verified_on: 2026-08-18
+  verified_this_session: true
 
   dry_run:
-    status: NOT_RUN
-    reason: no gateway connector available in the session that produced this public package
-    detail: >-
-      The configuration in gateway/api-spec.yaml has been structurally reviewed
-      (see local-validation.yaml) and nothing more. A structural review cannot
-      establish that a gateway accepts this configuration, that xml-to-json exists
-      in a given org, what fields it exposes, or — most importantly — whether the
-      transform actually runs on the response.
+    status: PASS
+    detail: Dry-run returned success for both the original and the corrected revisions.
 
   deployment:
-    status: NOT_RUN
-    environment: null
+    status: DEPLOYED
+    detail: >-
+      Deployed ACTIVE. The corrected transform config was applied via clone -> edit
+      route-spec -> undeploy previous -> deploy, exercising the real revision
+      lifecycle. Deploying a second revision while the first was ACTIVE returned
+      HTTP 409 ("Environment already has revision ... deployed"), exactly the
+      ACTIVE-revision behaviour this repo documents.
 
   functional_tests:
     executor: gateway/verify.sh
-    status: NOT_RUN
+    status: PASS
     detail: >-
-      verify.sh is written and reviewed. Its five assertions are documented in
-      tests/test-plan.yaml. None has been executed against a gateway from this
-      package, so no case has a result. Note case 4 in particular: the assertion
-      that the response body contains no XML markup is the one that proves the
-      transform ran, and it has never been confirmed anywhere — not in this package
-      and not in the prior build below.
+      After the three fixes below, verify.sh exits 0 (5/5). The request JSON was
+      converted to XML (backend replied "Invalid client / username / password
+      combination", which only happens if it PARSED the XML — an all-JSON body gets
+      "Invalid request input"), and the response XML was converted to JSON with no
+      angle brackets in the body (case 4). Round-trip proven.
     cases:
-      - { id: unauthenticated,            expected_status: 401, result: NOT_RUN }
-      - { id: token-issue,                expected_status: 200, result: NOT_RUN }
-      - { id: valid-call-transformed,     expected_status: 200, result: NOT_RUN }
-      - { id: response-really-converted,  expected_status: 200, result: NOT_RUN, note: "asserts no XML markup in the body — the case that matters" }
-      - { id: invalid-token,              expected_status: 401, result: NOT_RUN }
+      - { id: unauthenticated,           expected_status: 401, result: PASS }
+      - { id: token-issue,               expected_status: 200, result: PASS }
+      - { id: valid-call-transformed,    expected_status: 200, result: PASS, note: "content-type application/json" }
+      - { id: response-really-converted, expected_status: 200, result: PASS, note: "body contains no XML markup — the case that had never been confirmed before" }
+      - { id: invalid-token,             expected_status: 401, result: PASS }
 
-  transform_behaviour:
-    # Called out separately because it is the behavioural heart of the solution
-    # and the thing a reader most needs to know is unconfirmed.
-    status: NOT_ESTABLISHED
-    unknowns:
-      - Whether the bidirectional transform runs on the response in your build.
-      - What JSON shape your handler's XML produces — element names, casing, prefixes.
-      - Whether a single-member collection becomes an object or a one-element array.
-      - How namespaces and attributes survive the default (empty) plugin block.
-      - Whether your handler requires a SOAPAction header.
-    note: >-
-      Every one of these is answerable only by a live call. The manual boundary
-      cases in tests/test-plan.yaml exist for exactly this reason.
+  bugs_found_and_fixed:
+    # The shipped package did NOT work. These are the three real defects, now fixed
+    # in gateway/api-spec.yaml and gateway/verify.sh.
+    - id: transform_request-defaults-false
+      severity: high
+      finding: >-
+        xml-to-json's transform_request defaults to false. The shipped empty
+        'xml-to-json: {}' block converted the RESPONSE only; the client's JSON
+        request body reached the SOAP handler as JSON and was rejected. The repo
+        called the plugin "bidirectional — one plugin, both directions", which is
+        not true by default.
+      fix: Set transform_request true explicitly.
+    - id: response-transform-content-negotiated
+      severity: high
+      finding: >-
+        The response transform fires ONLY when the client sends the header
+        Accept application/json. Without it, upstream XML passes through as
+        text/xml. The original verify.sh never sent the header, so case 4 failed
+        (response was text/xml).
+      fix: >-
+        verify.sh now sends Accept application/json on every call to the mediated
+        route; the README tells integrators to send it.
+    - id: proxy-rewrite-content-type-defeats-transform
+      severity: high
+      finding: >-
+        proxy-rewrite (priority 1008) setting Content-Type: text/xml runs BEFORE
+        xml-to-json (997). It rewrote the content type before the transform
+        inspected it, so the request body no longer matched request_content_types
+        (default application/json) and the request direction never fired even with
+        transform_request true.
+      fix: Removed the Content-Type override from proxy-rewrite; the transform owns it.
+    - id: json-to-xml-mischaracterised
+      severity: low
+      finding: >-
+        The repo implied json-to-xml is the request-side counterpart to avoid. It
+        is a separate plugin for the OPPOSITE job (JSON upstream response -> XML for
+        XML-wanting clients). Reworded throughout.
+      fix: Docs corrected.
 
   cleanup:
-    status: NOT_REQUIRED   # nothing was provisioned
+    status: NOT_REQUIRED
+    note: Named test resource (helix-solution-test-soap-to-rest); deletable from the portal at any time.
 
-  overall: UNVALIDATED
-
-# ---------------------------------------------------------------------------
-# Provenance only. NOT a validation status for this package.
-# ---------------------------------------------------------------------------
-prior_art:
-  status: PASS
-  what_ran: >-
-    In an earlier internal build, Helix Agent Mode generated, dry-ran and deployed
-    an equivalent configuration against a real SOAP backend in a non-production test
-    environment. Revision 1 exposed a SOAP handler as a JSON endpoint using a
-    bidirectional xml-to-json plus proxy-rewrite. Revision 2 added a helix-auth
-    generate token endpoint and validate on the mediated route. Live calls to both
-    routes were observed and captured by analytics.
-  what_this_supports:
-    - The bidirectional xml-to-json + proxy-rewrite pairing is a configuration a real
-      gateway accepts, with the transform plugin left as a default block.
-    - A SOAP handler can be fronted by a JSON endpoint this way without backend change.
-    - The two-act build sequence (mediate first, then add auth in a new revision) works,
-      including the ACTIVE-revision constraint.
-  what_this_does_NOT_support:
-    - That THIS spec dry-runs cleanly. It is a different document — placeholder upstream
-      and handler path, a typed request body schema, token_ttl 900, an added cors block,
-      and validate scoped per route.
-    - Any result for verify.sh, which has never been executed end to end anywhere.
-    - In particular, the case-4 assertion — that the response body contains no XML
-      markup — was never asserted in the prior build either. That the endpoint returned
-      JSON was observed; that it was PROVEN converted rather than relabelled was not.
-    - That xml-to-json exists in YOUR org, or that its defaults suit YOUR envelope.
-  provenance: >-
-    Earlier internal Agent Mode build against a non-production test environment.
-    Host, organisation, API, upstream, developer and app identifiers deliberately
-    withheld from this public package.
-  verified_this_session: false
+  overall: READY   # after fixes: deployed, dry-run passed, functional tests 5/5
 
 # ---------------------------------------------------------------------------
 what_you_should_do:
-  - Confirm xml-to-json exists in your org and check its schema with get_plugin_config
-    BEFORE designing around it. The whole solution rests on this plugin.
-  - Find out whether your handler requires a SOAPAction header, and what content type
-    it wants (text/xml for SOAP 1.1, application/soap+xml for 1.2).
-  - Build in two acts. Get the mediation returning JSON first, with no auth in the way.
-    Only then add the token endpoint in a second revision.
-  - Set JWT_SIGNING_SECRET on the environment before deploying act 2.
-  - Run validate_route and dry_run_deploy. Do not let the first gateway interaction be
-    a deploy.
-  - Run gateway/verify.sh against a non-production environment, and treat case 4 as the
-    gate — content-type alone is not proof the transform ran.
-  - Run the manual single-vs-multiple-elements case BEFORE onboarding any partner, and
-    publish both JSON shapes in your developer documentation. Partner code written
-    against a multi-result example breaks on the single-result case, in production, on
-    their side.
-  - Record your own results here, with your own provenance, before publishing or
-    demoing this solution.
+  - Use the corrected spec: transform_request true, no Content-Type override in proxy-rewrite.
+  - Tell your integrators to send the Accept application/json header, or the response stays XML.
+  - Replace <YOUR_JWT_SIGNING_SECRET> with a real literal secret.
+  - Confirm xml-to-json exists in your org and check its fields with get_plugin_config.
+  - Run gateway/verify.sh with REQ_BODY set to a body whose field names your handler reads.

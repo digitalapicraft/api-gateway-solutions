@@ -427,20 +427,28 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 
 ## Validation status
 
+**✅ Verified against a live gateway on 2026-08-18 — passed as shipped, 5/5.**
+
 | Stage | Status | Provenance |
 |---|---|---|
 | Configuration generated | **YES** | [`gateway/api-spec.yaml`](gateway/api-spec.yaml), [`gateway/products.json`](gateway/products.json) |
-| Local validation | **PASS** | Structural review, plus `verify.sh` syntax-checked and its guardrail and unreachable-host paths executed. [`validation/local-validation.yaml`](validation/local-validation.yaml) |
-| Gateway dry-run | **NOT RUN for this package** | An equivalent `helix-auth` + `api-product-enforcer` configuration was dry-run and functionally tested against a live gateway in an earlier internal build. This repackaged, placeholder-parameterised spec has **not** itself been dry-run. |
-| Gateway deployed | **NOT RUN for this package** | — |
-| Functional tests | **NOT RUN for this package** | `verify.sh` is written and reviewed; not executed against a gateway from this package |
+| Local validation | **PASS** | [`validation/local-validation.yaml`](validation/local-validation.yaml) |
+| Gateway dry-run | **PASS** | Live gateway, 2026-08-18. |
+| Gateway deployed | **DEPLOYED** | Two products, two apps on different products, ACTIVE. |
+| Functional tests | **PASS (5/5)** | `gateway/verify.sh` exit 0 — **including isolation** (case 5). |
 
-Overall: **UNVALIDATED** — generated and structurally reviewed, with the enforcement
-model proven in an earlier internal build. **Run
-[`gateway/verify.sh`](gateway/verify.sh) against your own environment before you
-rely on this**, and treat case 5 as the gate. Full record of what the prior build
-did and didn't establish:
-[`validation/gateway-validation.yaml`](validation/gateway-validation.yaml).
+Overall: **READY.** Confirmed live: quota is exact (a Free app at 5/min served
+exactly five 200s then 429 in a clean window); isolation holds (a second app on a
+different product kept getting 200s while the first was throttled); the 429 body is
+`{"error":"quota exceeded"}` with **no** `Retry-After` and **no** `X-RateLimit-*`
+headers; a product without a `quota` object is rejected at creation; and an app
+whose product doesn't cover the API gets 403. Two observations worth knowing: the
+429 is JSON but carries `content-type: text/plain`, and the quota window is a fixed
+calendar minute (a boundary-straddling burst can briefly serve 2×). The multi-node
+`quota_policy` pitfall could not be exercised on a single-node test — verify it on
+your own cluster. Full record:
+[`validation/gateway-validation.yaml`](validation/gateway-validation.yaml) and
+[`../../VERIFICATION.md`](../../VERIFICATION.md).
 
 ## Related solutions
 

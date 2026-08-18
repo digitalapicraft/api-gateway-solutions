@@ -14,6 +14,11 @@ level of outcomes matters more here than anywhere else in this library, because
 `xml-to-json`'s fields genuinely vary by build and a model asked for specific
 fields will invent them.
 
+> **✅ Verified 2026-08-18.** The constraints below were updated after a live run:
+> `transform_request` defaults to **false**, the response transform is
+> content-negotiated, and a `Content-Type` override in `proxy-rewrite` defeats the
+> request direction. See [VERIFICATION.md](../../VERIFICATION.md).
+
 ---
 
 ## Act 1 — get the mediation working
@@ -37,28 +42,33 @@ WHAT I WANT
 1. An endpoint POST /locations that proxies to the upstream path
    <</GetData.ashx>>.
 
-2. Use a plugin to transform the request and response bodies, so the client
-   sends JSON, the handler receives XML, and the handler's XML response comes
-   back to the client as JSON.
+2. Use the xml-to-json plugin to transform BOTH the request and response bodies,
+   so the client sends JSON, the handler receives XML, and the handler's XML
+   response comes back to the client as JSON.
 
-   Check get_plugin_config for the transform plugin BEFORE writing any config
-   and use the schema this org actually has. Do not use field names from another
-   gateway's documentation.
+   Verified platform behaviour to respect: transform_request DEFAULTS TO false, so
+   set it to true explicitly or the request body is not converted. The response
+   direction only fires when the client sends Accept: application/json — note that
+   in what you hand me. Check get_plugin_config for the real field names first.
 
-3. Set the upstream content type to text/xml on the proxied request.
-   Tell me whether my handler is likely to also need a SOAPAction header — many
-   classic SOAP 1.1 and .asmx endpoints return a 500 with an unhelpful envelope
-   without one. If you can't tell, say so and ask.
+3. Do NOT hard-set the request Content-Type in proxy-rewrite (see the constraint
+   below) — the transform handles the XML. But tell me whether my handler is
+   likely to need a SOAPAction header: many classic SOAP 1.1 and .asmx endpoints
+   return a 500 with an unhelpful envelope without one. If you can't tell, ask.
 
 4. Add request-id (uuid, header X-Request-Id) API-wide. When a partner reports a
    wrong response I need to correlate the JSON they saw with the XML the handler
    actually returned, across the gateway-to-SOAP hop.
 
 CONSTRAINTS — known platform behaviour, please respect these
-- The transform plugin is BIDIRECTIONAL. One plugin handles JSON->XML on the
-  request AND XML->JSON on the response. Do NOT add a second plugin for the
-  other direction. Two transforms convert the body twice, the handler receives
-  nonsense, and it returns a 500 that looks like a backend fault.
+- One plugin (xml-to-json) handles both directions, but NOT by default: set
+  transform_request true, and rely on Accept: application/json for the response.
+  Do NOT add json-to-xml — it is a SEPARATE plugin for the opposite job (JSON
+  upstream response -> XML for XML-wanting clients), not the request-side
+  counterpart.
+- Do NOT set Content-Type in proxy-rewrite. proxy-rewrite runs before xml-to-json,
+  so a text/xml override there hides the JSON body from the request transform and
+  it silently never fires. Retarget the path only; let the transform own the type.
 - Only schema fields plus _meta are legal in a plugin block. No invented fields
   and no commentary keys — put explanation in a YAML comment.
 - If the plugin's schema has fields for namespace or attribute handling, tell me
@@ -109,9 +119,9 @@ Now deploy a NEW REVISION that puts OAuth 2.0 in front of this API.
    There is no point converting a body we are about to discard — confirm to me
    that this is the order you have produced.
 
-3. Both must reference the JWT_SIGNING_SECRET environment variable. Never write
-   the secret into the spec. If it does not exist on <<staging>>, tell me and
-   stop — I will set it.
+3. Both must use the SAME signing secret. On this build signing_secret is a
+   literal HMAC key — there is no <ENV:...> resolution — so use one real, secret,
+   high-entropy value in both places. Never commit the filled-in spec.
 
 CONSTRAINTS
 - Use helix-auth generate, NOT the jwt-auth plugin, for issuing. jwt-auth
@@ -142,7 +152,7 @@ AFTER YOU DEPLOY
 | Block | Why it's there |
 |---|---|
 | **Two acts, not one** | Mediation failures and auth failures look alike from the outside (a 500 or a 401 with a config that reads fine). Splitting at the seam means each act is independently verifiable, and you know which one broke. |
-| **"The transform plugin is BIDIRECTIONAL… do NOT add a second plugin"** | The single most likely wrong turn in this solution. The name reads one-way, so a model reaches for `json-to-xml` for the request direction. The body is then converted twice and the handler 500s — while the config looks *more* thorough, not less. |
+| **"transform_request defaults to false; response needs Accept; no Content-Type in proxy-rewrite"** | The three real defects found in a live run. A model reaches for `json-to-xml` (wrong plugin), leaves `transform_request` at its false default, or sets `Content-Type` in `proxy-rewrite` — any one leaves the request unconverted and the handler rejecting JSON. |
 | **"Check get_plugin_config BEFORE writing any config"** | This plugin's fields vary by build more than most. Asked for an outcome the agent reads your schema; asked for fields it recalls someone else's. |
 | **"Use a plugin to transform the requests and responses"** — outcome, not field names | Deliberately high altitude. This phrasing is what makes the agent go and look rather than pattern-match. |
 | **"Tell me whether my handler needs SOAPAction"** | A missing `SOAPAction` is the second most common cause of a 500 from a handler that works under curl. Asking the agent to raise it surfaces the question before you're debugging. |
@@ -214,8 +224,11 @@ already counts per app.
 - **The handler returns 500, but curling it directly works.** In order of
   likelihood: a second transform plugin got added and the body is being converted
   twice; a missing `SOAPAction` header; the request body's element names don't
-  match what the handler reads. Reply: `the transform is bidirectional — remove
+  match what the handler reads. Reply: `set transform_request true, drop any
   the second plugin, one handles both directions.`
+- **The response is still XML (text/xml).** Either the client isn't sending
+  `Accept: application/json`, or `proxy-rewrite` is overriding `Content-Type`
+  ahead of the transform. Both were real failures in the live run.
 - **The agent adds `json-to-xml` alongside `xml-to-json`.** The expected wrong
   turn. Reply exactly as above.
 - **The response is XML with a JSON content-type.** The transform isn't running on

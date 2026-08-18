@@ -46,26 +46,25 @@ implementation:
     validate route; nothing in either plugin block hints that the value is shared.
 
 validation:
-  # No gateway connector was available in the session that produced this public
-  # package, so no dry-run, deployment or functional test was performed FOR THIS
-  # ARTIFACT. See prior_art for what an earlier internal build did establish, and
-  # validation/gateway-validation.yaml for the full record.
+  # VERIFIED against a live gateway on 2026-08-18. See validation/gateway-validation.yaml
+  # for the full record and provenance.
   local:
     status: PASS
     basis: structural review of api-spec.yaml and verify.sh — syntax, schema fields, plugin scoping, secret handling, test-to-implementation mapping
     verified_this_session: true
   gateway_dry_run:
-    status: NOT_RUN
-    verified_this_session: false
-    reason: no gateway connector available in the session that produced this package
+    status: PASS
+    verified_this_session: true
+    detail: dry-run passed; first attempt correctly failed on the missing upstream binding.
   deployment:
-    status: NOT_RUN
-    environment: null
+    status: DEPLOYED
+    environment: a fresh free-trial test environment (identifiers withheld)
+    detail: revision ACTIVE; service_id auto-assigned on import.
   functional_test:
-    status: NOT_RUN
-    verified_this_session: false
+    status: PASS
+    verified_this_session: true
     executor: gateway/verify.sh
-    reason: written and reviewed, not executed against a gateway from this package
+    detail: verify.sh exit 0, 6/6 cases, as shipped.
 
 prior_art:
   # Recorded so the reader knows which parts have run somewhere, and which have
@@ -127,4 +126,4 @@ limitations:
   - helix-auth's exact schema varies by build. Confirm with get_plugin_config before
     deploying rather than trusting the field names in this spec.
 
-status: UNVALIDATED   # generated + locally reviewed; auth mechanism proven in a prior internal build, this artifact not gateway-confirmed
+status: READY   # verified against a live gateway 2026-08-18; verify.sh 6/6 as shipped

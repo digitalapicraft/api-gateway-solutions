@@ -2,8 +2,10 @@
 #
 # This is the importable artifact: an OpenAPI 3.0.3 document carrying
 # x-helix-gateway.plugins. Import it (OpenAPI import, or paste the agent prompt
-# into Agent Mode), bind your upstream, set JWT_SIGNING_SECRET on the
-# environment, then deploy the revision.
+# into Agent Mode), bind your upstream, replace <YOUR_JWT_SIGNING_SECRET> with a
+# real secret value (see the SIGNING SECRET note below), then deploy the revision.
+#
+# VERIFIED 2026-08-18 against a live gateway: verify.sh passes 6/6 as written.
 #
 # WHAT THIS DOES
 #   POST /oauth/token  — the gateway verifies the app's client_id/client_secret
@@ -25,16 +27,24 @@
 #
 # EXTERNAL ISSUER? Do not use this file as-is. If Keycloak / Auth0 / Entra ID /
 # Okta issues the tokens, the gateway is a verifier only: drop the /oauth/token
-# route and use the jwt-auth plugin pointed at the issuer's public key or JWKS
-# instead of helix-auth generate. helix-auth generate is for when the GATEWAY is
-# the issuer. See architecture.md § Who issues the token.
+# route and keep helix-auth in validate mode with validate_auth_type jwt-auth,
+# pointed at the issuer's key material. NOTE (verified 2026-08-18): jwt-auth is
+# NOT a standalone plugin on this build — it is only a value of helix-auth's
+# validate_auth_type. helix-auth generate is for when the GATEWAY is the issuer.
+# See architecture.md § Who issues the token.
 #
 # UPSTREAM is bound on the service at import/bind time, NOT in the OpenAPI
 # paths. Replace <UPSTREAM_URL> wherever your control plane asks for it.
 #
-# SECRETS NEVER APPEAR IN A SPEC. signing_secret is an <ENV:...> reference; the
-# app's client_id/client_secret are provisioned on the credential by the control
-# plane and are never written here.
+# THE SIGNING SECRET IS A LITERAL — replace it, and never ship the placeholder.
+# VERIFIED 2026-08-18: this build does NOT resolve <ENV:...> or ${...} syntax.
+# Whatever string sits in signing_secret is used verbatim as the HMAC key. So
+# <YOUR_JWT_SIGNING_SECRET> is a fill-in-the-blank, not an environment-variable
+# reference — replace it with a real, secret, high-entropy value before deploy.
+# If you ship the placeholder literally, your signing key is a public constant
+# and anyone can forge tokens. The app's client_id/client_secret are still
+# provisioned on the credential by the control plane and never written here.
+# Keep the real spec (with the secret filled in) out of version control.
 
 openapi: 3.0.3
 
@@ -73,8 +83,9 @@ paths:
           # key (client_id) and secret (client_secret) and signs a JWT with
           # signing_secret.
           #
-          # Use helix-auth generate — NOT jwt-auth. jwt-auth is for validating
-          # tokens an EXTERNAL issuer signed; here the gateway is the issuer.
+          # Use helix-auth generate. (validate_auth_type jwt-auth is for
+          # validating tokens an EXTERNAL issuer signed; here the gateway is the
+          # issuer. jwt-auth is a validate_auth_type value, not a separate plugin.)
           #
           # This is also the only mode that checks the app's secret. key-auth
           # validate resolves on the credential key alone, which is why a static
@@ -82,7 +93,7 @@ paths:
           helix-auth:
             mode: generate
             token_ttl: 900                          # 15 minutes — see README § Choosing a token lifetime
-            signing_secret: "<ENV:JWT_SIGNING_SECRET>"
+            signing_secret: "<YOUR_JWT_SIGNING_SECRET>"
 
   /orders:
     get:
@@ -103,7 +114,7 @@ paths:
           helix-auth:
             mode: validate
             validate_auth_type: jwt-auth
-            signing_secret: "<ENV:JWT_SIGNING_SECRET>"
+            signing_secret: "<YOUR_JWT_SIGNING_SECRET>"
 
     post:
       summary: Create an order
@@ -134,7 +145,7 @@ paths:
           helix-auth:
             mode: validate
             validate_auth_type: jwt-auth
-            signing_secret: "<ENV:JWT_SIGNING_SECRET>"
+            signing_secret: "<YOUR_JWT_SIGNING_SECRET>"
 
   /orders/{orderId}:
     get:
@@ -151,7 +162,7 @@ paths:
           helix-auth:
             mode: validate
             validate_auth_type: jwt-auth
-            signing_secret: "<ENV:JWT_SIGNING_SECRET>"
+            signing_secret: "<YOUR_JWT_SIGNING_SECRET>"
 
 # API-WIDE POLICY.
 #

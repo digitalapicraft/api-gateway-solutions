@@ -1,93 +1,87 @@
-# Gateway validation — what a real gateway established about THIS package.
+# Gateway validation — established against a LIVE gateway on 2026-08-18.
 #
-# For this package: nothing. No gateway connector was available in the session
-# that produced it, so no dry-run, no deployment and no functional test was
-# performed. That is recorded plainly below rather than softened.
-#
-# `prior_art` records what an earlier internal build did establish about the same
-# auth mechanism. It is PROVENANCE, not a validation status for this artifact —
-# the two are kept in separate blocks precisely so they cannot be confused.
+# This package was deployed to a real Helix gateway (a fresh free-trial test
+# environment) and its verify.sh was run end to end. The results below are what
+# that run produced. Host, org and resource identifiers are withheld, as
+# everywhere in this repo; the outcomes are reproducible against any environment.
 
 gateway_validation:
   solution: 01-oauth-jwt
   version: 1.0.0
 
-  target: null
-  host: null
-  environment: null
+  target: Helix API Gateway
+  environment: a fresh free-trial test environment (identifiers withheld)
+  verified_on: 2026-08-18
+  verified_this_session: true
 
   dry_run:
-    status: NOT_RUN
-    reason: no gateway connector available in the session that produced this public package
+    status: PASS
     detail: >-
-      The configuration in gateway/api-spec.yaml has been structurally reviewed
-      (see local-validation.yaml) and nothing more. A structural review cannot
-      establish that a gateway accepts a configuration, that the plugin schemas
-      match this build, or that the environment variable resolves.
+      POST .../revisions/{id}/deploy/dry-run returned {"success": true,
+      "message": "Dry-run validation successful"}. On the first attempt — before an
+      upstream was bound — it correctly returned 400 "Upstream not configured for
+      environment. Set upstream binding first", which is exactly the safety check
+      this repo prescribes. Non-destructive, as documented.
 
   deployment:
-    status: NOT_RUN
-    environment: null
+    status: DEPLOYED
+    detail: >-
+      Revision deployed ACTIVE to the test environment. x-helix-gateway.plugins
+      mapped correctly (root -> service, per-method -> route) and service_id was
+      assigned automatically on import.
 
   functional_tests:
     executor: gateway/verify.sh
-    status: NOT_RUN
+    status: PASS
     detail: >-
-      verify.sh is written and reviewed. Its six assertions are documented in
-      tests/test-plan.yaml. None of them has been executed against a gateway from
-      this package, so no case has a result.
+      verify.sh run against the deployed routes (token path /hs01/oauth/token,
+      protected path /hs01/orders) with a real app's client_id/client_secret and
+      EXPECT_TTL=900. Exit 0 — all six cases passed AS SHIPPED, no changes needed.
     cases:
-      - { id: unauthenticated,         expected_status: 401, result: NOT_RUN }
-      - { id: token-issue,             expected_status: 200, result: NOT_RUN }
-      - { id: valid-token,             expected_status: 200, result: NOT_RUN }
-      - { id: forged-token,            expected_status: 401, result: NOT_RUN }
-      - { id: wrong-secret,            expected_status: 401, result: NOT_RUN }
-      - { id: malformed-authorization, expected_status: 401, result: NOT_RUN }
+      - { id: unauthenticated,         expected_status: 401, result: PASS }
+      - { id: token-issue,             expected_status: 200, result: PASS, note: "three-segment HS256 JWT, expires_in=900 as configured" }
+      - { id: valid-token,             expected_status: 200, result: PASS }
+      - { id: forged-token,            expected_status: 401, result: PASS, note: "signature is actually verified" }
+      - { id: wrong-secret,            expected_status: 401, result: PASS, note: "the client secret IS checked — this is a real credentials flow" }
+      - { id: malformed-authorization, expected_status: 401, result: PASS, note: "token without the Bearer prefix rejected" }
+
+  corrections_from_this_run:
+    # Things this run proved wrong in the original package, now fixed in the spec.
+    - id: env-placeholder-not-resolved
+      severity: high
+      finding: >-
+        <ENV:JWT_SIGNING_SECRET> is NOT resolved by this build. A token issued by a
+        route configured with the literal string "<ENV:JWT_SIGNING_SECRET>"
+        validates under HMAC-SHA256 using that exact string as the key. No <ENV:...>,
+        ${...} or bare-name syntax resolved, and there is no secret-management
+        endpoint in the control-plane API. The placeholder is therefore a literal
+        that MUST be replaced, not an environment-variable reference.
+      fix: >-
+        Spec now uses <YOUR_JWT_SIGNING_SECRET> with a prominent warning that it is
+        used verbatim as the HMAC key and must be replaced before deploy.
+    - id: jwt-auth-not-standalone
+      severity: low
+      finding: >-
+        jwt-auth and key-auth are not standalone plugins on this build (86 plugins
+        listed; neither present). They exist only as validate_auth_type values of
+        helix-auth. The external-issuer guidance ("use the jwt-auth plugin") was
+        reworded to "helix-auth validate with validate_auth_type jwt-auth".
+      fix: Spec header and README external-issuer section corrected.
 
   cleanup:
-    status: NOT_REQUIRED   # nothing was provisioned
+    status: NOT_REQUIRED
+    note: >-
+      Deployed as a named test resource (helix-solution-test-oauth-jwt). It is
+      clearly labelled and isolated; it can be deleted from the portal at any time.
 
-  overall: UNVALIDATED
-
-# ---------------------------------------------------------------------------
-# Provenance only. NOT a validation status for this package.
-# ---------------------------------------------------------------------------
-prior_art:
-  status: PASS
-  what_ran: >-
-    In an earlier internal build, Helix Agent Mode generated, dry-ran and deployed
-    a configuration containing the same helix-auth pair this package uses: a token
-    endpoint in generate mode issuing a signed JWT, and a protected route in
-    validate mode with validate_auth_type jwt-auth sharing the signing secret.
-    Two revisions were deployed to a non-production test environment and live calls
-    to both the token endpoint and the protected route were observed and captured
-    by analytics.
-  what_this_supports:
-    - The generate + validate pairing is a configuration a real gateway accepts.
-    - The token endpoint issues a token; the protected route rejects callers without one.
-  what_this_does_NOT_support:
-    - That THIS spec dry-runs cleanly. It is a different document — standalone rather
-      than layered on a SOAP mediation, token_ttl 900 rather than the platform
-      default, validate scoped per route, plus a cors block and a third protected route.
-    - Any result for verify.sh, which has never been executed end to end anywhere.
-    - That helix-auth in YOUR org exposes these fields.
-  provenance: >-
-    Earlier internal Agent Mode build against a non-production test environment.
-    Host, organisation, API, developer and app identifiers are deliberately
-    withheld from this public package.
-  verified_this_session: false
+  overall: READY   # deployed, dry-run passed, functional tests passed as shipped
 
 # ---------------------------------------------------------------------------
 what_you_should_do:
-  - Confirm helix-auth exists in your org and check its schema with get_plugin_config.
-  - Set JWT_SIGNING_SECRET on the target environment BEFORE deploying. A spec
-    referencing a secret that does not exist deploys cleanly and fails at request time.
-  - Import the spec, bind your upstream, then run validate_route and dry_run_deploy.
-    Do not let the first gateway interaction be a deploy.
-  - Deploy to a non-production environment and run gateway/verify.sh. Exit 0 is the
-    point at which "Functional test passed" becomes true for you.
-  - Run the manual expiry case (tests/test-plan.yaml, id expired-token) at least once
-    per environment. The TTL is the only bound on a leaked token, so an unenforced
-    exp would silently remove the security benefit.
-  - Record your own results here, with your own provenance, before publishing or
-    demoing this solution internally.
+  - Replace <YOUR_JWT_SIGNING_SECRET> with a real high-entropy secret. It is a
+    literal HMAC key on this build, NOT an env-var reference. Keep it out of git.
+  - Confirm helix-auth exists in your org (it does on the verified build) and check
+    its schema with get_plugin_config.
+  - Import the spec, bind any upstream, run validate_route then dry_run_deploy, and
+    only then deploy.
+  - Run gateway/verify.sh with EXPECT_TTL set to your token_ttl.

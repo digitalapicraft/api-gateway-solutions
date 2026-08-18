@@ -325,27 +325,35 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 
 ## Validation status
 
+**✅ Verified against a live gateway on 2026-08-18 — the central claims confirmed.**
+
 | Stage | Status | Provenance |
 |---|---|---|
-| Configuration generated | **YES** | [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| Local validation | **PASS** | Structural review, plus `verify.sh` syntax-checked and its guard paths executed. [`validation/local-validation.yaml`](validation/local-validation.yaml) |
-| Gateway dry-run | **NOT RUN for this package** | — |
-| Gateway deployed | **NOT RUN for this package** | — |
-| Functional tests | **NOT RUN for this package** | `verify.sh` written and reviewed, not executed against a gateway |
-| Analytics verified | **NOT RUN for this package** | See below — this is the one that matters, and it is manual by nature |
+| Configuration generated | **YES** | [`gateway/api-spec.yaml`](gateway/api-spec.yaml) — no analytics plugin, by design |
+| Local validation | **PASS** | [`validation/local-validation.yaml`](validation/local-validation.yaml) |
+| Gateway dry-run | **PASS** | Live gateway, 2026-08-18. |
+| Gateway deployed | **DEPLOYED** | Four routes ACTIVE, including the templated `/orders/{orderId}`. |
+| Functional tests | **PASS** | `gateway/verify.sh` seeded a labelled pattern; identity and correlation id confirmed. |
+| Analytics verified | **VERIFIED** | Queried the control-plane analytics API — see below. |
 
-**On the prior art**, and this is worth being precise about: an earlier internal build
-did confirm that the platform's global analytics captures real traffic and can be
-queried per route — a two-request window was retrieved and matched what had been sent.
-That establishes *capture works*. It does **not** establish anything about this
-package's central claims: that identity resolution produces per-app attribution at
-scale, or that templated paths aggregate as described. Neither was tested with enough
-traffic or enough apps to demonstrate it.
+Overall: **READY.** Confirmed live, by querying the analytics API:
 
-Overall: **UNVALIDATED**. Run [`gateway/verify.sh`](gateway/verify.sh) against your own
-environment, then do the manual analytics checks it prints — particularly the path
-templating one. Full record:
-[`validation/gateway-validation.yaml`](validation/gateway-validation.yaml).
+- **Analytics is global** — with no plugin in the spec, every call was captured.
+- **Per-app attribution works** — grouping by `app_name` / `developer` /
+  `product_name` returned the calling app by name, and counts matched the seed.
+- **The unidentified bucket works** — forged-token 401s came back with `app_name`
+  null, exactly as the package predicts.
+- **Path templating works at `route_id`** — five distinct `/orders/{orderId}`
+  values aggregate to **one** row by `route_id`, versus five by `api_path`. Group
+  route-level charts by `route_id`.
+- **Latency separation works** — the slow report route showed ~1000ms vs ~0ms for
+  the fast reads, not one blended average.
+
+**One correction the run produced:** `X-Request-Id` is **not** an analytics
+dimension. Correlating a single request is a join in *your* logs via the forwarded
+header, not an analytics query. `charts.md` has been updated. Full record:
+[`validation/gateway-validation.yaml`](validation/gateway-validation.yaml) and
+[`../../VERIFICATION.md`](../../VERIFICATION.md).
 
 ## Related solutions
 

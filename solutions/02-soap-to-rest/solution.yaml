@@ -29,74 +29,53 @@ business_need:
 
 implementation:
   gateway_capabilities:
-    - xml-to-json (BIDIRECTIONAL)           # JSON->XML on the request AND XML->JSON on the response. One plugin.
-    - proxy-rewrite                         # retarget /locations -> /GetData.ashx; set Content-Type text/xml
+    - xml-to-json (transform_request + transform_response)  # request needs transform_request:true (default false); response is content-negotiated on Accept: application/json
+    - proxy-rewrite                         # retarget /locations -> /GetData.ashx (path ONLY — no Content-Type override)
     - helix-auth (mode generate)            # POST /oauth/token — see solution 01
     - helix-auth (mode validate, jwt-auth)  # POST /locations — rejects in the access phase, BEFORE any transform
     - request-id                            # correlate the client's JSON with the handler's XML across the hop
     - cors                                  # browser access; authorization must be in allow_headers
   custom_code_required: false
   notes: >-
-    xml-to-json is bidirectional. Adding json-to-xml alongside it converts the
-    body twice and the handler receives nonsense — a 500 that looks like a backend
-    fault while the config looks more thorough, not less. This is the single most
-    common way the solution is built wrong, by people and by models.
-    xml-to-json is left as a DEFAULT (empty) block because its schema varies by
-    build. That takes plugin defaults, which suit a simple element-to-object
-    mapping and may not suit namespaced or attribute-heavy envelopes. Confirm with
-    get_plugin_config in the target org.
-    Authentication runs before the transform, deliberately: there is no point
-    converting a body that is about to be discarded.
-    proxy-rewrite and xml-to-json must agree — the former declares the body is
-    text/xml, the latter is what makes that true.
+    VERIFIED 2026-08-18 — three defects in the original package, now fixed:
+    (1) transform_request DEFAULTS TO false, so an empty xml-to-json block converts
+    the response only; it must be set true. (2) The response transform is
+    content-negotiated — it fires only when the client sends Accept: application/json.
+    (3) proxy-rewrite (prio 1008) setting Content-Type: text/xml runs BEFORE
+    xml-to-json (997) and hides the JSON body from the request transform, so
+    proxy-rewrite must retarget the path ONLY. json-to-xml is NOT the request-side
+    counterpart — it is a separate plugin converting a JSON upstream response to XML
+    for XML-wanting clients. Confirm fields with get_plugin_config. Authentication
+    runs before the transform, deliberately: no point converting a body about to be
+    discarded.
 
 validation:
-  # No gateway connector was available in the session that produced this public
-  # package, so no dry-run, deployment or functional test was performed FOR THIS
-  # ARTIFACT. See prior_art for what an earlier internal build established, and
-  # validation/gateway-validation.yaml for the full record.
+  # VERIFIED against a live gateway and a real SOAP backend on 2026-08-18, AFTER
+  # fixing three defects (see notes and validation/gateway-validation.yaml). The
+  # results below are for the corrected config now in gateway/api-spec.yaml.
   local:
-    status: PASS_WITH_WARNINGS
-    basis: >-
-      structural review of api-spec.yaml and verify.sh — syntax, plugin scoping and
-      phase ordering, secret handling, transform direction, test-to-implementation
-      mapping. Warnings because xml-to-json is a default block whose real schema is
-      build-dependent.
+    status: PASS
+    basis: structural review of the corrected api-spec.yaml and verify.sh.
     verified_this_session: true
   gateway_dry_run:
-    status: NOT_RUN
-    verified_this_session: false
-    reason: no gateway connector available in the session that produced this package
+    status: PASS
+    verified_this_session: true
+    detail: dry-run passed for the corrected revision.
   deployment:
-    status: NOT_RUN
-    environment: null
+    status: DEPLOYED
+    environment: a fresh free-trial test environment (identifiers withheld)
+    detail: >-
+      deployed ACTIVE against a live SOAP backend; the corrected transform was
+      applied via clone -> edit -> undeploy -> deploy, exercising the 409
+      ACTIVE-revision behaviour for real.
   functional_test:
-    status: NOT_RUN
-    verified_this_session: false
+    status: PASS
+    verified_this_session: true
     executor: gateway/verify.sh
-    reason: written and reviewed, not executed against a gateway from this package
-
-prior_art:
-  # Recorded so the reader knows which parts have run somewhere and which have not.
-  # This is provenance, NOT a validation status for this package.
-  status: PASS
-  scope: >-
-    In an earlier internal build, Helix Agent Mode generated, dry-ran and deployed
-    an equivalent configuration against a real SOAP backend in a non-production
-    test environment: a bidirectional xml-to-json plus proxy-rewrite exposing a
-    SOAP handler as a JSON endpoint (revision 1), then a helix-auth generate token
-    endpoint plus validate on the mediated route (revision 2). Live calls to both
-    routes were observed.
-  not_established: >-
-    This repackaged spec — placeholder-parameterised upstream and handler path, a
-    typed request body schema, token_ttl 900, an added cors block, and validate
-    scoped per route — has not itself been dry-run or deployed. verify.sh has never
-    been executed end to end, so in particular the case-4 assertion (response body
-    contains no XML markup) has never been confirmed anywhere.
-  provenance: >-
-    Earlier internal Agent Mode build against a non-production test environment.
-    Host, organisation, API, developer and app identifiers deliberately withheld
-    from this public package.
+    detail: >-
+      exit 0, 5/5 — including case 4 (response body contains no XML markup), which
+      proves the full JSON->XML->backend->XML->JSON round-trip and had never been
+      confirmed before this run.
 
 artifacts:
   documentation: [README.md, architecture.md, business-need.md]
@@ -115,7 +94,7 @@ assumptions:
   - The request body's field names match the element names the handler reads.
   - Authentication is wanted. Remove the helix-auth blocks if this API is internal-only.
   - token_ttl 900 is a deliberate choice, not a platform default. See solution 01.
-  - JWT_SIGNING_SECRET exists on the target environment before the revision is deployed.
+  - The signing secret is a LITERAL value filled into the spec (this build does not resolve <ENV:...>). Replace <YOUR_JWT_SIGNING_SECRET> and keep it out of git.
   - The upstream is bound on the service at import/bind time, not in the OpenAPI paths.
 
 limitations:
@@ -145,4 +124,4 @@ limitations:
   - xml-to-json's schema varies by build. Confirm with get_plugin_config rather than
     trusting the field names in this spec.
 
-status: UNVALIDATED   # generated + locally reviewed; the pattern was proven in a prior internal build, this artifact not gateway-confirmed
+status: READY   # verified against a live SOAP backend 2026-08-18 AFTER 3 fixes (now applied); verify.sh 5/5

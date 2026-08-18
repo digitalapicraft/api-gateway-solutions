@@ -122,11 +122,13 @@ turn, not a hypothetical:
 | *"Use `helix-auth`, not the raw `key-auth` plugin."* | `key-auth` authenticates the caller but resolves no product subscription, so quota enforcement downstream returns 403 on every request. |
 | *"Don't key any rate limit on `consumer_name`. Per-caller metering here is the product quota, counted per app."* | You get a `limit-count` that looks right, meters the wrong thing, and silently coexists with the product quota. |
 | *"Don't put Redis settings in the `api-product-enforcer` block."* | The plugin's schema doesn't accept them. Either validation fails, or it passes and each gateway node counts separately — so an N-node cluster serves N× the quota you sold. |
-| *"Use `helix-auth` in generate mode, not `jwt-auth`, since the gateway is the issuer."* | `jwt-auth` is for tokens an *external* IdP signed. Pointed at your own tokens it's the wrong half of the flow. |
+| *"Use `helix-auth` in generate mode for issuing, and `validate` with `validate_auth_type: jwt-auth` for verifying."* | `key-auth`/`jwt-auth` are **not** standalone plugins here (verified) — only `validate_auth_type` values of `helix-auth`. `generate` is for tokens the gateway issues; external-IdP tokens are `jwt-auth` mode. |
+| *"The signing secret is a literal — put a real value, not an `<ENV:...>` reference."* | Verified: this build does not resolve `<ENV:...>`/`${...}`. The string is used verbatim as the HMAC key, so a placeholder shipped as-is becomes a public signing key. |
+| *"For `xml-to-json`, set `transform_request: true` explicitly and have clients send `Accept: application/json`."* | Verified: `transform_request` defaults to false (an empty block converts the response only), and the response transform is content-negotiated. Don't set `Content-Type` in `proxy-rewrite` ahead of it. |
 | *"Use `filter_func` for conditional matching, not `vars`."* | `vars` is typed incompatibly between the control plane and the gateway and fails at deploy. |
 | *"Only schema fields plus `_meta` are legal in a plugin block."* | Models like to add explanatory keys — `description`, `note`, `reason`. They are rejected. Explanation belongs in a YAML comment. |
 | *"Check `get_plugin_config` for every plugin before writing config."* | Fields invented from another gateway's docs. This one line prevents most schema failures. |
-| *"Confirm the route has a `service_id`."* | `api-product-enforcer` returns 403 with no service id, regardless of subscription, and nothing in the plugin config hints at it. |
+| *"Confirm the route has a `service_id`."* | `api-product-enforcer` returns 403 with no service id, regardless of subscription, and nothing in the plugin config hints at it. (On this build, importing a spec assigns `service_id` automatically.) |
 
 Copy the ones relevant to what you're building. The per-solution prompts already
 carry theirs.
@@ -166,9 +168,11 @@ thousand distinct URLs). Solution 04 is about exactly this.
 
 Be clear-eyed about the boundary, because a prompt that assumes otherwise stalls:
 
-- **It doesn't set environment secrets for you.** `<ENV:JWT_SIGNING_SECRET>` has
-  to exist on the environment before the token flow works. The agent can tell
-  you it's missing; you set it.
+- **The signing secret is a literal in the spec, and you own keeping it safe.**
+  There's no env-var indirection on this build (verified) — the string you put in
+  `signing_secret` *is* the HMAC key. The agent will happily write whatever you
+  tell it; make sure that's a real, high-entropy value and not a placeholder, and
+  don't commit the filled-in spec.
 - **It doesn't bind upstreams that don't exist**, and it can't reach a backend
   your gateway can't reach.
 - **It doesn't publish to the Marketplace.** That's a portal action.

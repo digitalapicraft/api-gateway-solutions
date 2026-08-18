@@ -16,6 +16,13 @@
 # transform ran. Setting content-type: application/json on unconverted XML is a
 # real and easy misconfiguration, and it passes a naive check.
 #
+# EVERY request below sends `accept: application/json`. This is NOT optional
+# decoration: xml-to-json's response transformation is CONTENT-NEGOTIATED and does
+# nothing at all unless the client advertises that it wants JSON. Verified against
+# a live gateway — without the header the upstream XML passes through untouched
+# with content-type text/xml. If your clients do not send Accept, they will not get
+# JSON, and no amount of gateway configuration changes that.
+#
 # Usage:
 #   GATEWAY=https://<YOUR_GATEWAY_HOST> \
 #   CLIENT_ID=<CLIENT_ID> \
@@ -34,7 +41,7 @@ CLIENT_ID="${CLIENT_ID:?set CLIENT_ID to the app client id, i.e. the credential 
 CLIENT_SECRET="${CLIENT_SECRET:?set CLIENT_SECRET to the app client secret}"
 TOKEN_PATH="${TOKEN_PATH:-/oauth/token}"
 API_PATH="${API_PATH:-/locations}"
-REQ_BODY="${REQ_BODY:-{\}}"
+REQ_BODY="${REQ_BODY:-\{\}}"
 
 TOKEN_URL="${GATEWAY%/}${TOKEN_PATH}"
 API_URL="${GATEWAY%/}${API_PATH}"
@@ -52,7 +59,7 @@ echo
 
 # --- 1: no token -------------------------------------------------------------
 status="$(curl -s -o "$BODY_FILE" -w '%{http_code}' -X POST "$API_URL" \
-  -H 'content-type: application/json' -d "$REQ_BODY")"
+  -H 'content-type: application/json' -H 'accept: application/json' -d "$REQ_BODY")"
 [[ "$status" == "000" ]] && fail "could not reach $API_URL at all — curl got no HTTP
      response. Check GATEWAY, DNS and network reachability before anything else;
      every assertion below depends on the gateway answering."
@@ -77,7 +84,7 @@ ACCESS_TOKEN="$(tr -d '\n' < "$BODY_FILE" | sed -n 's/.*"access_token"[[:space:]
 echo
 status="$(curl -s -o "$BODY_FILE" -D "$HDR_FILE" -w '%{http_code}' -X POST "$API_URL" \
   -H "authorization: Bearer ${ACCESS_TOKEN}" \
-  -H 'content-type: application/json' -d "$REQ_BODY")"
+  -H 'content-type: application/json' -H 'accept: application/json' -d "$REQ_BODY")"
 case "$status" in
   200) pass "valid token → 200" ;;
   401) fail "valid token → 401. The signing secret on ${TOKEN_PATH} and ${API_PATH} almost certainly differ." ;;
@@ -92,7 +99,11 @@ if grep -qi '^content-type:.*application/json' "$HDR_FILE"; then
   pass "response content-type is application/json"
 else
   ct="$(grep -i '^content-type:' "$HDR_FILE" | tr -d '\r\n')"
-  fail "response is not JSON (${ct:-no content-type}). Is xml-to-json applied on ${API_PATH}, and did the upstream actually return XML?"
+  fail "response is not JSON (${ct:-no content-type}). Check, in order:
+     1. Is this request sending 'accept: application/json'? The transform is
+        content-negotiated and is a no-op without it. This is the usual cause.
+     2. Is xml-to-json applied on ${API_PATH}?
+     3. Did the upstream actually return XML (one of its content_types)?"
 fi
 
 # --- 4: the body is REALLY converted, not just relabelled --------------------
@@ -123,7 +134,7 @@ fi
 echo
 status="$(curl -s -o "$BODY_FILE" -w '%{http_code}' -X POST "$API_URL" \
   -H 'authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJmb3JnZWQifQ.not-a-valid-signature' \
-  -H 'content-type: application/json' -d "$REQ_BODY")"
+  -H 'content-type: application/json' -H 'accept: application/json' -d "$REQ_BODY")"
 [[ "$status" == "401" ]] \
   && pass "forged token → 401" \
   || fail "forged token → ${status} (expected 401). A token this gateway did not sign MUST be rejected before the SOAP hop."

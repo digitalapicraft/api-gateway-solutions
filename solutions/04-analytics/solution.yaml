@@ -65,9 +65,8 @@ implementation:
     authoritative.
 
 validation:
-  # No gateway connector was available in the session that produced this public
-  # package, so no dry-run, deployment or functional test was performed FOR THIS
-  # ARTIFACT. Analytics verification is manual BY NATURE — see analytics_verification.
+  # VERIFIED against a live gateway on 2026-08-18, including analytics queried via the
+  # control-plane API. See validation/gateway-validation.yaml for the full record.
   local:
     status: PASS
     basis: >-
@@ -77,43 +76,41 @@ validation:
       actually executed.
     verified_this_session: true
   gateway_dry_run:
-    status: NOT_RUN
-    verified_this_session: false
-    reason: no gateway connector available in the session that produced this package
+    status: PASS
+    verified_this_session: true
+    detail: dry-run passed; no analytics plugin in the spec, deployed cleanly.
   deployment:
-    status: NOT_RUN
-    environment: null
+    status: DEPLOYED
+    environment: a fresh free-trial test environment (identifiers withheld)
+    detail: four routes ACTIVE incl. templated /orders/{orderId}.
   functional_test:
-    status: NOT_RUN
-    verified_this_session: false
+    status: PASS
+    verified_this_session: true
     executor: gateway/verify.sh
-    reason: written and reviewed, not executed against a gateway from this package
+    detail: verify.sh seeded labelled traffic; analytics attribution + route_id templating confirmed via the analytics API.
 
 analytics_verification:
-  # Recorded separately because it is NOT something a script can establish, in this
-  # package or any other. Conflating it with functional_test would misrepresent what
-  # an exit code means.
-  status: NOT_RUN
-  method: manual — query the portal or the agent after real traffic exists
-  why_manual: >-
-    Analytics is captured asynchronously in the log phase and read from the portal or
-    via the agent. No shell script can assert that a chart is correct. verify.sh
-    therefore verifies the request PATH (identity enforced, correlation id present) and
-    seeds a deliberately labelled traffic pattern with known counts, then prints the
-    exact queries to run. Exit 0 means the path is correctly shaped and a pattern is
-    seeded — it does NOT mean analytics is verified, and the script says so.
-  the_three_manual_checks:
-    - Analytics reflects the seeded pattern, attributed to the calling app.
-    - The templated route appears as /orders/{orderId} and NOT as literal ids. This is
-      the most important check in the package and the only way to discover the problem,
-      which is unrecoverable for data already captured.
-    - The same X-Request-Id appears in your BACKEND's logs for that call, not just at
-      the gateway.
+  # VERIFIED 2026-08-18 by querying the control-plane analytics API after verify.sh
+  # seeded a labelled traffic pattern.
+  status: VERIFIED
+  method: POST /api/orgs/{orgId}/analytics/metrics/requests-count and /response-time, grouped by dimensions.
+  results:
+    - Per-app attribution CONFIRMED — grouping by app_name/developer/product_name returned the calling app by name; counts matched the seed.
+    - Unidentified bucket CONFIRMED — forged-token 401s came back with app_name null.
+    - Path templating CONFIRMED — five distinct /orders/{orderId} values = ONE row by route_id, FIVE rows by api_path.
+    - Latency separation CONFIRMED — the slow report route showed ~1000ms vs ~0ms for fast reads.
+  correction: >-
+    X-Request-Id is NOT an analytics dimension. Correlating a single request is a
+    join in your own logs via the forwarded header, not an analytics query. The
+    dimensions are env_name, app_id, app_name, product_name, api_name, route_id,
+    route_name, api_path, request_method, response_status_code, upstream_path,
+    developer. charts.md updated accordingly.
 
 prior_art:
-  # Recorded so the reader knows exactly which part has run somewhere. Deliberately
-  # narrow — it would be easy to overclaim here and it is worth not doing so.
-  status: PARTIAL
+  # SUPERSEDED by the 2026-08-18 live verification above, which established
+  # per-app attribution and path templating that this earlier note called untested.
+  # Kept for history only.
+  status: SUPERSEDED
   what_ran: >-
     In an earlier internal build, the platform's global analytics was queried after
     deploying an API and making live calls. A request count for a one-hour window,
@@ -190,4 +187,4 @@ limitations:
     routes. Per-route, or do not bother.
   - A chart nobody acts on is an ornament, and no configuration fixes that.
 
-status: UNVALIDATED   # generated + locally reviewed; prior art confirms capture works at trivial volume only, and the package's central claims (per-app attribution at scale, path templating) are untested
+status: READY   # verified against a live gateway 2026-08-18; per-app attribution + route_id templating confirmed

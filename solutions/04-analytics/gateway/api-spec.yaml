@@ -10,6 +10,10 @@
 #   If you find yourself adding one — or an agent proposes one — that is the thing
 #   to correct. It is not how observability is turned on here.
 #
+#   VERIFIED 2026-08-18 against a live gateway: with NO analytics plugin in this
+#   spec, every call was captured and attributable per app, developer and product.
+#   Path templating confirmed — see the /orders/{orderId} note below.
+#
 # SO WHAT IS THIS FILE FOR?
 #
 #   Analytics is always capturing. Whether it can answer a USEFUL question depends
@@ -44,8 +48,11 @@
 #     to chart, but the enforcement belongs to solution 03 — compose them and the
 #     quota charts in charts.md start working.
 #
-# SECRETS NEVER APPEAR IN A SPEC. signing_secret is an <ENV:...> reference; app
-# credentials are provisioned on the credential by the control plane.
+# THE SIGNING SECRET IS A LITERAL — replace <YOUR_JWT_SIGNING_SECRET> with a real
+# secret before deploy. VERIFIED 2026-08-18: this build does not resolve <ENV:...>
+# syntax; the string is used verbatim as the HMAC key. See solution 01. App
+# credentials are provisioned on the credential by the control plane. Keep the
+# filled-in spec out of version control.
 
 openapi: 3.0.3
 
@@ -85,7 +92,7 @@ paths:
           helix-auth:
             mode: generate
             token_ttl: 900
-            signing_secret: "<ENV:JWT_SIGNING_SECRET>"
+            signing_secret: "<YOUR_JWT_SIGNING_SECRET>"
 
   /orders:
     get:
@@ -107,7 +114,7 @@ paths:
           helix-auth:
             mode: validate
             validate_auth_type: jwt-auth
-            signing_secret: "<ENV:JWT_SIGNING_SECRET>"
+            signing_secret: "<YOUR_JWT_SIGNING_SECRET>"
 
     post:
       summary: Create an order
@@ -137,7 +144,7 @@ paths:
           helix-auth:
             mode: validate
             validate_auth_type: jwt-auth
-            signing_secret: "<ENV:JWT_SIGNING_SECRET>"
+            signing_secret: "<YOUR_JWT_SIGNING_SECRET>"
 
   # TEMPLATED PATH — this is the analytics-relevant modelling decision.
   #
@@ -150,7 +157,9 @@ paths:
   # cardinality grows with your order volume forever.
   #
   # Nothing warns you about this. The API works either way; only the analytics is
-  # ruined.
+  # ruined. VERIFIED 2026-08-18: five requests to five distinct order ids aggregate
+  # to ONE row when grouped by the route_id analytics dimension, but FIVE rows when
+  # grouped by api_path. Group your route-level charts by route_id, not api_path.
   /orders/{orderId}:
     get:
       summary: Get an order
@@ -165,7 +174,7 @@ paths:
           helix-auth:
             mode: validate
             validate_auth_type: jwt-auth
-            signing_secret: "<ENV:JWT_SIGNING_SECRET>"
+            signing_secret: "<YOUR_JWT_SIGNING_SECRET>"
 
   /orders/report:
     post:
@@ -196,7 +205,7 @@ paths:
           helix-auth:
             mode: validate
             validate_auth_type: jwt-auth
-            signing_secret: "<ENV:JWT_SIGNING_SECRET>"
+            signing_secret: "<YOUR_JWT_SIGNING_SECRET>"
 
 # API-WIDE POLICY.
 #

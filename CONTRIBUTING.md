@@ -117,10 +117,16 @@ Get these right or the package is confidently misleading:
   Put explanation in YAML comments.
 - **Execution is priority-ordered**, not document-ordered. If your solution
   depends on ordering, say so in a comment and in `architecture.md`.
-- **Prefer the Helix opinion** over the generic equivalent: `helix-auth` over raw
-  `key-auth`; API Products + `api-product-enforcer` over `limit-count` on
-  `consumer_name`; `helix-auth` generate over `jwt-auth` for tokens the gateway
-  itself issues.
+- **Prefer the Helix opinion** over the generic equivalent: `helix-auth` over a
+  bare static key; API Products + `api-product-enforcer` over `limit-count` on
+  `consumer_name`; `helix-auth` `generate` for tokens the gateway issues, and
+  `validate` with `validate_auth_type: jwt-auth` for external-IdP tokens.
+  `key-auth`/`jwt-auth` are `validate_auth_type` values of `helix-auth`, **not**
+  standalone plugins (verified against the live build).
+- **Secrets are literals, not references.** This build does not resolve
+  `<ENV:...>` — a `signing_secret` is used verbatim. Use a `<YOUR_...>`-style
+  placeholder that a contributor must replace, and never commit a real one. Do not
+  imply that `<ENV:...>` resolves.
 - **Analytics is global.** Don't add a `helix-analytics` block to a spec and
   don't tell readers to. See [solution 04](solutions/04-analytics/).
 - **Prefer the simplest native capability.** Don't write custom code where a

@@ -3,12 +3,19 @@
 **Partners send JSON. A twenty-year-old system answers. Neither knows about the
 other.**
 
+> **✅ Verified end to end against a live SOAP backend on 2026-08-18 — but only
+> after three fixes.** The originally-shipped config did **not** work: the
+> `xml-to-json` transform is not "bidirectional by default", and a `Content-Type`
+> override defeated it. This page reflects the corrected, working config. The
+> details are in [VERIFICATION.md](../../VERIFICATION.md); the short version is in
+> *The one thing everybody gets wrong*, below.
+
 | | |
 |---|---|
 | **Setup time** | ~25 minutes |
 | **Difficulty** | 🟡 Intermediate |
-| **Needs** | A SOAP endpoint reachable from the gateway · `JWT_SIGNING_SECRET` on the environment · one developer + app · `xml-to-json` present in your org |
-| **Plugins** | `xml-to-json` (**bidirectional**) · `proxy-rewrite` · `helix-auth` (generate + validate) · `request-id` · `cors` |
+| **Needs** | A SOAP endpoint reachable from the gateway · a real signing-secret value for the spec (literal — see solution 01) · one developer + app · `xml-to-json` present in your org |
+| **Plugins** | `xml-to-json` (`transform_request` + `transform_response`) · `proxy-rewrite` · `helix-auth` (generate + validate) · `request-id` · `cors` |
 | **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
 | **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Infographic](infographic.md) · ✅ [Blog](blog.md) · ✅ [Manifest](solution.yaml) |
 
@@ -73,7 +80,7 @@ Partner                        Gateway                          SOAP system
   │
   ├─► proxy-rewrite                            [rewrite phase]
   │     uri: /locations ──► /GetData.ashx
-  │     Content-Type: text/xml
+  │     (do NOT set Content-Type here — it defeats the transform; see below)
   │              ▼
   │
   ├─► xml-to-json  (request direction)
@@ -100,30 +107,48 @@ one signature check and nothing else — no body conversion, no SOAP call. If yo
 ever find yourself transforming a body you're about to reject, the plugins are on
 the wrong route.
 
-**One plugin covers both conversions.** `xml-to-json` is bidirectional. It is not
-"the XML→JSON one" with a `json-to-xml` counterpart. See the next section, because
-this is the mistake.
+**One plugin covers both conversions — but neither is on the way you'd assume.**
+`xml-to-json` does the response by default and the request only when you enable
+`transform_request`, and even the response fires only on `Accept: application/json`.
+It is *not* "the XML→JSON one" with a `json-to-xml` counterpart. See the next
+section — this is where the shipped config was wrong.
 
 ## The one thing everybody gets wrong
 
-**`xml-to-json` is bidirectional. Do not add `json-to-xml` next to it.**
+**`xml-to-json` does not transform the request by default, and its response
+transform only fires when the client asks for JSON.** This is the part that cost a
+live debugging session to pin down, so here it is in full — all three points
+verified against a real gateway.
 
-The name reads like a one-way street, so the instinct — and the instinct of any
-model you ask about this — is to reach for a second plugin for the request
-direction. What you get is a body converted twice:
+1. **`transform_request` defaults to `false`.** An empty `xml-to-json: {}` block
+   converts the *response* only. Your client's JSON request body sails through to
+   the SOAP handler *as JSON*, and the handler rejects it. You must set
+   `transform_request: true` explicitly.
 
+2. **The response transform is content-negotiated.** It only runs when the client
+   sends `Accept: application/json`. Without that header the upstream XML comes
+   back untouched, as `text/xml`. Your integrators must send the header — tell them.
+
+3. **`proxy-rewrite` must not set `Content-Type`.** It runs at priority 1008,
+   *before* `xml-to-json` at 997. If it rewrites the content type to `text/xml`
+   first, the request body no longer matches the transform's `request_content_types`
+   (default `application/json`) and the request direction silently never fires.
+   Retarget the path in `proxy-rewrite`; let the transform own the content type.
+
+And a myth to retire: **`json-to-xml` is not the request-side counterpart of
+`xml-to-json`.** It is a separate plugin that converts a JSON *upstream response*
+into XML for clients that ask for XML — the opposite problem. You do not add it here.
+
+The corrected block:
+
+```yaml
+proxy-rewrite:
+  uri: /GetData.ashx          # path only — no Content-Type override
+
+xml-to-json:
+  transform_request: true     # DEFAULT IS false — the request is not converted without this
+  transform_response: true    # default true, but fires only on Accept: application/json
 ```
-{"region":"EMEA"}
-   ──► json-to-xml  ──►  <region>EMEA</region>
-   ──► xml-to-json  ──►  {"region":"EMEA"}          ← back where you started
-   ──► the SOAP handler receives JSON and returns a 500
-```
-
-The failure is confusing because the config looks thorough. Both directions are
-"handled". The symptom is a 500 from a handler that works fine when you curl it
-directly, and the natural conclusion is that the SOAP service is broken.
-
-One plugin. Both directions. Nothing else.
 
 ## Build it with the Helix Agent
 
@@ -158,8 +183,9 @@ Now deploy a new revision that adds OAuth 2.0:
   15-minute lifetime
 - POST /locations requires a valid Bearer token, rejected before the transform runs
 
-Both must reference the same JWT_SIGNING_SECRET environment variable. Use
-helix-auth generate and validate — the gateway is the issuer, not an external IdP.
+Both must use the same signing secret — a literal value (this build does not
+resolve <ENV:...>). Use helix-auth generate and validate — the gateway is the
+issuer, not an external IdP.
 ```
 
 Then create the app:
@@ -189,7 +215,8 @@ H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
 #    Ask the agent get_plugin_config, or query the control plane's
 #    plugin-schema endpoint. Do not assume the field names in this spec.
 
-# 2. Set JWT_SIGNING_SECRET on the environment BEFORE deploying.
+# 2. Replace <YOUR_JWT_SIGNING_SECRET> in the spec with a real secret (literal
+#    HMAC key on this build — no <ENV:...> resolution). Same value both routes.
 
 # 3. Import gateway/api-spec.yaml and bind <SOAP_UPSTREAM_URL> to the service.
 
@@ -213,24 +240,24 @@ Source of truth: [`gateway/api-spec.yaml`](gateway/api-spec.yaml). Three blocks 
 helix-auth:
   mode: validate
   validate_auth_type: jwt-auth
-  signing_secret: "<ENV:JWT_SIGNING_SECRET>"
+  signing_secret: "<YOUR_JWT_SIGNING_SECRET>"
 
-# 2. the client called /locations; the handler only answers on /GetData.ashx
+# 2. path only — NO Content-Type override (it runs before the transform and defeats it)
 proxy-rewrite:
   uri: /GetData.ashx
-  headers:
-    set:
-      Content-Type: text/xml
 
-# 3. BOTH directions. One plugin. No json-to-xml.
-xml-to-json: {}
+# 3. request conversion is OFF by default — turn it on; response fires on Accept: application/json
+xml-to-json:
+  transform_request: true
+  transform_response: true
 ```
 
-`xml-to-json` is deliberately an **empty block**. That takes the plugin's
-defaults, which is correct for a straightforward element-to-object mapping. If
-your envelope is namespaced or attribute-heavy you will need fields here — get
-them from `get_plugin_config` in your own org rather than from this file, because
-they vary by build.
+`xml-to-json` needs `transform_request: true` explicitly — the default is
+`false`, so an empty block converts the response only (verified). The response
+side additionally requires the client to send `Accept: application/json`. For
+namespaced or attribute-heavy envelopes there are more fields
+(`property_naming`, `array_item_name`, `content_types`, …) — get them from
+`get_plugin_config` in your own org.
 
 ## What the caller actually sees
 
@@ -305,9 +332,11 @@ Full plan, including the XML-edge cases worth checking by hand:
 
 ## Gotchas
 
-- **`xml-to-json` is bidirectional. Never add `json-to-xml` alongside it.** The
-  body gets converted twice and the handler receives nonsense. See § *The one
-  thing everybody gets wrong*.
+- **`xml-to-json` needs `transform_request: true`, and the response needs
+  `Accept: application/json`.** The defaults do neither the way you'd expect
+  (verified). `json-to-xml` is a *separate* plugin for the opposite job (JSON
+  upstream → XML for XML-wanting clients), not the request-side counterpart. See
+  § *The one thing everybody gets wrong*.
 - **Your handler may require a `SOAPAction` header.** Many classic SOAP 1.1 and
   `.asmx` endpoints return a 500 with an unhelpful envelope without it. Add it in
   `proxy-rewrite.headers.set`. Check what your handler wants rather than assuming
@@ -379,20 +408,28 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 
 ## Validation status
 
+**✅ Verified end to end against a live SOAP backend on 2026-08-18 — after three
+fixes, now applied.** The originally-shipped config failed; the corrected config
+here passes `verify.sh` 5/5, including the case-4 no-XML-markup proof.
+
 | Stage | Status | Provenance |
 |---|---|---|
-| Configuration generated | **YES** | [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| Local validation | **PASS WITH WARNINGS** | Structural review — `xml-to-json` left as a default block. [`validation/local-validation.yaml`](validation/local-validation.yaml) |
-| Gateway dry-run | **NOT RUN for this package** | An equivalent SOAP→REST + OAuth configuration was dry-run and deployed via Agent Mode in an earlier internal build. This repackaged, placeholder-parameterised spec has **not** itself been dry-run. |
-| Gateway deployed | **NOT RUN for this package** | — |
-| Functional tests | **NOT RUN for this package** | `verify.sh` is written and reviewed; not executed from this package |
+| Configuration generated | **YES** | [`gateway/api-spec.yaml`](gateway/api-spec.yaml) (corrected) |
+| Local validation | **PASS** | [`validation/local-validation.yaml`](validation/local-validation.yaml) |
+| Gateway dry-run | **PASS** | Live gateway, 2026-08-18. |
+| Gateway deployed | **DEPLOYED** | Deployed against a real SOAP backend; the ACTIVE-revision 409 and clone/undeploy flow were exercised for real. |
+| Functional tests | **PASS (5/5)** | `gateway/verify.sh` exit 0 — request JSON→XML and response XML→JSON both proven round-trip. |
 
-Overall: **UNVALIDATED** — generated and structurally reviewed, with the
-mediation-plus-auth pattern proven in an earlier internal build against a real
-SOAP backend. **Run [`gateway/verify.sh`](gateway/verify.sh) against your own
-environment before you rely on this**, and pay particular attention to case 4.
-Full record of what the prior build did and did not establish:
-[`validation/gateway-validation.yaml`](validation/gateway-validation.yaml).
+Overall: **READY (post-fix).** What the run corrected, and now works:
+
+- `transform_request: true` is now set — the empty block never converted the request.
+- The `Content-Type: text/xml` override was removed from `proxy-rewrite` — it ran
+  before the transform and hid the JSON body from it.
+- `verify.sh` now sends `Accept: application/json` — the response transform is
+  content-negotiated and did nothing without it.
+
+Full account: [`validation/gateway-validation.yaml`](validation/gateway-validation.yaml)
+and [`../../VERIFICATION.md`](../../VERIFICATION.md).
 
 ## Related solutions
 

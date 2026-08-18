@@ -18,6 +18,17 @@ Two things are assumed throughout, and both come from
 attribute to an app, not an IP) and **paths are templated** (so a route is one row).
 Where a chart needs more than that, it says so.
 
+> **✅ Verified 2026-08-18 against the live control-plane analytics API.** The
+> concrete backing for these charts: `POST /api/orgs/{orgId}/analytics/metrics/*`
+> (requests-count, response-time, sizes, rps, upstream-time) taking
+> `{startTime, endTime, filters[], dimensions[], aggregation, timeUnit}`. The
+> available **dimensions** are: `env_name`, `app_id`, `app_name`, `product_name`,
+> `api_name`, `route_id`, `route_name`, `api_path`, `request_method`,
+> `response_status_code`, `upstream_path`, `developer`. **Group route-level charts
+> by `route_id`, not `api_path`** — `route_id` collapses `/orders/{orderId}` to one
+> row (verified), `api_path` gives one row per concrete id. Note `X-Request-Id` is
+> **not** a dimension; see chart 4.
+
 > **On the exact query syntax.** The prompts below are how you ask the *agent*, and
 > that's deliberate — it knows your org's schema and can pull the data directly.
 > The portal exposes the same underlying data through its own filters; where a field
@@ -73,9 +84,10 @@ rate" produces a number that can't drive an action: a rising 5xx rate is an
 engineering escalation, a rising 401 rate on one app is a support conversation, and a
 rising 400 rate across many apps means your request contract is unclear.
 
-**What breaks it:** untemplated paths. If `/orders/{orderId}` is recorded as literal
-order ids, the error rate is spread across thousands of one-sample rows and no route
-shows a meaningful rate.
+**What breaks it:** grouping by `api_path` instead of `route_id`. `api_path` records
+the concrete path, so `/orders/{orderId}` fragments into one row per id and no route
+shows a meaningful rate. Group by `route_id` (verified: it collapses to one row per
+configured route).
 
 ---
 
