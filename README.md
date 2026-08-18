@@ -162,7 +162,7 @@ provisioned on the credential by the control plane and never belong in a spec.
 
 ## Prerequisites
 
-- A Helix organisation, with at least one environment you can deploy to.
+- A provisioned gateway, with an organisation and at least one environment you can deploy to.
 - The API you want to protect, reachable from the gateway.
 - Access to Helix **Agent Mode**, if you're building the recommended way.
 - `curl` for `verify.sh`; `jq` is optional but makes failures easier to read.
