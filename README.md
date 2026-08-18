@@ -1,4 +1,4 @@
-# Helix Solutions
+# API Gateway Solutions
 
 A public library of **solved API problems** for the API gateway — built the
 way we expect you to build them: by describing the outcome to the **Helix Agent**
