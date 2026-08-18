@@ -11,64 +11,62 @@ not an observability concern, and the distinction is the whole architecture.
 
 ## Where the data comes from
 
+This solution's API is deliberately minimal — two routes returning a standard
+response via the `mocking` plugin, no auth. Analytics still captures every call; the
+only question is how usefully. Here is a call to the templated route:
+
 ```
-┌────────┐   ┌───────────────────────────────────────────────┐   ┌──────────┐
-│ Client │   │                   Gateway                     │   │ Upstream │
-└───┬────┘   │                                               │   └────┬─────┘
-    │        │  ┌──────────── access phase ───────────────┐  │        │
-    │ GET /orders/ord_1a2b3c                              │  │        │
-    │ Bearer eyJ… │ helix-auth (validate)                 │  │        │
-    ├────────────►│                                       │  │        │
-    │        │    │ resolves → app "partner-b-prod"       │  │        │
-    │        │    │            developer "Partner B"      │  │        │
-    │        │    └──────────────┬────────────────────────┘  │        │
-    │        │                   ▼                           │        │
-    │        │  ┌──────────── rewrite phase ──────────────┐  │        │
-    │        │  │ request-id → X-Request-Id: 7f3c…        │  │        │
-    │        │  │            (forwarded upstream)          │  │        │
-    │        │  └──────────────┬─────────────────────────┘  │        │
-    │        │                 └───────────────────────────►│        │
-    │  200   │                                              │◄───────┤
-    │◄───────┼──────────────────────────────────────────────┼────────┘
+┌────────┐   ┌───────────────────────────────────────────────┐
+│ Client │   │                   Gateway                     │
+└───┬────┘   │                                               │
+    │ GET /orders/ord_1a2b3c                                 │
+    ├────────►│  ┌──────────── rewrite phase ─────────────┐  │
+    │        │  │ request-id → X-Request-Id: 7f3c…        │  │
+    │        │  └──────────────┬─────────────────────────┘  │
+    │        │  ┌──────────── (mocking) ──────────────────┐  │
+    │  200   │  │ returns the standard response           │  │
+    │◄───────┼──┴─────────────────────────────────────────┘  │
     │        │  ┌──────────── log phase ──────────────────┐  │
-    │        │  │ helix-analytics  (GLOBAL — not in your   │  │
+    │        │  │ helix-analytics  (GLOBAL — NOT in your   │  │
     │        │  │                   API's spec)            │  │
-    │        │  │                                          │  │
     │        │  │ writes one row:                          │  │
-    │        │  │   route     /orders/{orderId}  ← templated
-    │        │  │   app       partner-b-prod     ← identity
-    │        │  │   developer Partner B          ← identity
-    │        │  │   status    200                          │  │
-    │        │  │   latency   41ms                         │  │
-    │        │  │   request_id 7f3c…             ← correlation
+    │        │  │   route      /orders/{orderId}  ← templated (group by route_id)
+    │        │  │   api_path   /orders/ord_1a2b3c ← the concrete path
+    │        │  │   status     200                         │  │
+    │        │  │   latency    2ms                         │  │
+    │        │  │   request_id 7f3c…             ← correlation (log-side)
+    │        │  │   app        (none) ── a SOURCE IP unless you add identity
     │        │  └─────────────────┬───────────────────────┘  │
     └────────┴────────────────────┼──────────────────────────┘
                                  ▼
                     ┌────────────────────────┐
                     │   analytics store      │ ──► portal
-                    │   (platform-managed)   │ ──► the agent  ("show me…")
+                    │   (platform-managed)   │ ──► the agent / metrics API
                     └────────────────────────┘
 ```
 
-Look at the row that gets written. **Three of its six fields are only meaningful
-because of decisions made earlier in the request path** — and those three are exactly
-what makes the difference between a queryable dataset and a pile of counters.
+Two fields in that row are useful *because of a request-path choice* baked into this
+API: **route** is templated (group by the `route_id` dimension and `/orders/{orderId}`
+collapses to one row), and **request_id** is a correlation handle you match in your own
+logs. A third — **who called** — is a *source IP* here, because the API has no identity.
+Add `helix-auth` ([solution 01](../01-oauth-jwt/)) and that same row carries the app and
+developer instead; you change nothing on the analytics side.
 
-## The three fields that matter, and where they come from
+## The fields that matter, and where they come from
 
 | Field in the row | Comes from | Without it |
 |---|---|---|
-| `app` / `developer` | `helix-auth` resolving identity in the access phase | The row attributes to a source IP. Partners share NAT gateways, run in clouds, and rotate egress addresses — so the row corresponds to nothing you can act on. |
-| `route` | The **templated** OpenAPI path `/orders/{orderId}` | One row per order id. A per-route breakdown becomes a list of individual records; per-route p99 is computed from one sample per row; cardinality grows with your data volume forever. |
-| `request_id` | `request-id`, forwarded upstream | You can see that 3% of calls failed. You cannot get from that row to the failing request, or to the matching line in your backend's own logs. |
-
-Everything in [`gateway/api-spec.yaml`](gateway/api-spec.yaml) exists to make those
-three correct. There is no analytics configuration in it at all, and there should not
-be.
+| `route` (by `route_id`) | The **templated** OpenAPI path `/orders/{orderId}` | Group by `api_path` and you get one row per order id — a per-route breakdown that is a list of individual records, with per-route p99 from one sample each. |
+| `request_id` | `request-id`, forwarded upstream | You can see 3% of calls failed but cannot reach the failing request, or the matching line in your backend's logs. |
+| `app` / `developer` *(compose-in)* | `helix-auth` ([solution 01](../01-oauth-jwt/)) resolving identity | Not present on this minimal API — the row attributes to a source IP. Add solution 01 when you need per-app numbers. |
+Templating and correlation are baked into this minimal API; identity is the one you
+add ([solution 01](../01-oauth-jwt/)) when per-app numbers matter. There is no analytics
+configuration in the spec at all, and there should not be.
 
 ## The property that makes this urgent
 
-**All three decisions must be true *before* the data you want to query is generated.**
+**Templating and identity must be in place *before* the data you want to query is
+generated.**
 
 This is the structural fact that justifies a gateway configuration in a solution about
 reading charts:
@@ -111,10 +109,10 @@ is obvious as such.
 literals, it's one row per order. The API behaves identically — this is invisible until
 you ask a route-level question.
 
-**Splitting by latency profile.** The spec keeps `POST /orders/report` separate from the
-fast read routes deliberately. If a 30-second report and a 40ms lookup share a path
-pattern, the per-route latency distribution describes neither: p50 is dragged up, p99 is
-dragged down, and the number is worse than useless because it looks authoritative.
+**Splitting by latency profile.** If you later add routes with very different latency
+profiles — say a 30-second report and a 40ms lookup — keep them as separate routes. Sharing
+one path pattern gives a per-route latency distribution that describes neither: p50 dragged
+up, p99 dragged down, a number worse than useless because it looks authoritative.
 
 > **If two routes have wildly different latency profiles, they want separate rows.**
 
@@ -180,8 +178,8 @@ Don't use it when:
 ## Prerequisites
 
 - The API is deployed to an environment.
-- **Identity is resolved on every route you care about attributing** — see
-  [solution 01](../01-oauth-jwt/). This is the prerequisite, not a nice-to-have.
+- For per-app attribution, **identity is resolved** on the routes — see
+  [solution 01](../01-oauth-jwt/). Optional here; without it, rows attribute to a source IP.
 - Paths are templated wherever a segment is an identifier.
 - `request-id` applied API-wide, and ideally your backend teams logging it.
 - Traffic actually exists. Analytics is capture-then-query; there is nothing to look at

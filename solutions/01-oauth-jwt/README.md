@@ -10,7 +10,7 @@ authentication happened.**
 | **Needs** | An API deployed to an environment · a real signing-secret value to paste into the spec (used literally — see below) · one developer + app to test with |
 | **Plugins** | `helix-auth` (generate + validate) · `request-id` · `cors` |
 | **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Infographic](infographic.md) · ✅ [Blog](blog.md) · ✅ [Manifest](solution.yaml) |
+| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Infographic](infographic.md) · ✅ [Manifest](solution.yaml) |
 
 ---
 
@@ -67,7 +67,7 @@ alternatives to each other — they sit on opposite sides of the same boundary.
 Verifying your own gateway-issued tokens against an external issuer, or issuing
 tokens when an IdP already exists, produces a system with two sources of truth
 about identity. (Note: `jwt-auth` is a `validate_auth_type` value of `helix-auth`,
-not a standalone plugin — verified against the live build.)
+not a standalone plugin on this build.)
 
 Everything below is the first row.
 
@@ -127,7 +127,7 @@ token endpoint and validate mode with validate_auth_type jwt-auth for the
 protected routes.
 
 Both must use the SAME signing secret. On this gateway the signing_secret is a
-literal HMAC key — there is no <ENV:...> resolution — so use one real, secret,
+literal HMAC key on this build — there is no <ENV:...> resolution — so use one real, secret,
 high-entropy value in both places, and don't commit it.
 
 Show me the spec, run validate_route and dry_run_deploy, and wait for me to
@@ -156,7 +156,7 @@ export BASE=https://<YOUR_GATEWAY_HOST>/api
 H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
 
 # 1. Replace <YOUR_JWT_SIGNING_SECRET> in the spec with a real, high-entropy
-#    secret. VERIFIED: this build uses it LITERALLY as the HMAC key — <ENV:...>
+#    secret. On this build it is used LITERALLY as the HMAC key — <ENV:...>
 #    is not resolved. Use the SAME value on the token route and every protected
 #    route. Do not commit the filled-in spec.
 
@@ -360,13 +360,13 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 
 ## Validation status
 
-**✅ Verified against a live gateway on 2026-08-18 — passed as shipped, no changes.**
+**Validated against a Helix gateway — imported, dry-run, deployed, and passed `verify.sh`.**
 
 | Stage | Status | Provenance |
 |---|---|---|
 | Configuration generated | **YES** | [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
 | Local validation | **PASS** | Structural review — [`validation/local-validation.yaml`](validation/local-validation.yaml) |
-| Gateway dry-run | **PASS** | Live gateway, 2026-08-18. Non-destructive; caught a missing upstream binding first. |
+| Gateway dry-run | **PASS** | Non-destructive; a missing upstream binding is reported here, before any deploy. |
 | Gateway deployed | **DEPLOYED** | Revision ACTIVE in a test environment; `service_id` auto-assigned on import. |
 | Functional tests | **PASS (6/6)** | `gateway/verify.sh` exit 0 — including the wrong-secret and forged-token cases. |
 
@@ -375,8 +375,7 @@ HS256 JWT, `expires_in` matching `token_ttl`, the client secret genuinely checke
 forged and prefix-less tokens rejected. Full record, including the two repo
 corrections this run produced (the `<ENV:...>` finding and the `jwt-auth`
 plugin-naming fix), is in
-[`validation/gateway-validation.yaml`](validation/gateway-validation.yaml) and
-[`../../VERIFICATION.md`](../../VERIFICATION.md).
+[`validation/gateway-validation.yaml`](validation/gateway-validation.yaml).
 
 **One thing you must do:** replace `<YOUR_JWT_SIGNING_SECRET>` with a real secret.
 It is used *literally* as the HMAC key on this build — `<ENV:...>` syntax is not

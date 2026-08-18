@@ -14,7 +14,7 @@ local_validation:
     references:              PASS   # /oauth/token and /locations reference the identical <ENV:JWT_SIGNING_SECRET>
     plugin_ordering:         PASS   # access (helix-auth) -> rewrite (proxy-rewrite) -> request transform -> upstream -> response transform. Rejection precedes translation, which is the property that matters.
     plugin_scoping:          PASS   # validate is per-route on /locations, NOT at the document root, so POST /oauth/token stays reachable without a token
-    transform_direction:     PASS   # exactly ONE xml-to-json block and NO json-to-xml. The bidirectional plugin covers both directions; a second transform would double-convert.
+    transform_direction:     PASS   # xml-to-json has transform_request:true (default is false) and transform_response:true; proxy-rewrite retargets the path only (no Content-Type override, which would run first and defeat the request transform). No json-to-xml (that is the opposite plugin).
     plugin_agreement:        PASS   # proxy-rewrite declares Content-Type text/xml and xml-to-json is what makes that true — the two are consistent
     auth_authz_dependencies: PASS   # /oauth/token intentionally unprotected; nothing on /locations reads context helix-auth has not yet produced
     request_response:        PASS   # documented 200/401/502/504 responses match the design
@@ -25,7 +25,7 @@ local_validation:
 
   warnings:
     - >-
-      xml-to-json is left as a DEFAULT (empty) block. That takes plugin defaults,
+      xml-to-json sets transform_request:true explicitly (default false converts the response only) and relies on Accept: application/json for the response. Other fields take defaults,
       which suit a straightforward element-to-object mapping. Namespaced or
       attribute-heavy envelopes will need fields set. Its schema varies by build —
       confirm with get_plugin_config in YOUR org rather than trusting this file.

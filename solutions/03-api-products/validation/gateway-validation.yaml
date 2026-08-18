@@ -1,76 +1,48 @@
-# Gateway validation — established against a LIVE gateway on 2026-08-18. This
-# package was deployed and its verify.sh run end to end. Passed as shipped.
+# Gateway validation — this solution was imported, dry-run, deployed and exercised
+# against a Helix gateway. The statuses below are the outcome. Re-run
+# gateway/verify.sh against your own environment before you rely on it.
 
 gateway_validation:
   solution: 03-api-products
   version: 1.0.0
 
-  target: Helix API Gateway
-  environment: a fresh free-trial test environment (identifiers withheld)
-  verified_on: 2026-08-18
-  verified_this_session: true
-
   dry_run:
     status: PASS
-    detail: Dry-run returned success. Non-destructive, as documented.
 
   deployment:
     status: DEPLOYED
     detail: >-
-      Revision ACTIVE. Two products (Free 5/min, Pro 1000/min) created and deployed
-      to the environment; two SEPARATE apps subscribed, one to each product, so
-      isolation could be proven rather than merely a limit demonstrated.
+      Deployed ACTIVE with two products (a small Free quota and a large Pro quota)
+      and two SEPARATE apps, one on each product — so isolation can be proven, not
+      just a limit demonstrated.
 
   functional_tests:
     executor: gateway/verify.sh
     status: PASS
     detail: >-
-      verify.sh exit 0 (5/5) AS SHIPPED. Beyond the script, a clean-window burst
-      showed exactly five 200s then 429 (quota is precise), and the 403 path was
-      confirmed with an app whose product does not cover the API.
+      verify.sh exits 0. A Free app is admitted up to its quota then returns 429;
+      at that same moment a second app on a different product still returns 200. The
+      quota is exact (a clean window serves exactly the configured count then 429s),
+      and a product with no quota object is rejected at creation.
     cases:
       - { id: unauthenticated,  expected_status: 401, result: PASS }
       - { id: unknown-key,      expected_status: 401, result: PASS }
       - { id: valid-free-call,  expected_status: 200, result: PASS }
-      - { id: quota-exhausted,  expected_status: 429, result: PASS, note: "body {\"error\":\"quota exceeded\"}; exactly 5 allowed then 429 in a clean window" }
-      - { id: isolation,        expected_status: 200, result: PASS, note: "second app on a different product kept getting 200 while the Free app was throttled — THE case that matters" }
+      - { id: quota-exhausted,  expected_status: 429, result: PASS, note: "body {\"error\":\"quota exceeded\"}" }
+      - { id: isolation,        expected_status: 200, result: PASS, note: "second app on a different product unaffected — the case that matters" }
 
-  confirmed_repo_claims:
-    - api-product-enforcer accepts ONLY error_policy and ctx_namespace (schema confirmed).
-    - A product with no quota object is rejected — quota is a REQUIRED field on create.
-    - Quota is counted per app; isolation holds.
-    - The 429 body is {"error":"quota exceeded"}.
-    - NO Retry-After and NO X-RateLimit-* headers on the 429 (checked explicitly, all absent).
-    - No product covering the API -> 403 "This credential is not authorized to access this API."
-
-  observations:
-    - id: 429-content-type-text-plain
-      note: >-
-        The 429 body is valid JSON but is served with content-type text/plain, not
-        application/json. Parse defensively; do not rely on the content type.
-    - id: fixed-window-not-sliding
-      note: >-
-        The quota window is a fixed wall-clock minute, not a sliding window. A burst
-        straddling the minute boundary served five before and five after — i.e. up
-        to 2x the limit briefly. Consistent with the repo's "per-minute absorbs
-        bursts" note; stated explicitly now.
-    - id: quota-backend-not-tested-multinode
-      note: >-
-        The single-node test could not exercise the multi-node quota_policy=local
-        pitfall. That remains a documented risk to verify on your own cluster.
-
-  cleanup:
-    status: NOT_REQUIRED
-    note: >-
-      Named test resources (helix-solution-test-api-products, products hs-verify-*).
-      Deletable from the portal at any time.
+  how_this_build_behaves:
+    - api-product-enforcer accepts only error_policy and ctx_namespace (schema-confirmed).
+    - The 429 body is {"error":"quota exceeded"} with NO Retry-After and NO X-RateLimit-* headers.
+    - The 429 body is JSON but is served with content-type text/plain — parse defensively.
+    - The quota window is a fixed calendar minute (not sliding); a burst straddling the boundary can briefly serve up to 2x.
+    - No product covering the API -> 403 "not authorized to access this API".
+    - Multi-node counting depends on quota_policy=redis in plugin_attr; a single-node test cannot reveal that pitfall.
 
   overall: READY
 
-# ---------------------------------------------------------------------------
 what_you_should_do:
   - Set your own tier numbers; Free must be unusable for production, Enterprise must match a contract.
-  - Create products AND deploy them to the environment; create TWO apps on different products.
-  - Run gateway/verify.sh and treat case 5 (isolation) as the gate.
-  - On more than one node, set quota_policy to redis in plugin_attr.api-product-enforcer,
-    then run the multi-node counting case — a single-node test cannot reveal that pitfall.
+  - Create products AND deploy them; create TWO apps on different products.
+  - Run gateway/verify.sh and treat the isolation case as the gate.
+  - On more than one node, set quota_policy to redis in plugin_attr.api-product-enforcer.

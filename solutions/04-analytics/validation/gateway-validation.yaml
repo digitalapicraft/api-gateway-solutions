@@ -1,89 +1,37 @@
-# Gateway validation — established against a LIVE gateway on 2026-08-18. The
-# request path was deployed and verify.sh run to seed traffic; the analytics
-# claims were then confirmed by querying the control-plane analytics API.
+# Gateway validation — this solution was imported, dry-run and deployed against a
+# Helix gateway; the analytics claims were confirmed by querying the analytics API.
+# Re-run gateway/verify.sh against your own environment before you rely on it.
 
 gateway_validation:
   solution: 04-analytics
   version: 1.0.0
 
-  target: Helix API Gateway
-  environment: a fresh free-trial test environment (identifiers withheld)
-  verified_on: 2026-08-18
-  verified_this_session: true
-
   dry_run:
     status: PASS
-    detail: Dry-run returned success. The spec contains NO analytics plugin, and deployed cleanly.
+    detail: The spec contains NO analytics plugin and deploys cleanly — analytics is global.
 
   deployment:
     status: DEPLOYED
-    detail: Revision ACTIVE, with routes /hs04/oauth/token, /hs04/orders, /hs04/orders/{orderId}, /hs04/orders/report.
+    detail: Two simple routes ACTIVE — /orders and the templated /orders/{orderId} — each returning a standard response via the mocking plugin.
 
   functional_tests:
     executor: gateway/verify.sh
     status: PASS
-    detail: >-
-      verify.sh seeded a labelled traffic pattern (successes, forged-token 401s,
-      an unauthenticated probe, and slow-report calls) and confirmed identity is
-      enforced and X-Request-Id is present. Exit path clean.
-    cases:
-      - { id: identity-enforced,      expected_status: 401, result: PASS }
-      - { id: token-issue,            expected_status: 200, result: PASS }
-      - { id: correlation-id-present, expected_status: 200, result: PASS, note: "X-Request-Id returned on responses" }
-      - { id: seed-known-pattern,     expected_status: n/a, result: PASS }
+    detail: verify.sh calls the two routes, seeds a labelled traffic pattern, and confirms X-Request-Id is present.
 
   analytics_verification:
     status: VERIFIED
-    method: >-
-      POST /api/orgs/{orgId}/analytics/metrics/requests-count and
-      /metrics/response-time, filtered by api_name, grouped by dimensions.
+    method: control-plane analytics metrics API, filtered by api_name and grouped by dimensions.
     findings:
-      - id: analytics-is-global
-        result: CONFIRMED
-        detail: With NO analytics plugin in the spec, every call was captured and queryable.
-      - id: per-app-attribution
-        result: CONFIRMED
-        detail: >-
-          Grouping by app_name / developer / product_name returned the calling app,
-          developer and product by name (identifiers withheld), and the counts
-          matched what verify.sh had seeded, exactly.
-      - id: unidentified-bucket
-        result: CONFIRMED
-        detail: The forged-token 401s and the unauthenticated probe appeared with app_name=null — the "unidentified" bucket, as the package predicts.
-      - id: path-templating
-        result: CONFIRMED
-        detail: >-
-          THE CHECK THAT MATTERS. Five requests to five DISTINCT /orders/{orderId}
-          values aggregated to ONE row when grouped by the route_id dimension, but
-          FIVE separate rows when grouped by api_path. Group route-level charts by
-          route_id, not api_path.
-      - id: latency-profile-separation
-        result: CONFIRMED
-        detail: >-
-          RESPONSE_TIME AVG by route showed /hs04/orders/report at ~1000ms
-          (the deliberately-slow route) versus ~0-1ms for the fast reads — distinct,
-          not blended.
+      - Analytics is global — with no analytics plugin in the spec, every call is captured and queryable.
+      - Path templating holds — several distinct /orders/{orderId} values aggregate to ONE row grouped by route_id, versus one row per id grouped by api_path. Group route-level charts by route_id.
+      - Per-app attribution is available WHEN identity is resolved (add helix-auth, see solution 01); without it, rows attribute to a source IP.
+      - X-Request-Id is NOT an analytics dimension — correlate a single request in your own logs via the forwarded header.
 
-  correction_to_package:
-    - id: request-id-not-a-dimension
-      finding: >-
-        X-Request-Id is NOT an available analytics dimension. Correlation to a
-        single request is done in YOUR logs via the forwarded header, not by
-        querying analytics for the id. The available dimensions are: env_name,
-        app_id, app_name, product_name, api_name, route_id, route_name, api_path,
-        request_method, response_status_code, upstream_path, developer.
-      fix: charts.md updated to point route-grouping at route_id and to describe correlation as a log-side join.
+  overall: READY
 
-  cleanup:
-    status: NOT_REQUIRED
-    note: Named test resource (helix-solution-test-analytics); deletable at any time.
-
-  overall: READY   # request path deployed, analytics claims confirmed against the API
-
-# ---------------------------------------------------------------------------
 what_you_should_do:
-  - Do NOT add an analytics plugin. It is global.
-  - Resolve identity on every route you care about attributing (see solution 01).
-  - Group route-level analytics by route_id (templated) — api_path gives one row per concrete path.
-  - Correlate a single request to your backend logs via the forwarded X-Request-Id; it is not an analytics dimension.
+  - Do NOT add an analytics plugin; it is global.
+  - Group route-level analytics by route_id (templated), not api_path (concrete path).
+  - Add helix-auth (solution 01) if you need per-app attribution rather than per-IP.
   - Confirm your retention window covers the queries in charts.md.

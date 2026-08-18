@@ -10,7 +10,7 @@ exhausts their own budget and nobody else's.**
 | **Needs** | An API deployed to an environment · a developer with **two** apps to test with · Redis if the gateway runs more than one node |
 | **Plugins** | `helix-auth` (validate / key-auth) · `api-product-enforcer` · `request-id` · `cors` · route-scoped `limit-count` |
 | **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) + [`products.json`](gateway/products.json) |
-| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec + products](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Infographic](infographic.md) · ✅ [Blog](blog.md) · ✅ [Manifest](solution.yaml) |
+| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec + products](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Infographic](infographic.md) · ✅ [Manifest](solution.yaml) |
 
 ---
 
@@ -427,13 +427,13 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 
 ## Validation status
 
-**✅ Verified against a live gateway on 2026-08-18 — passed as shipped, 5/5.**
+**Validated against a Helix gateway — imported, dry-run, deployed, and passed `verify.sh` including the isolation check.**
 
 | Stage | Status | Provenance |
 |---|---|---|
 | Configuration generated | **YES** | [`gateway/api-spec.yaml`](gateway/api-spec.yaml), [`gateway/products.json`](gateway/products.json) |
 | Local validation | **PASS** | [`validation/local-validation.yaml`](validation/local-validation.yaml) |
-| Gateway dry-run | **PASS** | Live gateway, 2026-08-18. |
+| Gateway dry-run | **PASS** | Non-destructive validation on a Helix gateway. |
 | Gateway deployed | **DEPLOYED** | Two products, two apps on different products, ACTIVE. |
 | Functional tests | **PASS (5/5)** | `gateway/verify.sh` exit 0 — **including isolation** (case 5). |
 
@@ -447,8 +447,7 @@ whose product doesn't cover the API gets 403. Two observations worth knowing: th
 calendar minute (a boundary-straddling burst can briefly serve 2×). The multi-node
 `quota_policy` pitfall could not be exercised on a single-node test — verify it on
 your own cluster. Full record:
-[`validation/gateway-validation.yaml`](validation/gateway-validation.yaml) and
-[`../../VERIFICATION.md`](../../VERIFICATION.md).
+[`validation/gateway-validation.yaml`](validation/gateway-validation.yaml).
 
 ## Related solutions
 

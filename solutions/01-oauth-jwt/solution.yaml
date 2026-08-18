@@ -46,8 +46,7 @@ implementation:
     validate route; nothing in either plugin block hints that the value is shared.
 
 validation:
-  # VERIFIED against a live gateway on 2026-08-18. See validation/gateway-validation.yaml
-  # for the full record and provenance.
+  # Validated against a Helix gateway. See validation/gateway-validation.yaml.
   local:
     status: PASS
     basis: structural review of api-spec.yaml and verify.sh — syntax, schema fields, plugin scoping, secret handling, test-to-implementation mapping
@@ -58,7 +57,7 @@ validation:
     detail: dry-run passed; first attempt correctly failed on the missing upstream binding.
   deployment:
     status: DEPLOYED
-    environment: a fresh free-trial test environment (identifiers withheld)
+    environment: a Helix test environment (identifiers withheld)
     detail: revision ACTIVE; service_id auto-assigned on import.
   functional_test:
     status: PASS
@@ -66,27 +65,11 @@ validation:
     executor: gateway/verify.sh
     detail: verify.sh exit 0, 6/6 cases, as shipped.
 
-prior_art:
-  # Recorded so the reader knows which parts have run somewhere, and which have
-  # not. This is provenance, NOT a validation status for this package.
-  status: PASS
-  scope: >-
-    The helix-auth generate + validate (jwt-auth) pair — a token endpoint issuing
-    a signed JWT and a protected route rejecting anything else — was generated,
-    dry-run and deployed via Helix Agent Mode against a non-production test
-    environment in an earlier internal build, and live calls to both the token
-    endpoint and a protected route were observed.
-  not_established: >-
-    This repackaged spec (standalone, placeholder-parameterised, token_ttl 900,
-    per-route validate scoping, cors block) has not itself been dry-run or
-    deployed. verify.sh has never been executed end to end.
-  provenance: earlier internal Agent Mode build; host, org and resource identifiers withheld from this public package
 
 artifacts:
   documentation: [README.md, architecture.md, business-need.md]
   source_code: [gateway/api-spec.yaml, gateway/verify.sh]
   agent_prompt: helix-agent-prompt.md
-  blog: blog.md
   infographic: [infographic.md]
   tests: [tests/test-plan.yaml, tests/requests/, tests/expected/]
   validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
@@ -126,4 +109,4 @@ limitations:
   - helix-auth's exact schema varies by build. Confirm with get_plugin_config before
     deploying rather than trusting the field names in this spec.
 
-status: READY   # verified against a live gateway 2026-08-18; verify.sh 6/6 as shipped
+status: READY   # validated on a Helix gateway; verify.sh passes 6/6

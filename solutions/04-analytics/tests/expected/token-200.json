@@ -1,9 +1,0 @@
-{
-  "_case": "token-issue",
-  "_status": 200,
-  "_note": "Shape of a successful client-credentials exchange. See solution 01 for the full treatment.",
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.<payload>.<signature>",
-  "token_type": "Bearer",
-  "expires_in": 900,
-  "_in_analytics": "Token requests are captured too. With a 900s TTL a well-behaved client needs about four per hour regardless of call volume. An app approaching one token per API call has doubled its own latency and made this your busiest route — chart 10 in charts.md finds those clients."
-}

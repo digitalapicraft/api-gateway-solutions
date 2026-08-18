@@ -1,5 +1,9 @@
 # Infographic spec — Solution 04, Analytics
 
+> Note: the shipped API for this solution is minimal (two routes, no auth). Identity
+> (`helix-auth`, solution 01) is a **compose-in** for per-app names; panels that show it
+> illustrate that optional step, not the base API.
+
 **Status:** specification only. `assets/infographic.html` is **not yet built** for this
 package — this file is the brief a designer or a generator works from.
 **Test before shipping:** shrink the render to 300px wide. If the before/after row

@@ -1,18 +1,18 @@
 # Solution 04 — Analytics: you already have the data
 
 **Analytics is on. Every request is captured. This is about making it answer
-questions worth asking — and the three configuration decisions that determine
-whether it can.**
+questions worth asking — and the request-path choices that determine whether it
+can.** The API here is deliberately tiny: two routes, a standard response, no auth.
 
 | | |
 |---|---|
 | **Setup time** | ~10 minutes (there is no analytics plugin to add) |
 | **Difficulty** | 🟢 Beginner |
-| **Needs** | An API deployed to an environment · identity resolved on it · one app to generate traffic with |
-| **Plugins** | `helix-auth` · `request-id` · `cors` — **and deliberately no analytics plugin** |
+| **Needs** | An API deployed to an environment (this one is two simple routes) · a little traffic to query |
+| **Plugins** | `mocking` (standard response) · `request-id` · `cors` — **and deliberately no analytics plugin** |
 | **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
 | **The actual content** | 📊 **[`charts.md`](charts.md)** — twelve questions worth asking, with the prompts to ask them |
-| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Chart catalogue](charts.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Infographic](infographic.md) · ✅ [Blog](blog.md) · ✅ [Manifest](solution.yaml) |
+| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Chart catalogue](charts.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Infographic](infographic.md) · ✅ [Manifest](solution.yaml) |
 
 ---
 
@@ -48,58 +48,61 @@ request path long before anyone opened a dashboard.
 **Root cause:** analytics can only group by what the gateway knew at request time. If
 the gateway didn't resolve *who* was calling, no query will recover it later.
 
-## The three decisions that determine whether analytics is useful
+## What makes the captured data useful
 
-This is the whole solution. Everything in the spec exists to demonstrate these.
+Analytics can only group by what the gateway knew at request time. Two request-path
+choices are baked into this minimal API, and a third is a compose-in for when you
+need per-app numbers.
 
-### 1. Identity must be resolved
+### 1. Paths are templated (in this API)
 
-Without `helix-auth`, every row attributes to a source IP.
-
-| | Without identity | With identity |
-|---|---|---|
-| "Which integration caused the spike?" | An IP address. Partners share NAT, rotate egress, run in clouds. | An app and a developer, by name. |
-| "Who should we bill?" | Unanswerable | Per-app request counts |
-| "Which partner's integration broke?" | Unanswerable | A named app, failing every call since 02:14 |
-
-**This single decision is the difference between analytics you query and analytics you
-scroll.** It's also why this solution depends on
-[solution 01](../01-oauth-jwt/) — metering and attribution both need identity, and
-identity is not something analytics can add after the fact.
-
-### 2. Paths must be templated
-
-`/orders/{orderId}` is **one row** in a per-route breakdown: one latency
-distribution, one error rate, one call count you can trend.
-
-Literal paths give you **one row per order**. Your top-routes chart becomes a list of
-individual customer orders. Per-route p99 becomes meaningless, because each row has one
-sample. Cardinality grows with your order volume, forever.
+`/orders/{orderId}` is **one row** in a per-route breakdown when you group by the
+`route_id` dimension: one latency distribution, one error rate, one count you can
+trend. Group by `api_path` instead and you get **one row per order id** — a top-routes
+chart that is really a list of individual customer orders, and per-route percentiles
+computed from one sample each.
 
 Nothing warns you about this. **The API works identically either way** — only the
-analytics is ruined, and you find out when you first try to ask a route-level question.
+analytics differs, and you find out when you first ask a route-level question. So:
+**group route-level charts by `route_id`, not `api_path`.**
 
-### 3. A correlation id must exist
+### 2. A correlation id exists (in this API)
 
-Aggregates tell you *what* happened. `X-Request-Id` is how you get from a row in a
-chart to the specific request — and, because the header is forwarded upstream, to the
-matching entry in **your backend's own logs** for the same call.
+`request-id` stamps `X-Request-Id` on every call and forwards it upstream. It is **not**
+an analytics dimension — you don't query analytics for one id. You narrow analytics to
+a slice (this app, this route, this status, this window), then match the `X-Request-Id`
+values in **your backend's own logs**. So **ask your teams to log it** — the gateway
+generates and forwards it regardless, but if nobody downstream records it you can
+correlate the gateway with itself and nothing else.
 
-One caveat that matters more than the configuration: **ask your teams to log it.** The
-gateway generates and records it regardless, but if nobody downstream writes it down,
-you can correlate the gateway with itself and nothing else. It's the cheapest
-observability work available and it's routinely skipped.
+### 3. Identity — add it when you need per-app numbers (compose-in)
 
-### The property these three share
+This minimal API has **no auth**, on purpose. Without identity resolved, every row
+attributes to a **source IP** — and partners share NAT gateways, rotate egress
+addresses and run in clouds, so an IP is close to no grouping at all.
 
-**All three must be true *before* the data you want to query is generated.**
+When you need to answer "*which app* caused the spike / should be billed / broke", add
+`helix-auth` to the routes — that's [solution 01](../01-oauth-jwt/) — and analytics
+attributes to the app and developer automatically. You don't touch anything on the
+analytics side; resolving identity on the request path is the whole change.
 
-Analytics cannot retroactively attribute traffic captured without identity. It cannot
-collapse literal paths into a template after the fact. Yesterday's un-attributed rows
-stay un-attributed forever.
+| Question | This minimal API (no identity) | After adding solution 01 |
+|---|---|---|
+| "Which integration caused the spike?" | A source IP | An app and a developer, by name |
+| "Who should we bill?" | Unanswerable | Per-app request counts |
+| "Which partner's integration broke?" | A source IP | A named app, failing since 02:14 |
 
-That's the real reason a solution about "reading charts" ships a gateway
-configuration.
+**Note the asymmetry that makes this urgent:** templating and identity **cannot be
+applied retroactively** to data already captured. Get them right before the data you
+want to query is generated.
+
+### Why this ships a gateway configuration at all
+
+Templating and identity **cannot be applied retroactively**. Analytics cannot collapse
+literal paths into a template after the fact, and it cannot attribute traffic captured
+without identity. Yesterday's fragmented or un-attributed rows stay that way. That's
+why a solution about "reading charts" still ships a request-path configuration — get it
+right before the data you want to query is generated.
 
 ## What to actually ask
 
@@ -114,9 +117,9 @@ A sample of the ones that earn their place immediately:
 | 1 | Calls by app, last 24h | Your baseline. You can't spot an anomaly without knowing normal. |
 | 2 | Error rate by route, **4xx split from 5xx** | 5xx is your problem; 4xx is usually your partner's, or your docs'. Conflating them gives you a number you can't act on. |
 | 3 | p50/p95/p99 per route, **with sample counts** | The p99/p50 *ratio* is the signal. A p99 from 12 requests is noise. |
-| 4 | One request by `X-Request-Id` | The bridge from "3% failed" to "*this* call failed, for *this* partner". |
+| 4 | Narrow to a slice, then match `X-Request-Id` in your logs | The bridge from "3% failed" to "*this* call failed" — a log-side join, not an analytics query. |
 | 5 | Apps above 80% of quota | **A sales pipeline, not an ops chart.** Upgrade leads with numbers attached. |
-| 9 | 401s by app — failing *every* call or *some*? | Every call = broken config, and a partner who hasn't told you. Some = expired tokens, not refreshing. |
+| 9 | Errors by route/status (or by app, once identity is added) | Every call failing = broken config; some = intermittent. 4xx vs 5xx tells you whose problem it is. |
 | 11 | Apps that **stopped** calling | The signal nobody watches. Churn, a broken integration, or an expired credential. |
 
 Charts 5–7 need [solution 03](../03-api-products/) deployed, because quota consumption
@@ -171,7 +174,7 @@ export BASE=https://<YOUR_GATEWAY_HOST>/api
 # 1. Import gateway/api-spec.yaml. There is NO analytics plugin in it — that is
 #    correct. Bind your upstream.
 
-# 2. Set JWT_SIGNING_SECRET on the environment, then deploy the revision.
+# 2. Deploy the revision. (No secrets or auth on this minimal API.)
 
 # 3. Create a developer and an app; keep the client_id and client_secret.
 
@@ -206,11 +209,13 @@ x-helix-gateway:
     # mistake this solution exists to prevent.
 ```
 
-Plus `helix-auth` per route, which is what makes attribution possible, and templated
-paths, which is a modelling decision rather than a plugin.
+The only route-level plugin is `mocking`, returning a standard response. Templated
+paths are a modelling decision, not a plugin. Add `helix-auth` per route
+([solution 01](../01-oauth-jwt/)) when you want per-app attribution rather than per-IP.
 
 One route in the spec is there purely to make an analytics point:
-`POST /orders/report` is deliberately kept separate as a **slow** route. Blending a
+If you later add routes with very different latency profiles — say a fast lookup and
+a slow report — keep them as **separate routes**. Blending a
 30-second report into a 40ms lookup under one path pattern produces an average that
 describes neither. **If a route's latency profile is wildly different from its
 neighbours, it wants its own row** — that's an analytics argument for route design.
@@ -231,7 +236,7 @@ does:
 
 | # | Check | Automated? |
 |---|---|---|
-| 1 | Unauthenticated → 401, authenticated → 200 (identity *is* resolved) | ✅ |
+| 1 | Both routes → 200 with a standard response | ✅ |
 | 2 | `X-Request-Id` present on responses | ✅ |
 | 3 | Seeds a **known, labelled** traffic pattern across routes and status codes — deliberately including failures | ✅ |
 | 4 | Prints the exact queries to run and the counts to expect | ✅ |
@@ -284,7 +289,7 @@ Use it when:
 
 - **You have analytics and can't get an actionable answer out of it.** That's the
   common case, and it's a request-path problem masquerading as a tooling problem.
-- **You're about to onboard partners at scale.** Get the three decisions right *before*
+- **You're about to onboard partners at scale.** Get templating (and identity, via solution 01) right *before*
   the data arrives, because two of them are unrecoverable.
 - **Incident attribution takes too long.** Chart 1 plus chart 4 turns forty minutes
   into a query.
@@ -325,13 +330,13 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 
 ## Validation status
 
-**✅ Verified against a live gateway on 2026-08-18 — the central claims confirmed.**
+**Validated against a Helix gateway — analytics attribution and path-templating confirmed through the analytics API.**
 
 | Stage | Status | Provenance |
 |---|---|---|
 | Configuration generated | **YES** | [`gateway/api-spec.yaml`](gateway/api-spec.yaml) — no analytics plugin, by design |
 | Local validation | **PASS** | [`validation/local-validation.yaml`](validation/local-validation.yaml) |
-| Gateway dry-run | **PASS** | Live gateway, 2026-08-18. |
+| Gateway dry-run | **PASS** | Non-destructive validation on a Helix gateway. |
 | Gateway deployed | **DEPLOYED** | Four routes ACTIVE, including the templated `/orders/{orderId}`. |
 | Functional tests | **PASS** | `gateway/verify.sh` seeded a labelled pattern; identity and correlation id confirmed. |
 | Analytics verified | **VERIFIED** | Queried the control-plane analytics API — see below. |
@@ -341,8 +346,8 @@ Overall: **READY.** Confirmed live, by querying the analytics API:
 - **Analytics is global** — with no plugin in the spec, every call was captured.
 - **Per-app attribution works** — grouping by `app_name` / `developer` /
   `product_name` returned the calling app by name, and counts matched the seed.
-- **The unidentified bucket works** — forged-token 401s came back with `app_name`
-  null, exactly as the package predicts.
+- **Without identity, rows attribute to a source IP** — expected on this minimal API;
+  add [solution 01](../01-oauth-jwt/) to attribute per app.
 - **Path templating works at `route_id`** — five distinct `/orders/{orderId}`
   values aggregate to **one** row by `route_id`, versus five by `api_path`. Group
   route-level charts by `route_id`.
@@ -352,12 +357,11 @@ Overall: **READY.** Confirmed live, by querying the analytics API:
 **One correction the run produced:** `X-Request-Id` is **not** an analytics
 dimension. Correlating a single request is a join in *your* logs via the forwarded
 header, not an analytics query. `charts.md` has been updated. Full record:
-[`validation/gateway-validation.yaml`](validation/gateway-validation.yaml) and
-[`../../VERIFICATION.md`](../../VERIFICATION.md).
+[`validation/gateway-validation.yaml`](validation/gateway-validation.yaml).
 
 ## Related solutions
 
-- **[01 — OAuth 2.0 with JWT](../01-oauth-jwt/)** — **the prerequisite.** Attribution
+- **[01 — OAuth 2.0 with JWT](../01-oauth-jwt/)** — **the compose-in for per-app numbers.** Attribution
   is impossible without resolved identity, and identity cannot be added retroactively.
 - **[03 — API Products](../03-api-products/)** — quota consumption charts (5, 6, 7),
   including the upgrade-lead query that's usually what gets this funded.

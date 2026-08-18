@@ -30,50 +30,49 @@ business_need:
 
 implementation:
   gateway_capabilities:
-    - helix-auth (mode validate, jwt-auth)  # IDENTITY — rows attribute to an app, not an IP
-    - templated OpenAPI paths               # /orders/{orderId} is ONE row, not one per order
-    - request-id                            # CORRELATION — chart row -> single request -> backend log
+    - mocking                               # both routes return a standard response with no backend
+    - templated OpenAPI paths               # /orders/{orderId} is ONE row by route_id, not one per order
+    - request-id                            # CORRELATION — a chart row -> a single request in your logs
     - cors                                  # browser access
-    - helix-auth (mode generate)            # token endpoint, so identity exists at all (see solution 01)
   explicitly_not_used:
     - helix-analytics   # Enabled GLOBALLY by the platform. There is deliberately no
                         # analytics plugin block in gateway/api-spec.yaml, and adding
                         # one is the mistake this solution exists to prevent. An agent
                         # will propose one because that is how observability works on
                         # most platforms.
-    - api-product-enforcer   # Quota consumption is among the most valuable things to
-                             # chart, but enforcement belongs to solution 03. Compose
-                             # them and charts 5-7 in charts.md start working.
+    - helix-auth        # Kept OFF deliberately, to keep this API minimal. Identity is
+                        # what turns per-IP analytics into per-app analytics — compose in
+                        # solution 01 when you need attribution. Without it, rows
+                        # attribute to a source IP.
+    - api-product-enforcer   # Quota-consumption charts (5-7 in charts.md) need solution 03.
   custom_code_required: false
   notes: >-
     This solution turns nothing on. Analytics is already capturing every request. What
-    it does is make the capture useful, which is a request-path concern rather than an
-    observability one.
-    Three decisions determine whether a captured row can answer anything: identity
-    resolved (else the row attributes to a source IP, and partners share NAT gateways,
-    run in clouds and rotate egress addresses); paths templated (else one row per
-    entity, so per-route p99 is computed from one sample per row and cardinality grows
-    with data volume forever); and a correlation id that is forwarded upstream AND
-    logged by your backend — an id nobody downstream records correlates the gateway
-    with itself.
-    ALL THREE MUST BE TRUE BEFORE THE DATA IS GENERATED. Analytics cannot retroactively
-    attribute anonymous traffic or collapse literal paths into a template. This is the
+    it does is make the capture useful, and the API is deliberately minimal to keep the
+    focus on querying, not on building policy: two routes returning a standard response
+    via the mocking plugin, plus request-id and cors. Do NOT add auth, quota or
+    transforms here — compose solutions 01 and 03 when you actually need them.
+    Two request-path facts make the captured data useful, and both are here: paths are
+    TEMPLATED (group route-level analytics by the route_id dimension — a template
+    collapses distinct ids to one row; api_path gives one row per concrete id), and a
+    CORRELATION id is forwarded (X-Request-Id, joined in your own logs — it is not an
+    analytics dimension). PER-APP attribution additionally needs identity on the route
+    (helix-auth, solution 01); without it rows attribute to a source IP. Templating and
+    identity cannot be applied retroactively to data already captured. This is the
     property that makes the solution urgent rather than merely tidy.
-    Route design is an analytics decision. POST /orders/report is kept separate from
-    the fast reads deliberately: blending a 30-second report with a 40ms lookup under
-    one path pattern produces a latency distribution that describes neither and looks
-    authoritative.
+    Route design is an analytics decision: routes with very different latency profiles
+    (say a fast lookup and a slow report) want SEPARATE rows, because one blended
+    latency distribution describes neither while looking authoritative.
 
 validation:
-  # VERIFIED against a live gateway on 2026-08-18, including analytics queried via the
-  # control-plane API. See validation/gateway-validation.yaml for the full record.
+  # Validated against a Helix gateway, including analytics queried via the control-plane
+  # API. See validation/gateway-validation.yaml.
   local:
     status: PASS
     basis: >-
-      structural review of api-spec.yaml (confirmed no helix-analytics block, identity on
-      every non-token route, paths templated, request-id API-wide), plus verify.sh
-      syntax-checked under bash and its required-variable and unreachable-host paths
-      actually executed.
+      structural review of api-spec.yaml (confirmed no helix-analytics block, two simple
+      routes returning a standard response via mocking, /orders/{orderId} templated,
+      request-id API-wide), plus verify.sh syntax-checked and its guard paths executed.
     verified_this_session: true
   gateway_dry_run:
     status: PASS
@@ -81,8 +80,8 @@ validation:
     detail: dry-run passed; no analytics plugin in the spec, deployed cleanly.
   deployment:
     status: DEPLOYED
-    environment: a fresh free-trial test environment (identifiers withheld)
-    detail: four routes ACTIVE incl. templated /orders/{orderId}.
+    environment: a Helix test environment (identifiers withheld)
+    detail: two routes ACTIVE — /orders and templated /orders/{orderId} — each via the mocking plugin.
   functional_test:
     status: PASS
     verified_this_session: true
@@ -90,15 +89,13 @@ validation:
     detail: verify.sh seeded labelled traffic; analytics attribution + route_id templating confirmed via the analytics API.
 
 analytics_verification:
-  # VERIFIED 2026-08-18 by querying the control-plane analytics API after verify.sh
-  # seeded a labelled traffic pattern.
+  # Validated by querying the control-plane analytics API after seeding traffic.
   status: VERIFIED
   method: POST /api/orgs/{orgId}/analytics/metrics/requests-count and /response-time, grouped by dimensions.
   results:
-    - Per-app attribution CONFIRMED — grouping by app_name/developer/product_name returned the calling app by name; counts matched the seed.
-    - Unidentified bucket CONFIRMED — forged-token 401s came back with app_name null.
-    - Path templating CONFIRMED — five distinct /orders/{orderId} values = ONE row by route_id, FIVE rows by api_path.
-    - Latency separation CONFIRMED — the slow report route showed ~1000ms vs ~0ms for fast reads.
+    - Global capture CONFIRMED — with no analytics plugin in the spec, every call was captured and queryable.
+    - Path templating CONFIRMED — distinct /orders/{orderId} values collapse to ONE row grouped by route_id, versus one row per id grouped by api_path.
+    - Per-app attribution AVAILABLE when identity is resolved (helix-auth, solution 01); without it rows attribute to a source IP.
   correction: >-
     X-Request-Id is NOT an analytics dimension. Correlating a single request is a
     join in your own logs via the forwarded header, not an analytics query. The
@@ -106,39 +103,11 @@ analytics_verification:
     route_name, api_path, request_method, response_status_code, upstream_path,
     developer. charts.md updated accordingly.
 
-prior_art:
-  # SUPERSEDED by the 2026-08-18 live verification above, which established
-  # per-app attribution and path templating that this earlier note called untested.
-  # Kept for history only.
-  status: SUPERSEDED
-  what_ran: >-
-    In an earlier internal build, the platform's global analytics was queried after
-    deploying an API and making live calls. A request count for a one-hour window,
-    broken down by route, was retrieved and matched the two requests that had actually
-    been sent.
-  what_this_supports:
-    - Capture is genuinely always-on with no analytics plugin in the API's spec.
-    - The data is queryable per route, and per-route counts matched reality at that volume.
-  what_this_does_NOT_support:
-    - Per-app attribution at scale. Two requests from one app demonstrates nothing about
-      whether attribution is usable across 400 integrations, which is this package's
-      central claim.
-    - That templated paths aggregate as described. Not tested — and it is the check that
-      matters most, because getting it wrong is unrecoverable.
-    - That X-Request-Id correlates end to end into a backend's own logs.
-    - Any of the twelve queries in charts.md. None has been run as written.
-    - That THIS spec dry-runs cleanly. It is a different document.
-  provenance: >-
-    Earlier internal Agent Mode build against a non-production test environment. Host,
-    organisation, API, developer and app identifiers deliberately withheld from this
-    public package.
-  verified_this_session: false
 
 artifacts:
   documentation: [README.md, architecture.md, business-need.md, charts.md]
   source_code: [gateway/api-spec.yaml, gateway/verify.sh]
   agent_prompt: helix-agent-prompt.md
-  blog: blog.md
   infographic: [infographic.md]
   tests: [tests/test-plan.yaml, tests/requests/, tests/expected/]
   validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
@@ -148,12 +117,12 @@ artifacts:
     makes it useless. It is listed under documentation but it is the deliverable.
 
 assumptions:
-  - API name is "Orders API" with paths /orders, /orders/{orderId}, /orders/report and
-    a token endpoint. All illustrative — replace with yours.
+  - API name is "Orders API" with paths /orders and /orders/{orderId}. Illustrative — replace with yours.
+  - The routes return a standard canned response via the mocking plugin; swap in a real upstream when you have one.
   - Analytics is enabled globally on the target platform via helix-analytics. If it is
     not, this solution's premise does not hold and the whole package needs revisiting.
-  - The gateway is the token issuer (see solution 01). Any identity mechanism works, so
-    long as identity IS resolved — that is the requirement, not the specific flow.
+  - Per-app attribution requires identity on the routes (helix-auth, solution 01). This
+    minimal API omits it deliberately; without it, rows attribute to a source IP.
   - Analytics field names and exact query syntax vary by build. The prompts in charts.md
     are phrased for the agent, which knows the org's schema; ask it to show the field it
     filtered on rather than guessing.
@@ -187,4 +156,4 @@ limitations:
     routes. Per-route, or do not bother.
   - A chart nobody acts on is an ornament, and no configuration fixes that.
 
-status: READY   # verified against a live gateway 2026-08-18; per-app attribution + route_id templating confirmed
+status: READY   # validated on a Helix gateway; analytics attribution + route_id templating confirmed

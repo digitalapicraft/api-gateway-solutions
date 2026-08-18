@@ -26,3 +26,7 @@ Thumbs.db
 *.log
 /tmp/
 scratch/
+
+# Not published to git — kept locally only (per maintainer decision)
+VERIFICATION.md
+solutions/*/blog.md

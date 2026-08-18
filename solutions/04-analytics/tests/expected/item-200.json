@@ -1,0 +1,7 @@
+{
+  "_case": "item-route-templated",
+  "_status": 200,
+  "_content_type": "application/json",
+  "_note": "Standard canned response for the templated route. The analytics point is not the body — it is that distinct ids collapse to ONE row by route_id. See tests/test-plan.yaml case path-templating and charts.md.",
+  "_body_example": { "orderId": "ord_1a2b3c", "status": "open" }
+}

@@ -13,20 +13,25 @@ Each entry below gives you:
   dashboard ornament.
 - **What breaks it** — the configuration mistake that makes the answer useless
 
+> **On the sample API vs. these charts.** The API shipped with this solution is
+> deliberately minimal (two routes, no auth), so charts that group by app or that need
+> quota only return useful data once you compose in identity ([solution 01](../01-oauth-jwt/))
+> and/or API Products ([solution 03](../03-api-products/)). Charts that group by route,
+> status or latency work as-is. Each chart notes what it needs.
+
 Two things are assumed throughout, and both come from
 [`gateway/api-spec.yaml`](gateway/api-spec.yaml): **identity is resolved** (so rows
 attribute to an app, not an IP) and **paths are templated** (so a route is one row).
 Where a chart needs more than that, it says so.
 
-> **✅ Verified 2026-08-18 against the live control-plane analytics API.** The
-> concrete backing for these charts: `POST /api/orgs/{orgId}/analytics/metrics/*`
+> **The concrete backing for these charts** (the control-plane analytics API): `POST /api/orgs/{orgId}/analytics/metrics/*`
 > (requests-count, response-time, sizes, rps, upstream-time) taking
 > `{startTime, endTime, filters[], dimensions[], aggregation, timeUnit}`. The
 > available **dimensions** are: `env_name`, `app_id`, `app_name`, `product_name`,
 > `api_name`, `route_id`, `route_name`, `api_path`, `request_method`,
 > `response_status_code`, `upstream_path`, `developer`. **Group route-level charts
 > by `route_id`, not `api_path`** — `route_id` collapses `/orders/{orderId}` to one
-> row (verified), `api_path` gives one row per concrete id. Note `X-Request-Id` is
+> row, `api_path` gives one row per concrete id. Note `X-Request-Id` is
 > **not** a dimension; see chart 4.
 
 > **On the exact query syntax.** The prompts below are how you ask the *agent*, and

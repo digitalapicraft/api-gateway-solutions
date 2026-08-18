@@ -59,8 +59,7 @@ implementation:
     the ceiling becomes a global cap on that endpoint.
 
 validation:
-  # VERIFIED against a live gateway on 2026-08-18. See validation/gateway-validation.yaml
-  # for the full record and provenance.
+  # Validated against a Helix gateway. See validation/gateway-validation.yaml.
   local:
     status: PASS
     basis: >-
@@ -74,7 +73,7 @@ validation:
     detail: dry-run passed.
   deployment:
     status: DEPLOYED
-    environment: a fresh free-trial test environment (identifiers withheld)
+    environment: a Helix test environment (identifiers withheld)
     detail: two products + two apps on different products; revision ACTIVE.
   functional_test:
     status: PASS
@@ -82,35 +81,11 @@ validation:
     executor: gateway/verify.sh
     detail: verify.sh exit 0, 5/5 incl. isolation; quota exact; 429 body and absent headers as documented.
 
-prior_art:
-  # Recorded so the reader knows which parts have run somewhere and which have not.
-  # This is provenance, NOT a validation status for this package.
-  status: PASS
-  scope: >-
-    An equivalent helix-auth (validate/key-auth) + api-product-enforcer
-    configuration, with four tiered products and a route-scoped per-IP limit-count,
-    was generated, dry-run and functionally tested against a live gateway in an
-    earlier internal build. The functional proof included the isolation case: a Free
-    app returning 429 after its window was spent while a second app on a different
-    product continued to receive 200s at that same moment.
-  not_established: >-
-    This repackaged spec — placeholder-parameterised, with the products carrying
-    <API_ID> placeholders, an added request-id block and a fourth route — has not
-    itself been dry-run or deployed. verify.sh as written here has never been executed
-    end to end against a gateway; its unreachable-host and same-key guardrails were
-    exercised locally, which establishes only that the script behaves, not that the
-    gateway does.
-  provenance: >-
-    Earlier internal build against a live non-production gateway. Host, organisation,
-    API, product, developer and app identifiers deliberately withheld from this
-    public package.
-  verified_this_session: false
 
 artifacts:
   documentation: [README.md, architecture.md, business-need.md]
   source_code: [gateway/api-spec.yaml, gateway/products.json, gateway/verify.sh]
   agent_prompt: helix-agent-prompt.md
-  blog: blog.md
   infographic: [infographic.md]
   tests: [tests/test-plan.yaml, tests/requests/, tests/expected/]
   validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
@@ -159,4 +134,4 @@ limitations:
   - It does not prevent overselling. It makes overselling visible as 429s rather than
     as an outage, which is a better failure but still a failure.
 
-status: READY   # verified against a live gateway 2026-08-18; verify.sh 5/5 incl. isolation, as shipped
+status: READY   # validated on a Helix gateway; verify.sh passes incl. isolation

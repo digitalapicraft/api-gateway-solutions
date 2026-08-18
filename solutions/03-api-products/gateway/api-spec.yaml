@@ -45,7 +45,7 @@
 # you sold. This is the single most common way this solution is deployed wrong,
 # and it is invisible from the route config.
 #
-# VERIFIED 2026-08-18 against a live gateway: verify.sh passes 5/5, including the
+# Validated against a Helix gateway: verify.sh passes, including the
 # isolation case. A Free app at 5/min returned exactly five 200s then 429 with
 # {"error":"quota exceeded"} (no Retry-After, no X-RateLimit-* headers), while a
 # second app on a different product kept getting 200s in the same window. Note the

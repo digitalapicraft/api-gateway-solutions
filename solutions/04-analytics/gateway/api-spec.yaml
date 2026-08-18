@@ -3,56 +3,34 @@
 # READ THIS FIRST — IT IS THE POINT OF THE WHOLE SOLUTION.
 #
 #   Analytics is enabled GLOBALLY on the platform via helix-analytics. Every
-#   request through every API is already being captured. YOU DO NOT ADD AN
-#   ANALYTICS PLUGIN, and there is deliberately no helix-analytics block anywhere
-#   in this document.
+#   request through every API is already captured. YOU DO NOT ADD AN ANALYTICS
+#   PLUGIN, and there is deliberately no helix-analytics block anywhere in this
+#   document. If an agent proposes one, that is the thing to correct.
 #
-#   If you find yourself adding one — or an agent proposes one — that is the thing
-#   to correct. It is not how observability is turned on here.
+# WHY THIS API IS SO SIMPLE.
 #
-#   VERIFIED 2026-08-18 against a live gateway: with NO analytics plugin in this
-#   spec, every call was captured and attributable per app, developer and product.
-#   Path templating confirmed — see the /orders/{orderId} note below.
+#   This solution is about QUERYING analytics, not about building a rich API. So
+#   the API is deliberately minimal: two routes that return a standard canned
+#   response via the `mocking` plugin, and nothing else on the routes. It exists
+#   only to generate traffic you can then slice in the analytics tool. Keep it
+#   this plain — do not bolt auth, quota or transforms onto it here. Those live in
+#   solutions 01 and 03, and you compose them when you actually need them.
 #
-# SO WHAT IS THIS FILE FOR?
+#   The one modelling decision that matters for analytics is PATH TEMPLATING:
+#   /orders/{orderId} is declared as a path PARAMETER, so every order id collapses
+#   into ONE route in a per-route breakdown. Declared as literal paths you would
+#   get one row per order, and route-level charts become useless. Group route-level
+#   analytics by the `route_id` dimension (a template collapses to one row there),
+#   not by `api_path` (which is the concrete path).
 #
-#   Analytics is always capturing. Whether it can answer a USEFUL question depends
-#   on three configuration decisions made on the request path, and those are what
-#   this spec demonstrates:
+#   Per-app attribution (which app/developer called) needs identity to be resolved
+#   on the route — that is solution 01's helix-auth. It is intentionally NOT here,
+#   to keep this API simple. Without it, analytics rows attribute to a source IP
+#   rather than an app. Add helix-auth (see solution 01) when you need per-app
+#   charts; the analytics side then attributes automatically.
 #
-#     1. IDENTITY IS RESOLVED (helix-auth)
-#        Without it, every row is attributed to an IP address. "Which of our 400
-#        integrations caused the 3am pager?" is unanswerable from IPs — partners
-#        share NAT gateways, rotate egress addresses, and run in clouds. With
-#        identity resolved, every row carries the calling app and developer.
-#        This single decision is the difference between analytics you query and
-#        analytics you scroll.
-#
-#     2. PATHS ARE TEMPLATED (the OpenAPI paths below)
-#        /orders/{orderId} is ONE row in a per-route breakdown. /orders/ord_1a2b3c
-#        as a literal path is one row PER ORDER, so your top-routes chart becomes a
-#        list of individual customer orders and per-route latency is meaningless.
-#        Templating is an OpenAPI modelling decision with direct analytics
-#        consequences, which is why it belongs in this package at all.
-#
-#     3. A CORRELATION ID EXISTS (request-id)
-#        Aggregates tell you WHAT happened. A correlation id is how you get from a
-#        row in a chart to the specific request, and from there to your backend's
-#        own logs for the same call. Without it, "show me that one" has no answer.
-#
-#   Everything else in this file exists to make those three legible.
-#
-# WHAT IS *NOT* HERE, AND WHY
-#   - No helix-analytics block. It is global. See above.
-#   - No api-product-enforcer. Quota consumption is one of the most valuable things
-#     to chart, but the enforcement belongs to solution 03 — compose them and the
-#     quota charts in charts.md start working.
-#
-# THE SIGNING SECRET IS A LITERAL — replace <YOUR_JWT_SIGNING_SECRET> with a real
-# secret before deploy. VERIFIED 2026-08-18: this build does not resolve <ENV:...>
-# syntax; the string is used verbatim as the HMAC key. See solution 01. App
-# credentials are provisioned on the credential by the control plane. Keep the
-# filled-in spec out of version control.
+# UPSTREAM: with the mocking plugin the routes never proxy, but the platform still
+# wants an upstream bound to the service. Bind any reachable placeholder.
 
 openapi: 3.0.3
 
@@ -60,174 +38,73 @@ info:
   title: Orders API
   version: 1.0.0
   description: >-
-    Partner-facing order API, configured so that the platform's always-on analytics
-    can answer questions worth asking: every request is attributed to a named app,
-    grouped under a templated route, and carries a correlation id.
+    A deliberately minimal API used to demonstrate the platform's always-on
+    analytics. Two routes return a standard response; every call is captured and
+    can be sliced by app, route, status and latency in the analytics tool.
 
 paths:
-  /oauth/token:
-    post:
-      summary: Issue an OAuth 2.0 access token (client credentials grant)
-      description: >-
-        Exchange an app's client credentials for a short-lived JWT. Deliberately not
-        behind validation — a caller here has no token yet. See solution 01.
-
-        Worth knowing for analytics: token requests are captured too. An app
-        requesting a fresh token more than once a minute is not caching, and it is
-        quietly making this your busiest route. That query is in charts.md.
-      responses:
-        '200':
-          description: Access token issued
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  access_token: { type: string }
-                  token_type:   { type: string, example: Bearer }
-                  expires_in:   { type: integer }
-        '401': { description: Unknown client_id, or client_secret does not match }
-      x-helix-gateway:
-        plugins:
-          helix-auth:
-            mode: generate
-            token_ttl: 900
-            signing_secret: "<YOUR_JWT_SIGNING_SECRET>"
-
   /orders:
     get:
       summary: List orders
       description: >-
-        A collection route with no path parameter, so it is naturally one row in a
-        per-route breakdown.
-      parameters:
-        - { name: status, in: query, schema: { type: string, enum: [open, shipped, cancelled] } }
-        - { name: limit,  in: query, schema: { type: integer, default: 25, maximum: 100 } }
+        A collection route with no path parameter — naturally one row in a
+        per-route breakdown. Returns a standard canned response.
       responses:
-        '200': { description: Array of orders }
-        '401': { description: Missing, malformed, expired or badly signed Bearer token }
+        '200':
+          description: Array of orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: object }
       x-helix-gateway:
         plugins:
-          # IDENTITY — the decision that makes analytics answerable.
-          # Every captured row for this route will carry the calling app and
-          # developer rather than a source IP address.
-          helix-auth:
-            mode: validate
-            validate_auth_type: jwt-auth
-            signing_secret: "<YOUR_JWT_SIGNING_SECRET>"
+          # Return a standard response without a backend. Nothing else on the
+          # route — this API is for generating analytics traffic, not for policy.
+          mocking:
+            content_type: application/json
+            response_status: 200
+            response_example: '[{"orderId":"ord_1a2b3c","status":"open"},{"orderId":"ord_4d5e6f","status":"shipped"}]'
 
-    post:
-      summary: Create an order
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [customerRef, lines]
-              properties:
-                customerRef: { type: string }
-                lines:
-                  type: array
-                  items:
-                    type: object
-                    required: [sku, quantity]
-                    properties:
-                      sku:      { type: string }
-                      quantity: { type: integer, minimum: 1 }
-      responses:
-        '201': { description: Created }
-        '400': { description: Invalid payload }
-        '401': { description: Missing or invalid Bearer token }
-      x-helix-gateway:
-        plugins:
-          helix-auth:
-            mode: validate
-            validate_auth_type: jwt-auth
-            signing_secret: "<YOUR_JWT_SIGNING_SECRET>"
-
-  # TEMPLATED PATH — this is the analytics-relevant modelling decision.
-  #
-  # Declared as /orders/{orderId}, every call to every order id aggregates into ONE
-  # row: one latency distribution, one error rate, one call count you can trend.
-  #
-  # Declared as literal paths (or generated per order), you would get one row per
-  # order id. The top-routes chart becomes a list of individual customer orders,
-  # per-route p99 becomes meaningless because each row has one sample, and the
-  # cardinality grows with your order volume forever.
-  #
-  # Nothing warns you about this. The API works either way; only the analytics is
-  # ruined. VERIFIED 2026-08-18: five requests to five distinct order ids aggregate
-  # to ONE row when grouped by the route_id analytics dimension, but FIVE rows when
-  # grouped by api_path. Group your route-level charts by route_id, not api_path.
+  # TEMPLATED PATH — the one analytics-relevant modelling decision.
+  # Declared as /orders/{orderId}, every order id aggregates into ONE row when you
+  # group by route_id. Declared as a literal path, you would get one row per order.
   /orders/{orderId}:
     get:
       summary: Get an order
+      description: Returns a standard canned response. The path parameter is what makes this one templated route rather than one row per id.
       parameters:
         - { name: orderId, in: path, required: true, schema: { type: string } }
       responses:
-        '200': { description: Order }
-        '401': { description: Missing or invalid Bearer token }
-        '404': { description: Not found }
+        '200':
+          description: Order
+          content:
+            application/json:
+              schema: { type: object }
       x-helix-gateway:
         plugins:
-          helix-auth:
-            mode: validate
-            validate_auth_type: jwt-auth
-            signing_secret: "<YOUR_JWT_SIGNING_SECRET>"
-
-  /orders/report:
-    post:
-      summary: Generate an order report
-      description: >-
-        Deliberately included as a SLOW route. Kept separate from the fast read
-        routes so that a single API-wide latency average does not blend a 30-second
-        report into a 40ms lookup and tell you nothing about either.
-
-        If one route's latency profile is wildly different from its neighbours, it
-        wants its own row. That is an analytics argument for route design.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [from, to]
-              properties:
-                from: { type: string, format: date }
-                to:   { type: string, format: date }
-      responses:
-        '202': { description: Report accepted for generation }
-        '401': { description: Missing or invalid Bearer token }
-        '504': { description: Report generation exceeded the gateway timeout }
-      x-helix-gateway:
-        plugins:
-          helix-auth:
-            mode: validate
-            validate_auth_type: jwt-auth
-            signing_secret: "<YOUR_JWT_SIGNING_SECRET>"
+          mocking:
+            content_type: application/json
+            response_status: 200
+            response_example: '{"orderId":"ord_1a2b3c","status":"open"}'
 
 # API-WIDE POLICY.
 #
-# NOTE THE ABSENCE. There is no helix-analytics block here and there should not be
-# one. Analytics is enabled globally on the platform; every request above is
-# already captured. The two plugins below are what make that capture USEFUL.
+# NOTE THE ABSENCE. There is no helix-analytics block and there should not be one:
+# analytics is enabled globally and every route above is already captured. The only
+# API-wide plugins are a correlation id and CORS — both light, neither analytics.
 x-helix-gateway:
   plugins:
-    # CORRELATION. The bridge between an aggregate and a single request.
-    #
-    # A chart tells you 3% of calls from one app failed yesterday. X-Request-Id is
-    # how you get from that row to the specific request, and — because the header
-    # is forwarded upstream — to the matching entry in your BACKEND's own logs.
-    #
-    # Ask your teams to log it. An id the gateway generates and nobody else records
-    # correlates the gateway with itself, which is half a feature.
+    # Correlation id, forwarded upstream, so a row in a chart can be joined to a
+    # single request in your backend's own logs. (X-Request-Id is a correlation
+    # tool, not an analytics dimension — you filter analytics down to a slice, then
+    # match the id in your logs.)
     request-id:
       algorithm: uuid
       header_name: X-Request-Id
 
     cors:
       allow_origins: "*"
-      allow_methods: "GET,POST,OPTIONS"
-      allow_headers: "authorization,content-type"
+      allow_methods: "GET,OPTIONS"
+      allow_headers: "content-type"
       allow_credential: false

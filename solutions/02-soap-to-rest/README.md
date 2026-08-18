@@ -3,12 +3,10 @@
 **Partners send JSON. A twenty-year-old system answers. Neither knows about the
 other.**
 
-> **✅ Verified end to end against a live SOAP backend on 2026-08-18 — but only
-> after three fixes.** The originally-shipped config did **not** work: the
-> `xml-to-json` transform is not "bidirectional by default", and a `Content-Type`
-> override defeated it. This page reflects the corrected, working config. The
-> details are in [VERIFICATION.md](../../VERIFICATION.md); the short version is in
-> *The one thing everybody gets wrong*, below.
+> **Validated end to end against a real SOAP backend.** The subtlety that matters:
+> `xml-to-json` is not "bidirectional by default", and a `Content-Type` override on
+> `proxy-rewrite` defeats it — this page reflects the working config. The short
+> version is in *The one thing everybody gets wrong*, below.
 
 | | |
 |---|---|
@@ -17,7 +15,7 @@ other.**
 | **Needs** | A SOAP endpoint reachable from the gateway · a real signing-secret value for the spec (literal — see solution 01) · one developer + app · `xml-to-json` present in your org |
 | **Plugins** | `xml-to-json` (`transform_request` + `transform_response`) · `proxy-rewrite` · `helix-auth` (generate + validate) · `request-id` · `cors` |
 | **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Infographic](infographic.md) · ✅ [Blog](blog.md) · ✅ [Manifest](solution.yaml) |
+| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Infographic](infographic.md) · ✅ [Manifest](solution.yaml) |
 
 ---
 
@@ -408,15 +406,15 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 
 ## Validation status
 
-**✅ Verified end to end against a live SOAP backend on 2026-08-18 — after three
-fixes, now applied.** The originally-shipped config failed; the corrected config
-here passes `verify.sh` 5/5, including the case-4 no-XML-markup proof.
+**Validated end to end against a real SOAP backend.** The configuration here
+passes `verify.sh` including the case-4 no-XML-markup proof (JSON→XML→backend→XML→JSON
+round-trip).
 
 | Stage | Status | Provenance |
 |---|---|---|
 | Configuration generated | **YES** | [`gateway/api-spec.yaml`](gateway/api-spec.yaml) (corrected) |
 | Local validation | **PASS** | [`validation/local-validation.yaml`](validation/local-validation.yaml) |
-| Gateway dry-run | **PASS** | Live gateway, 2026-08-18. |
+| Gateway dry-run | **PASS** | Non-destructive validation on a Helix gateway. |
 | Gateway deployed | **DEPLOYED** | Deployed against a real SOAP backend; the ACTIVE-revision 409 and clone/undeploy flow were exercised for real. |
 | Functional tests | **PASS (5/5)** | `gateway/verify.sh` exit 0 — request JSON→XML and response XML→JSON both proven round-trip. |
 
@@ -428,8 +426,7 @@ Overall: **READY (post-fix).** What the run corrected, and now works:
 - `verify.sh` now sends `Accept: application/json` — the response transform is
   content-negotiated and did nothing without it.
 
-Full account: [`validation/gateway-validation.yaml`](validation/gateway-validation.yaml)
-and [`../../VERIFICATION.md`](../../VERIFICATION.md).
+Full account: [`validation/gateway-validation.yaml`](validation/gateway-validation.yaml).
 
 ## Related solutions
 

@@ -18,29 +18,24 @@ Read [AGENT-GUIDE.md](../../AGENT-GUIDE.md) § 7 first if you haven't.
 ## Part A — shape the request path
 
 ```text
-I want the platform's analytics to be able to answer per-app and per-route questions
-about my API. Analytics is already enabled globally, so do NOT add an analytics plugin
-— there is nothing to turn on. Instead, make sure the request path is shaped so the
-data being captured is actually useful.
+I want the platform's analytics to be able to answer per-route questions about my API,
+from a deliberately minimal API. Analytics is already enabled globally, so do NOT add
+an analytics plugin — there is nothing to turn on. Instead, keep the API simple and
+make sure the request path is shaped so the captured data is useful.
 
 CONTEXT
 - API: <<Orders API>>   (find it with list_apis; if more than one matches, ask me
   before changing anything)
 - Environment: <<staging>>
-- JWT_SIGNING_SECRET already exists on <<staging>>. If it does not, tell me and stop.
 
 WHAT I WANT
 
-1. IDENTITY ON EVERY ROUTE.
-   Confirm every route resolves the calling app, so analytics rows attribute to an app
-   and developer rather than to a source IP address. Use helix-auth validate.
-
-   Then tell me explicitly: is there any route that is currently unauthenticated? I
-   need to know, because rows captured for those routes will never be attributable to
-   anyone and no later query can recover it.
-
-   (The token endpoint is expected to be unauthenticated — that one is fine and by
-   design.)
+1. KEEP THE API MINIMAL.
+   This API exists to generate analytics traffic, so keep the routes simple — a
+   standard response via the mocking plugin, and nothing else on them. Do NOT add
+   auth, quota or transforms here. (For per-APP attribution rather than per-IP, I add
+   identity later by composing solution 01 — tell me if any route currently resolves
+   identity, but don't add it as part of this.)
 
 2. REVIEW MY PATHS FOR TEMPLATING.
    Go through the OpenAPI paths and find any route where a path segment is really an

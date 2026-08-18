@@ -14,10 +14,10 @@ level of outcomes matters more here than anywhere else in this library, because
 `xml-to-json`'s fields genuinely vary by build and a model asked for specific
 fields will invent them.
 
-> **✅ Verified 2026-08-18.** The constraints below were updated after a live run:
-> `transform_request` defaults to **false**, the response transform is
-> content-negotiated, and a `Content-Type` override in `proxy-rewrite` defeats the
-> request direction. See [VERIFICATION.md](../../VERIFICATION.md).
+> **On this build:** `transform_request` defaults to **false**, the response
+> transform is content-negotiated (`Accept: application/json`), and a `Content-Type`
+> override in `proxy-rewrite` defeats the request direction. The constraints below
+> account for all three.
 
 ---
 
@@ -120,7 +120,7 @@ Now deploy a NEW REVISION that puts OAuth 2.0 in front of this API.
    that this is the order you have produced.
 
 3. Both must use the SAME signing secret. On this build signing_secret is a
-   literal HMAC key — there is no <ENV:...> resolution — so use one real, secret,
+   literal HMAC key on this build — there is no <ENV:...> resolution — so use one real, secret,
    high-entropy value in both places. Never commit the filled-in spec.
 
 CONSTRAINTS

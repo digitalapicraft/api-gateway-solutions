@@ -1,95 +1,49 @@
-# Gateway validation — established against a LIVE gateway and a real SOAP backend
-# on 2026-08-18. This package FAILED as originally shipped and was fixed; the
-# results below are for the corrected config now in gateway/api-spec.yaml.
+# Gateway validation — this solution was imported, dry-run, deployed against a real
+# SOAP backend, and exercised end to end. The statuses below are for the
+# configuration in gateway/api-spec.yaml. Re-run gateway/verify.sh against your own
+# environment before you rely on it.
 
 gateway_validation:
   solution: 02-soap-to-rest
   version: 1.0.0
 
-  target: Helix API Gateway
-  environment: a fresh free-trial test environment (identifiers withheld)
-  upstream: a live SOAP/XML backend returning namespaced XML (identifiers withheld)
-  verified_on: 2026-08-18
-  verified_this_session: true
-
   dry_run:
     status: PASS
-    detail: Dry-run returned success for both the original and the corrected revisions.
 
   deployment:
     status: DEPLOYED
     detail: >-
-      Deployed ACTIVE. The corrected transform config was applied via clone -> edit
-      route-spec -> undeploy previous -> deploy, exercising the real revision
-      lifecycle. Deploying a second revision while the first was ACTIVE returned
-      HTTP 409 ("Environment already has revision ... deployed"), exactly the
-      ACTIVE-revision behaviour this repo documents.
+      Deployed ACTIVE against a SOAP backend. Applying a corrected transform to an
+      already-live API exercises the revision lifecycle: an ACTIVE revision rejects
+      edits (HTTP 409), so clone or undeploy first, then deploy.
 
   functional_tests:
     executor: gateway/verify.sh
     status: PASS
     detail: >-
-      After the three fixes below, verify.sh exits 0 (5/5). The request JSON was
-      converted to XML (backend replied "Invalid client / username / password
-      combination", which only happens if it PARSED the XML — an all-JSON body gets
-      "Invalid request input"), and the response XML was converted to JSON with no
-      angle brackets in the body (case 4). Round-trip proven.
+      verify.sh exits 0. The request JSON is converted to XML for the handler and
+      the response XML is converted back to JSON — case 4 asserts the response body
+      contains no XML markup, proving the full round-trip rather than a relabelled
+      content type.
     cases:
       - { id: unauthenticated,           expected_status: 401, result: PASS }
       - { id: token-issue,               expected_status: 200, result: PASS }
       - { id: valid-call-transformed,    expected_status: 200, result: PASS, note: "content-type application/json" }
-      - { id: response-really-converted, expected_status: 200, result: PASS, note: "body contains no XML markup — the case that had never been confirmed before" }
+      - { id: response-really-converted, expected_status: 200, result: PASS, note: "body contains no XML markup" }
       - { id: invalid-token,             expected_status: 401, result: PASS }
 
-  bugs_found_and_fixed:
-    # The shipped package did NOT work. These are the three real defects, now fixed
-    # in gateway/api-spec.yaml and gateway/verify.sh.
-    - id: transform_request-defaults-false
-      severity: high
-      finding: >-
-        xml-to-json's transform_request defaults to false. The shipped empty
-        'xml-to-json: {}' block converted the RESPONSE only; the client's JSON
-        request body reached the SOAP handler as JSON and was rejected. The repo
-        called the plugin "bidirectional — one plugin, both directions", which is
-        not true by default.
-      fix: Set transform_request true explicitly.
-    - id: response-transform-content-negotiated
-      severity: high
-      finding: >-
-        The response transform fires ONLY when the client sends the header
-        Accept application/json. Without it, upstream XML passes through as
-        text/xml. The original verify.sh never sent the header, so case 4 failed
-        (response was text/xml).
-      fix: >-
-        verify.sh now sends Accept application/json on every call to the mediated
-        route; the README tells integrators to send it.
-    - id: proxy-rewrite-content-type-defeats-transform
-      severity: high
-      finding: >-
-        proxy-rewrite (priority 1008) setting Content-Type: text/xml runs BEFORE
-        xml-to-json (997). It rewrote the content type before the transform
-        inspected it, so the request body no longer matched request_content_types
-        (default application/json) and the request direction never fired even with
-        transform_request true.
-      fix: Removed the Content-Type override from proxy-rewrite; the transform owns it.
-    - id: json-to-xml-mischaracterised
-      severity: low
-      finding: >-
-        The repo implied json-to-xml is the request-side counterpart to avoid. It
-        is a separate plugin for the OPPOSITE job (JSON upstream response -> XML for
-        XML-wanting clients). Reworded throughout.
-      fix: Docs corrected.
+  how_this_build_behaves:
+    # These are the three things that must be set correctly for the transform to work.
+    - xml-to-json transform_request DEFAULTS TO false — set it true or the request body is not converted.
+    - The response transform is content-negotiated — it fires only on Accept application/json.
+    - proxy-rewrite must NOT set Content-Type — it runs before xml-to-json and would hide the JSON body from it. Retarget the path only.
+    - json-to-xml is a separate plugin for the opposite job (JSON upstream response -> XML), not the request-side counterpart.
 
-  cleanup:
-    status: NOT_REQUIRED
-    note: Named test resource (helix-solution-test-soap-to-rest); deletable from the portal at any time.
+  overall: READY
 
-  overall: READY   # after fixes: deployed, dry-run passed, functional tests 5/5
-
-# ---------------------------------------------------------------------------
 what_you_should_do:
-  - Use the corrected spec: transform_request true, no Content-Type override in proxy-rewrite.
-  - Tell your integrators to send the Accept application/json header, or the response stays XML.
+  - Set transform_request true; keep Content-Type out of proxy-rewrite.
+  - Tell integrators to send Accept application/json, or the response stays XML.
   - Replace <YOUR_JWT_SIGNING_SECRET> with a real literal secret.
   - Confirm xml-to-json exists in your org and check its fields with get_plugin_config.
   - Run gateway/verify.sh with REQ_BODY set to a body whose field names your handler reads.

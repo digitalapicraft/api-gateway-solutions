@@ -16,7 +16,7 @@ GATEWAY DRY-RUN → TESTS → RESULTS → DOCUMENTATION
 ```
 
 **The gateway configuration is the source of truth.** The README, the
-architecture doc, the agent prompt, the blog post and the infographic all
+architecture doc, the agent prompt and the infographic all
 describe the solution that was actually generated and validated — never an
 idealised one. If you find yourself editing the spec so it matches something you
 already wrote, stop and re-derive the writing instead.
@@ -33,7 +33,6 @@ solutions/<NN>-<slug>/
 ├── business-need.md        required
 ├── architecture.md         required
 ├── helix-agent-prompt.md   required
-├── blog.md                 required
 ├── infographic.md          required
 ├── gateway/
 │   ├── api-spec.yaml       required — the importable source of truth
@@ -122,7 +121,7 @@ Get these right or the package is confidently misleading:
   `consumer_name`; `helix-auth` `generate` for tokens the gateway issues, and
   `validate` with `validate_auth_type: jwt-auth` for external-IdP tokens.
   `key-auth`/`jwt-auth` are `validate_auth_type` values of `helix-auth`, **not**
-  standalone plugins (verified against the live build).
+  standalone plugins on this build.
 - **Secrets are literals, not references.** This build does not resolve
   `<ENV:...>` — a `signing_secret` is used verbatim. Use a `<YOUR_...>`-style
   placeholder that a contributor must replace, and never commit a real one. Do not
@@ -178,7 +177,7 @@ A solution is mergeable when all of these hold:
 - [ ] Tests defined: at least one positive, one negative, one boundary, and one failure case where relevant
 - [ ] `verify.sh` present, and its exit-0 condition described in the README
 - [ ] No secrets, hostnames or internal identifiers
-- [ ] Agent prompt, blog, infographic spec and README present
+- [ ] Agent prompt, infographic spec and README present
 - [ ] Limitations stated
 - [ ] Validation status reported accurately, with provenance
 - [ ] `solution.yaml` version matches every artifact in the package

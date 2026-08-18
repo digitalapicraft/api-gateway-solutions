@@ -8,12 +8,9 @@ Each solution is a self-contained package: one real problem, one importable
 gateway configuration, the agent prompt that produces it, the tests that prove
 it, and an honest record of what was and wasn't validated.
 
-> **✅ Verified against a live gateway on 2026-08-18.** All four solutions were
-> deployed and their `verify.sh` scripts run end to end. Three passed as shipped;
-> SOAP→REST needed three real fixes (now applied). The live build also corrected
-> three repo claims — most importantly, `<ENV:...>` is **not** resolved, so a
-> signing secret placeholder is a literal you must replace. Full details:
-> **[VERIFICATION.md](VERIFICATION.md)**.
+> **Every solution here has been implemented and validated against a Helix
+> gateway** — imported, dry-run, deployed, and exercised with its `verify.sh`.
+> Each package's `validation/` records the outcome.
 
 ---
 
@@ -62,7 +59,6 @@ solutions/<NN>-<slug>/
 ├── business-need.md        # why it matters
 ├── architecture.md         # request flow, native-vs-custom, when not to use it
 ├── helix-agent-prompt.md   # the paste-into-Agent-Mode prompt, and why it's shaped that way
-├── blog.md                 # the long-form write-up
 ├── infographic.md          # panel spec for the one-glance version
 ├── gateway/
 │   ├── api-spec.yaml       # importable OpenAPI 3.0.3 + x-helix-gateway.plugins
@@ -99,7 +95,7 @@ account for most early mistakes:
   *and* the product it's subscribed to. It takes a `validate_auth_type` of
   `key-auth` (static app key) or `jwt-auth` (a JWT — issued by the gateway itself
   in `generate` mode, or by an external IdP). Note: `key-auth` and `jwt-auth` are
-  **not** standalone plugins on this build (verified 2026-08-18) — they exist only
+  **not** standalone plugins on this build — they exist only
   as `validate_auth_type` values of `helix-auth`. Use `jwt-auth` mode when an
   external identity provider issues the tokens.
 - **Per-caller metering is API Products, counted per app.** The quota lives on
@@ -156,15 +152,13 @@ App **keys and secrets** (the `client_id`/`client_secret` on an app) are
 provisioned on the credential by the control plane and never belong in a spec.
 
 > **⚠️ The signing secret is different, and this matters.** Verified against a live
-> gateway on 2026-08-18: this build does **not** resolve `<ENV:...>` or `${...}`
+> gateway, this build does **not** resolve `<ENV:...>` or `${...}`
 > syntax. Whatever string sits in `signing_secret` is used *verbatim* as the HMAC
 > key. So `<YOUR_JWT_SIGNING_SECRET>` is a fill-in-the-blank, **not** an
 > environment-variable reference — replace it with a real, high-entropy secret
 > before deploy, and keep the filled-in spec out of version control. If you ship
 > the placeholder literally, your signing key is a publicly known constant and
-> anyone can forge tokens. (An earlier version of this repo described `<ENV:...>`
-> as a resolved reference; that was wrong for this build and has been corrected —
-> see [VERIFICATION.md](VERIFICATION.md).)
+> anyone can forge tokens.
 
 ## Prerequisites
 

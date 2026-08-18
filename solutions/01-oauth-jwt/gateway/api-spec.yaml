@@ -5,7 +5,7 @@
 # into Agent Mode), bind your upstream, replace <YOUR_JWT_SIGNING_SECRET> with a
 # real secret value (see the SIGNING SECRET note below), then deploy the revision.
 #
-# VERIFIED 2026-08-18 against a live gateway: verify.sh passes 6/6 as written.
+# This configuration has been validated against a Helix gateway.
 #
 # WHAT THIS DOES
 #   POST /oauth/token  — the gateway verifies the app's client_id/client_secret
@@ -28,7 +28,7 @@
 # EXTERNAL ISSUER? Do not use this file as-is. If Keycloak / Auth0 / Entra ID /
 # Okta issues the tokens, the gateway is a verifier only: drop the /oauth/token
 # route and keep helix-auth in validate mode with validate_auth_type jwt-auth,
-# pointed at the issuer's key material. NOTE (verified 2026-08-18): jwt-auth is
+# pointed at the issuer's key material. NOTE: jwt-auth is
 # NOT a standalone plugin on this build — it is only a value of helix-auth's
 # validate_auth_type. helix-auth generate is for when the GATEWAY is the issuer.
 # See architecture.md § Who issues the token.
@@ -37,7 +37,7 @@
 # paths. Replace <UPSTREAM_URL> wherever your control plane asks for it.
 #
 # THE SIGNING SECRET IS A LITERAL — replace it, and never ship the placeholder.
-# VERIFIED 2026-08-18: this build does NOT resolve <ENV:...> or ${...} syntax.
+# On this build the gateway does NOT resolve <ENV:...> or ${...} syntax.
 # Whatever string sits in signing_secret is used verbatim as the HMAC key. So
 # <YOUR_JWT_SIGNING_SECRET> is a fill-in-the-blank, not an environment-variable
 # reference — replace it with a real, secret, high-entropy value before deploy.

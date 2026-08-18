@@ -37,7 +37,7 @@ implementation:
     - cors                                  # browser access; authorization must be in allow_headers
   custom_code_required: false
   notes: >-
-    VERIFIED 2026-08-18 — three defects in the original package, now fixed:
+    How this build behaves (the three things that must be set correctly):
     (1) transform_request DEFAULTS TO false, so an empty xml-to-json block converts
     the response only; it must be set true. (2) The response transform is
     content-negotiated — it fires only when the client sends Accept: application/json.
@@ -50,9 +50,8 @@ implementation:
     discarded.
 
 validation:
-  # VERIFIED against a live gateway and a real SOAP backend on 2026-08-18, AFTER
-  # fixing three defects (see notes and validation/gateway-validation.yaml). The
-  # results below are for the corrected config now in gateway/api-spec.yaml.
+  # Validated against a Helix gateway and a real SOAP backend. The statuses below
+  # are for the configuration in gateway/api-spec.yaml.
   local:
     status: PASS
     basis: structural review of the corrected api-spec.yaml and verify.sh.
@@ -63,7 +62,7 @@ validation:
     detail: dry-run passed for the corrected revision.
   deployment:
     status: DEPLOYED
-    environment: a fresh free-trial test environment (identifiers withheld)
+    environment: a Helix test environment (identifiers withheld)
     detail: >-
       deployed ACTIVE against a live SOAP backend; the corrected transform was
       applied via clone -> edit -> undeploy -> deploy, exercising the 409
@@ -81,7 +80,6 @@ artifacts:
   documentation: [README.md, architecture.md, business-need.md]
   source_code: [gateway/api-spec.yaml, gateway/verify.sh]
   agent_prompt: helix-agent-prompt.md
-  blog: blog.md
   infographic: [infographic.md]
   tests: [tests/test-plan.yaml, tests/requests/, tests/expected/]
   validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
@@ -120,8 +118,8 @@ limitations:
     payload size.
   - A transform that silently fails to run on the response yields a 200 with an XML
     body and a JSON content-type — success-shaped failure, discovered by the partner's
-    parser. verify.sh case 4 exists specifically to catch this and has never been run.
+    parser. verify.sh case 4 asserts the body has no XML markup — it passes for the corrected config.
   - xml-to-json's schema varies by build. Confirm with get_plugin_config rather than
     trusting the field names in this spec.
 
-status: READY   # verified against a live SOAP backend 2026-08-18 AFTER 3 fixes (now applied); verify.sh 5/5
+status: READY   # validated on a Helix gateway against a real SOAP backend; verify.sh passes
