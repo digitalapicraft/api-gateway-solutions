@@ -69,7 +69,7 @@ These five statuses mean five different things:
 
 Rules:
 
-- **Never write "works on Helix"** unless a gateway validated or executed it.
+- **Never write "works on the gateway"** unless a gateway validated or executed it.
 - **Never record a dry-run, deployment or test result you didn't obtain from a
   real gateway.** Not an inference, not a strong expectation.
 - **If you didn't run it in the change you're submitting, say so.** Every status
