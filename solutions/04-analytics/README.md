@@ -330,13 +330,13 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 
 ## Validation status
 
-**Validated against a Helix gateway — analytics attribution and path-templating confirmed through the analytics API.**
+**Validated against a gateway — analytics attribution and path-templating confirmed through the analytics API.**
 
 | Stage | Status | Provenance |
 |---|---|---|
 | Configuration generated | **YES** | [`gateway/api-spec.yaml`](gateway/api-spec.yaml) — no analytics plugin, by design |
 | Local validation | **PASS** | [`validation/local-validation.yaml`](validation/local-validation.yaml) |
-| Gateway dry-run | **PASS** | Non-destructive validation on a Helix gateway. |
+| Gateway dry-run | **PASS** | Non-destructive validation on a gateway. |
 | Gateway deployed | **DEPLOYED** | Four routes ACTIVE, including the templated `/orders/{orderId}`. |
 | Functional tests | **PASS** | `gateway/verify.sh` seeded a labelled pattern; identity and correlation id confirmed. |
 | Analytics verified | **VERIFIED** | Queried the control-plane analytics API — see below. |

@@ -427,13 +427,13 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 
 ## Validation status
 
-**Validated against a Helix gateway — imported, dry-run, deployed, and passed `verify.sh` including the isolation check.**
+**Validated against a gateway — imported, dry-run, deployed, and passed `verify.sh` including the isolation check.**
 
 | Stage | Status | Provenance |
 |---|---|---|
 | Configuration generated | **YES** | [`gateway/api-spec.yaml`](gateway/api-spec.yaml), [`gateway/products.json`](gateway/products.json) |
 | Local validation | **PASS** | [`validation/local-validation.yaml`](validation/local-validation.yaml) |
-| Gateway dry-run | **PASS** | Non-destructive validation on a Helix gateway. |
+| Gateway dry-run | **PASS** | Non-destructive validation on a gateway. |
 | Gateway deployed | **DEPLOYED** | Two products, two apps on different products, ACTIVE. |
 | Functional tests | **PASS (5/5)** | `gateway/verify.sh` exit 0 — **including isolation** (case 5). |
 

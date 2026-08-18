@@ -1,6 +1,6 @@
 # Helix Solutions
 
-A public library of **solved API problems** for the Helix API Gateway — built the
+A public library of **solved API problems** for the API gateway — built the
 way we expect you to build them: by describing the outcome to the **Helix Agent**
 and letting it generate, validate and deploy the configuration.
 

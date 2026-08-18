@@ -65,7 +65,7 @@ implementation:
     latency distribution describes neither while looking authoritative.
 
 validation:
-  # Validated against a Helix gateway, including analytics queried via the control-plane
+  # Validated against a gateway, including analytics queried via the control-plane
   # API. See validation/gateway-validation.yaml.
   local:
     status: PASS
@@ -156,4 +156,4 @@ limitations:
     routes. Per-route, or do not bother.
   - A chart nobody acts on is an ornament, and no configuration fixes that.
 
-status: READY   # validated on a Helix gateway; analytics attribution + route_id templating confirmed
+status: READY   # validated on a gateway; analytics attribution + route_id templating confirmed

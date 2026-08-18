@@ -46,7 +46,7 @@ implementation:
     validate route; nothing in either plugin block hints that the value is shared.
 
 validation:
-  # Validated against a Helix gateway. See validation/gateway-validation.yaml.
+  # Validated against a gateway. See validation/gateway-validation.yaml.
   local:
     status: PASS
     basis: structural review of api-spec.yaml and verify.sh — syntax, schema fields, plugin scoping, secret handling, test-to-implementation mapping
@@ -109,4 +109,4 @@ limitations:
   - helix-auth's exact schema varies by build. Confirm with get_plugin_config before
     deploying rather than trusting the field names in this spec.
 
-status: READY   # validated on a Helix gateway; verify.sh passes 6/6
+status: READY   # validated on a gateway; verify.sh passes 6/6

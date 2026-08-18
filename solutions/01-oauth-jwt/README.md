@@ -360,7 +360,7 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 
 ## Validation status
 
-**Validated against a Helix gateway — imported, dry-run, deployed, and passed `verify.sh`.**
+**Validated against a gateway — imported, dry-run, deployed, and passed `verify.sh`.**
 
 | Stage | Status | Provenance |
 |---|---|---|

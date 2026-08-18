@@ -1,5 +1,5 @@
 # Gateway validation — this solution was imported, dry-run and deployed against a
-# Helix gateway; the analytics claims were confirmed by querying the analytics API.
+# gateway; the analytics claims were confirmed by querying the analytics API.
 # Re-run gateway/verify.sh against your own environment before you rely on it.
 
 gateway_validation:

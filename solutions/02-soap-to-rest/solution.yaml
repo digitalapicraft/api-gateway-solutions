@@ -50,7 +50,7 @@ implementation:
     discarded.
 
 validation:
-  # Validated against a Helix gateway and a real SOAP backend. The statuses below
+  # Validated against a gateway and a real SOAP backend. The statuses below
   # are for the configuration in gateway/api-spec.yaml.
   local:
     status: PASS
@@ -122,4 +122,4 @@ limitations:
   - xml-to-json's schema varies by build. Confirm with get_plugin_config rather than
     trusting the field names in this spec.
 
-status: READY   # validated on a Helix gateway against a real SOAP backend; verify.sh passes
+status: READY   # validated on a gateway against a real SOAP backend; verify.sh passes

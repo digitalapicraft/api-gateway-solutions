@@ -59,7 +59,7 @@ implementation:
     the ceiling becomes a global cap on that endpoint.
 
 validation:
-  # Validated against a Helix gateway. See validation/gateway-validation.yaml.
+  # Validated against a gateway. See validation/gateway-validation.yaml.
   local:
     status: PASS
     basis: >-
@@ -134,4 +134,4 @@ limitations:
   - It does not prevent overselling. It makes overselling visible as 429s rather than
     as an outage, which is a better failure but still a failure.
 
-status: READY   # validated on a Helix gateway; verify.sh passes incl. isolation
+status: READY   # validated on a gateway; verify.sh passes incl. isolation

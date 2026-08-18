@@ -5,7 +5,7 @@
 # into Agent Mode), bind your upstream, replace <YOUR_JWT_SIGNING_SECRET> with a
 # real secret value (see the SIGNING SECRET note below), then deploy the revision.
 #
-# This configuration has been validated against a Helix gateway.
+# This configuration has been validated against a gateway.
 #
 # WHAT THIS DOES
 #   POST /oauth/token  — the gateway verifies the app's client_id/client_secret

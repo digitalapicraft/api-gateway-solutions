@@ -49,7 +49,7 @@ cases:
       show one row for the item route; api_path should show one row per id.
     expected: one row by route_id; one row per concrete id by api_path
     notes: >-
-      Group route-level charts by route_id. Confirmed against a Helix gateway. See
+      Group route-level charts by route_id. Confirmed against a gateway. See
       charts.md.
 
   - id: correlation-id
