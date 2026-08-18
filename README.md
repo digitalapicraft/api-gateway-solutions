@@ -8,7 +8,7 @@ Each solution is a self-contained package: one real problem, one importable
 gateway configuration, the agent prompt that produces it, the tests that prove
 it, and an honest record of what was and wasn't validated.
 
-> **Every solution here has been implemented and validated against a Helix
+> **Every solution here has been implemented and validated against a
 > gateway** — imported, dry-run, deployed, and exercised with its `verify.sh`.
 > Each package's `validation/` records the outcome.
 

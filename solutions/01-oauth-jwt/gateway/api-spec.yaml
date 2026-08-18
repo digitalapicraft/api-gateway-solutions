@@ -8,7 +8,7 @@
 # RUNNABLE ON A FRESH FREE-TRIAL ORG. The upstream is the public
 # https://jsonplaceholder.typicode.com, so GET /posts and GET /posts/{postId}
 # return real data with no backend of your own. Swap in your real upstream when
-# you have one — nothing else changes. Validated against a Helix gateway: no
+# you have one — nothing else changes. Validated against a gateway: no
 # token -> 401, a valid token -> 200 with real posts.
 #
 # ENVIRONMENT: a free-trial org gets a "test" environment by default — deploy here.
