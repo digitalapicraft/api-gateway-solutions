@@ -21,129 +21,68 @@ fields will invent them.
 
 ---
 
+> **Run each act as its own prompt on the default agent model** — the prompts
+> below are the ones verified there. Deploy and check between acts; don't fold
+> mediation and auth into one prompt. Beyond making a failure diagnosable, one
+> bounded ask per act keeps a smaller model from attempting an oversized change
+> and stalling. Replace the `<<...>>` values.
+
 ## Act 1 — get the mediation working
 
 Nothing in the way yet. One thing to prove: JSON in, JSON out, XML in the middle.
 
 ```text
-Create a REST API that fronts a SOAP/XML backend, so partners can send and
-receive JSON without ever seeing an envelope or needing the WSDL. The SOAP
-service must not be modified.
+Create a REST API called "<<Partner Locations API>>" that fronts a SOAP backend.
 
-CONTEXT
-- API name: <<Partner Locations API>>
-- Environment: test   (my free-trial org's default environment)
-- SOAP upstream: <<SOAP_UPSTREAM_URL>>
-- The SOAP handler answers on the path <<SOAP_HANDLER_PATH>> and expects
-  content-type text/xml.
+POST /locations should proxy to the upstream path <<SOAP_HANDLER_PATH>>, and a
+plugin should transform the request and response bodies so partners send and
+receive JSON while the backend keeps speaking XML.
 
-WHAT I WANT
+Upstream: <<SOAP_UPSTREAM_URL>>
 
-1. An endpoint POST /locations that proxies to the upstream path
-   <<SOAP_HANDLER_PATH>>.
+Check get_plugin_config for the transform plugin before writing config — I want
+the schema this org actually has, not field names from another gateway. On this
+build transform_request defaults to false, so set it true explicitly, and the
+response direction only fires when the client sends Accept: application/json.
+Do not set Content-Type in proxy-rewrite — it runs before the transform and would
+hide the JSON body. Do not add json-to-xml; it is the opposite job.
 
-2. Use the xml-to-json plugin to transform BOTH the request and response bodies,
-   so the client sends JSON, the handler receives XML, and the handler's XML
-   response comes back to the client as JSON.
-
-   Verified platform behaviour to respect: transform_request DEFAULTS TO false, so
-   set it to true explicitly or the request body is not converted. The response
-   direction only fires when the client sends Accept: application/json — note that
-   in what you hand me. Check get_plugin_config for the real field names first.
-
-3. Do NOT hard-set the request Content-Type in proxy-rewrite (see the constraint
-   below) — the transform handles the XML. But tell me whether my handler is
-   likely to need a SOAPAction header: many classic SOAP 1.1 and .asmx endpoints
-   return a 500 with an unhelpful envelope without one. If you can't tell, ask.
-
-4. Add request-id (uuid, header X-Request-Id) API-wide. When a partner reports a
-   wrong response I need to correlate the JSON they saw with the XML the handler
-   actually returned, across the gateway-to-SOAP hop.
-
-CONSTRAINTS — known platform behaviour, please respect these
-- One plugin (xml-to-json) handles both directions, but NOT by default: set
-  transform_request true, and rely on Accept: application/json for the response.
-  Do NOT add json-to-xml — it is a SEPARATE plugin for the opposite job (JSON
-  upstream response -> XML for XML-wanting clients), not the request-side
-  counterpart.
-- Do NOT set Content-Type in proxy-rewrite. proxy-rewrite runs before xml-to-json,
-  so a text/xml override there hides the JSON body from the request transform and
-  it silently never fires. Retarget the path only; let the transform own the type.
-- Only schema fields plus _meta are legal in a plugin block. No invented fields
-  and no commentary keys — put explanation in a YAML comment.
-- If the plugin's schema has fields for namespace or attribute handling, tell me
-  they exist and what the defaults do, but leave them at defaults unless I say
-  my envelope needs them.
-- If you need a conditional match on a header or path, use filter_func (a Lua
-  expression string), not vars — vars fails at deploy time.
-
-BEFORE YOU DEPLOY
-- Show me the full spec you are about to apply and wait for my confirmation.
-- Run validate_route and dry_run_deploy first. If either fails, show me the
-  error and your proposed fix rather than retrying blindly.
-- Tell me the execution order of the plugins on this route and which phase each
-  one runs in.
-
-AFTER YOU DEPLOY
-- Give me a curl command that calls POST /locations with a JSON body.
-- Show me the raw response, and confirm two separate things: the content-type is
-  application/json, AND the body contains no XML markup. The header is a claim;
-  a body with no angle brackets is the evidence. I want both.
-- Show me the JSON shape the transform actually produced, and warn me about
-  anything in it I would not have designed by hand — PascalCase element names,
-  vendor prefixes, or a single-element collection that came through as an object
-  rather than a list.
-
-If anything is ambiguous — the handler path, whether it needs SOAPAction, what
-the request body's field names should be — ask me instead of guessing.
+Show me the spec, dry-run it, and wait for me to confirm before deploying.
 ```
 
 **Check before act 2.** Confirm a JSON call returns JSON with no angle brackets in
-the body. If that isn't true, adding auth on top will just make the failure harder
-to see.
+the body. If that isn't true, adding auth on top just makes the failure harder to
+see.
 
 ## Act 2 — add OAuth 2.0
 
 ```text
-Now deploy a NEW REVISION that puts OAuth 2.0 in front of this API.
+Now deploy a NEW REVISION that adds OAuth 2.0:
 
-1. Add POST /oauth/token. Use helix-auth in generate mode: it verifies an app's
-   client id and secret (Authorization: Basic base64(client_id:client_secret))
-   and returns a signed JWT. Token lifetime 900 seconds — a leaked token should
-   be worthless within fifteen minutes, so do not default it to an hour.
+- POST /oauth/token issues a signed JWT from an app's client id and secret,
+  15-minute lifetime (helix-auth generate)
+- POST /locations requires a valid Bearer token, rejected in the access phase
+  BEFORE the transform runs (helix-auth validate, validate_auth_type jwt-auth)
 
-2. Require a valid Bearer token on POST /locations. Use helix-auth in validate
-   mode with validate_auth_type jwt-auth, referencing the SAME signing secret.
-
-   The rejection must happen in the access phase, BEFORE the transform runs.
-   There is no point converting a body we are about to discard — confirm to me
-   that this is the order you have produced.
-
-3. Both must use the SAME signing secret. On this build signing_secret is a
-   literal HMAC key on this build — there is no <ENV:...> resolution — so use one real, secret,
-   high-entropy value in both places. Never commit the filled-in spec.
-
-CONSTRAINTS
-- Use helix-auth generate, NOT the jwt-auth plugin, for issuing. jwt-auth
-  validates tokens an EXTERNAL issuer signed; the gateway is the issuer here.
-- Apply validate PER ROUTE, on /locations only. Do NOT apply it API-wide — that
-  would protect /oauth/token as well, and then no caller could ever obtain a
-  first token and every request would return 401.
-- This is a new revision. An ACTIVE revision will not accept edits ("Only
-  INACTIVE revisions can be updated") — clone the revision so I keep a rollback
-  target, or undeploy first. Tell me which you did.
-
-BEFORE YOU DEPLOY
-- Show me the spec, run validate_route and dry_run_deploy, and wait.
-
-AFTER YOU DEPLOY
-- Create a developer "<<Partner Integrations>>" with ONE app subscribed to this
-  API and give me its client id and client secret.
-- Give me curl commands showing, in order: no token → 401; client credentials →
-  200 with an access_token; that token → 200 with a JSON body; and a garbage
-  token → 401.
-- Confirm that the 401 case never reached the SOAP backend.
+Both must use the SAME signing secret — a literal value (this build does not
+resolve <ENV:...>). Apply validate on /locations only, never API-wide, or
+/oauth/token would be protected and nobody could get a first token. This is a new
+revision — clone the active one (so I keep a rollback) or undeploy first.
 ```
+
+Then create the app:
+
+```text
+Create a developer "<<Partner Integrations>>" with an app subscribed to this API
+and give me the client id and secret. Then give me curl commands showing, in
+order: no token → 401; client credentials → 200 with an access_token; that token
+→ 200 with a JSON body; a garbage token → 401 — and confirm the 401 never reached
+the SOAP backend.
+```
+
+**Two acts, not one.** If you ask for mediation and auth in a single prompt and
+something breaks, you don't know whether it's the transform or the token. Split at
+the seam and each act is independently verifiable.
 
 ---
 

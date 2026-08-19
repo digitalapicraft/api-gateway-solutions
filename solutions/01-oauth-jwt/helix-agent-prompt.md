@@ -13,82 +13,55 @@ first if you haven't.
 
 ## The prompt
 
+> **Run it in steps, not as one mega-prompt.** These are the exact prompts
+> verified on the **default agent model**. Paste **Step 1**, let the agent create
+> the API and stop at the dry-run; confirm; then paste **Step 2**. Folding the
+> whole build into a single prompt pushes a smaller model to attempt one oversized
+> change and stall — one bounded ask per step is what keeps it reliable. Replace
+> the `<<...>>` values.
+
+**Step 1 — create and protect the API**
+
 ```text
-Create a new REST API and protect it with OAuth 2.0 client-credentials
-authentication, so callers exchange a client id and secret for a short-lived
-token instead of sending a static key on every request.
+Create a new REST API called "<<Posts API>>" and protect it with OAuth 2.0
+client-credentials authentication. This is a fresh org — I have no existing API.
 
-CONTEXT
-- This is a fresh org — I do NOT have an existing API. Create one.
-- API name: <<Posts API>>
-- Upstream: https://jsonplaceholder.typicode.com   (a public REST service, so the
-  API returns real data with no backend of my own; I'll swap in my real upstream
-  later)
-- Environment: test   (my free-trial org's default environment)
-- The gateway is the token issuer. There is no external identity provider.
+Upstream: https://jsonplaceholder.typicode.com (public, so it returns real data;
+I'll swap in my own later). Deploy to the "test" environment.
 
-WHAT I WANT
+Routes (paths match the upstream, so no path rewrite): GET /posts,
+GET /posts/{postId}, POST /posts.
 
-1. Create the API with these routes, proxying the upstream (the route paths match
-   the upstream paths, so no path rewrite is needed):
-     - GET  /posts            -> lists posts
-     - GET  /posts/{postId}   -> one post
-     - POST /posts            -> create a post
-   Bind the upstream above and deploy to the "test" environment.
+Add POST /oauth/token using helix-auth generate — it verifies an app's client id
+and secret and issues a signed JWT, 15-minute lifetime. Protect the /posts routes
+with helix-auth validate, validate_auth_type jwt-auth, referencing the SAME
+signing secret. Apply validate per route, not API-wide (or /oauth/token would be
+protected and nobody could get a first token).
 
-2. A token endpoint: POST /oauth/token
-   Use helix-auth in generate mode. It should verify the calling app's client id
-   and secret (Authorization: Basic base64(client_id:secret)) and return a signed
-   JWT with token_type Bearer and expires_in. Token lifetime 900 seconds — a
-   leaked token should be worthless within fifteen minutes, so do not default it
-   to an hour.
+The signing secret is a LITERAL on this build — no <ENV:...> resolution — so use
+one real, high-entropy value in both places and don't commit it. jwt-auth is a
+validate_auth_type of helix-auth, not a standalone plugin.
 
-3. Protect /posts and /posts/{postId} (all methods).
-   Use helix-auth in validate mode with validate_auth_type jwt-auth, referencing
-   the SAME signing secret. A request with no token, a malformed Authorization
-   header, an expired token, or a token this gateway did not sign must be rejected
-   at the gateway and never reach the upstream. Apply validate PER ROUTE on the
-   protected routes — do NOT apply it API-wide, or it would protect /oauth/token
-   too and no caller could ever get a first token.
-
-4. Add request-id (uuid, header X-Request-Id) API-wide, and cors allowing the
-   "authorization" and "content-type" headers with allow_credential false.
-
-CONSTRAINTS — known platform behaviour, please respect these
-- Use helix-auth in generate mode for issuing and validate mode with
-  validate_auth_type jwt-auth for verifying. jwt-auth and key-auth are
-  validate_auth_type VALUES of helix-auth, not standalone plugins on this build.
-- The signing secret is a LITERAL. This build does NOT resolve <ENV:...> or
-  ${...} syntax — the string in signing_secret is used verbatim as the HMAC key.
-  Use one real, high-entropy value on the token route and every validate route,
-  and do not commit it. If you cannot store a secret for me, use a clear
-  placeholder and tell me to replace it before deploy.
-- Check get_plugin_config for helix-auth before writing config. Only schema
-  fields plus _meta are legal — no invented or commentary fields.
-- If you need a conditional match, use filter_func (a Lua expression string),
-  not vars — vars fails at deploy time.
-
-BEFORE YOU DEPLOY
-- Show me the full spec you are about to apply and wait for my confirmation.
-- Run validate_route and dry_run_deploy first. If either fails, show me the error
-  and your proposed fix rather than retrying blindly.
-- Tell me the execution order of the plugins on a protected route, and confirm
-  the rejection happens in the access phase before the upstream is called.
-
-AFTER YOU DEPLOY
-- Create a developer "<<Partner Integrations>>" with ONE app subscribed to this
-  API, and give me its client id and client secret.
-- Give me curl commands that show, in order: no token → 401; client credentials
-  → 200 with an access_token; that token → 200 on /posts with real data; a
-  garbage token → 401; and the CORRECT client id with a WRONG secret → 401.
-- That last one matters: if a wrong secret still issues a token, this is a
-  static-key flow wearing a token's clothes, and I want to know now.
-- Tell me plainly what a rejected caller sees — status, body, and which headers
-  are absent — so I can write the developer documentation.
-
-If anything is ambiguous — the environment, the upstream, whether a signing
-secret exists — ask me instead of guessing.
+Check get_plugin_config for helix-auth before writing config. Show me the spec,
+run validate_route and dry_run_deploy, and wait before deploying.
 ```
+
+**Step 2 — create an app and test it** (same session, after Step 1 deploys)
+
+```text
+Create a developer "<<Partner Integrations>>" with an app subscribed to this API,
+and give me the client id and secret so I can test the token exchange.
+
+Then give me curl commands that show, in order: no token → 401; client credentials
+→ 200 with an access_token; that token → 200 on /posts with real data; a garbage
+token → 401; and the CORRECT client id with a WRONG secret → 401. That last one
+proves the secret is actually verified rather than decorative.
+```
+
+The agent creates the API, fetches the real `helix-auth` schema from your org,
+proposes the spec, and stops for your confirmation. See
+[AGENT-GUIDE.md](../../AGENT-GUIDE.md) for why the prompt is shaped this way and
+what to do when the agent takes a wrong turn.
 
 ---
 

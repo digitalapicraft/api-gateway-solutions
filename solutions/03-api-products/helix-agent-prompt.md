@@ -14,72 +14,52 @@ first if you haven't.
 
 ## The prompt
 
+> **Run it in steps, not as one mega-prompt.** These are the exact prompts
+> verified on the **default agent model**. Paste **Step 1**, let the agent create
+> the API and products and stop at the dry-run; confirm; then paste **Step 2**.
+> Folding the whole build into a single prompt pushes a smaller model to attempt
+> one oversized change and stall — one bounded ask per step keeps it reliable.
+> Replace the `<<...>>` values.
+
+**Step 1 — create the API and the tier quotas**
+
 ```text
-Create a new REST API and rate-limit it per calling app using an API Product
-quota. This is a fresh org — I have no existing API, so create one.
+Create a new REST API called "<<Posts API>>" and rate-limit it per app with a
+product quota. This is a fresh org — I have no existing API.
 
-CONTEXT
-- API name: <<Posts API>>
-- Upstream: https://jsonplaceholder.typicode.com   (public, returns real data with
-  no backend of my own; I'll swap in my real upstream later)
-- Environment: test   (my free-trial org's default)
+Upstream: https://jsonplaceholder.typicode.com (public, returns real data).
+Environment: test. Routes: GET /posts, GET /posts/{postId} (paths match the
+upstream, no rewrite). Confirm the route has a service_id.
 
-WHAT I WANT
+Identify the caller with helix-auth validate, validate_auth_type key-auth, reading
+the credential key from the "apikey" header (key-auth is a value of helix-auth,
+not a standalone plugin — I want the product subscription resolved).
 
-1. Create the API with GET /posts and GET /posts/{postId}, proxying the upstream
-   (route paths match the upstream, so no path rewrite is needed). Confirm the
-   route has a service_id — without one api-product-enforcer returns 403. Deploy
-   to the "test" environment.
+Create two products, each with a quota: Free 5/min and Pro 1000/min. Every product
+must carry a quota object (a product without one is a 403, not "unlimited"). Deploy
+both to test. Add api-product-enforcer with error_policy fail_close — the product
+quota IS the rate limiter; do not add any other limiter or key anything on
+consumer_name. Do not put Redis settings in the enforcer.
 
-2. Identify the caller.
-   Add helix-auth in validate mode with validate_auth_type key-auth, reading the
-   credential key from the "apikey" header. Requests with no key or an unknown key
-   must be rejected at the gateway. Use helix-auth (key-auth is one of its
-   validate_auth_type values, not a standalone plugin) — I want the app's product
-   subscription resolved, not just a static key checked.
-
-3. Rate-limit via product quota.
-   Create two API Products bundling this API, each with a quota:
-     - "<<Posts API>> — Free"  5 requests per 1 minute
-     - "<<Posts API>> — Pro"   1000 requests per 1 minute
-   Every product MUST carry a quota object — a product without one is a 403, not
-   "unlimited" (use limit -1 for unlimited). Deploy both products to "test".
-   Add api-product-enforcer to the API with error_policy fail_close. This IS the
-   rate limiter — do not add any other rate-limit plugin.
-
-4. Add request-id (uuid, X-Request-Id) so a disputed 429 has something to search
-   on, and cors allowing apikey + content-type with allow_credential false.
-
-CONSTRAINTS — known platform behaviour
-- Rate limiting is the product quota, counted per app (the credential). Do NOT key
-  any limit-count on consumer_name, and do NOT add a separate rate-limit plugin —
-  the product quota is the mechanism.
-- Do NOT put Redis settings in api-product-enforcer — it accepts only error_policy
-  and ctx_namespace. quota_policy and the Redis connection live in
-  plugin_attr.api-product-enforcer in the gateway config.yaml. Tell me in your
-  summary that on more than one gateway node this MUST be redis, or each node
-  counts separately.
-- Check get_plugin_config for each plugin before writing config. Only schema
-  fields plus _meta are legal.
-
-BEFORE YOU DEPLOY
-- Show me the full spec and the products you are about to create, and wait for my
-  confirmation. Run validate_route and dry_run_deploy first; on failure show me
-  the error and your fix rather than retrying blindly.
-
-AFTER YOU DEPLOY
-- Create a test developer with TWO SEPARATE APPS — one subscribed to Free, one to
-  Pro — and give me both app keys. They must be different apps: two keys on the
-  same app share one quota bucket and would not prove isolation.
-- Give me a curl loop showing the Free app getting 429 {"error":"quota exceeded"}
-  after 5 requests while the Pro app still gets 200s with real data in the same
-  window.
-- Tell me plainly what the 429 does and does not contain (no Retry-After, no
-  X-RateLimit-* headers), so I can write the developer docs.
-
-If anything is ambiguous — the environment, the upstream, whether Redis is
-configured — ask me instead of guessing.
+Check get_plugin_config for each plugin before writing config. Show me the spec,
+dry-run it, and wait for me to confirm before deploying.
 ```
+
+**Step 2 — two apps that prove the limit is per-app** (same session)
+
+```text
+Create a test developer with TWO SEPARATE APPS — one subscribed to Free, one to Pro
+— and give me both keys. They must be different apps: two keys on the same app
+share one quota bucket and would not prove isolation.
+
+Then give me a curl loop showing the Free app getting 429 after 5 requests while
+the Pro app still gets 200s with real data in the same window.
+```
+
+The agent creates the API and products, proposes the spec, and stops for your
+confirmation. See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for what to say if the
+agent reaches for a `limit-count` on `consumer_name` — the generic reflex this
+platform doesn't use.
 
 ---
 
