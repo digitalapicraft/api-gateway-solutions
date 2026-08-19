@@ -35,7 +35,36 @@ All for a chosen window (the last hour by default):
 - **What's the traffic shape over time?** — per-hour (or per-minute/day) buckets.
 - **What's driving data transfer / egress?** — bytes by API.
 
-## Run it
+## Read it with the Helix Agent
+
+Recommended path — no queries to hand-write. Ask the agent in plain English and it
+pulls the numbers and **renders a chart in the chat** (it calls its `get_metrics`
+tool for you; read-only, nothing added to your APIs). Full set of prompts:
+[`helix-agent-prompt.md`](helix-agent-prompt.md).
+
+```text
+Show me requests to all my APIs in the last hour, broken down by API and sorted
+busiest first.
+```
+
+More of the everyday questions, each a plain-English prompt:
+
+```text
+Show me requests in the last hour grouped by app.
+Which of my APIs were slowest in the last hour, by average response time?
+Show me requests in the last 24 hours grouped by API and status code (4xx vs 5xx).
+Plot total requests per hour for the last 24 hours.
+```
+
+Keep asks inside what analytics supports — **average/max, not percentiles**; a
+**count of 429s**, not "% of quota used"; an aggregate slice, not a single-request
+lookup. See [`helix-agent-prompt.md`](helix-agent-prompt.md) for why, and
+[AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the general pattern.
+
+## Run it from the CLI
+
+Prefer a script? [`scripts/query-analytics.sh`](scripts/query-analytics.sh) prints the
+headline views for the last hour — same metrics API, no agent:
 
 ```bash
 CP=https://<YOUR_CONTROL_PLANE_HOST> \
