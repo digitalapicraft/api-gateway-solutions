@@ -26,11 +26,11 @@ business_need:
 implementation:
   changes_to_apis: none   # analytics is global; nothing is added to any API
   how_you_read_it: >-
-    A structured metrics API — POST /api/orgs/{orgId}/analytics/metrics/{metric}
-    with dimensions, filters and an optional sort — or the portal over it. NOT a
-    natural-language prompt to the agent (the agent builds APIs; it does not read
-    charts). scripts/query-analytics.sh runs the common views; charts.md is the
-    full catalogue.
+    Three ways, same data: ask the agent in plain English (it calls its get_metrics
+    tool and renders a chart), run scripts/query-analytics.sh from the CLI, or POST
+    the metrics API directly — /api/orgs/{orgId}/analytics/metrics/{metric} with
+    dimensions, filters and an optional sort. helix-agent-prompt.md has the prompts;
+    charts.md is the raw catalogue.
   capabilities_used:
     - "metrics: requests-count, requests-per-second, response-time, request-size, response-size, total-transfer-size, upstream-response-time"
     - "dimensions: env_name, app_id, app_name, product_name, api_name, route_id, route_name, api_path, request_method, response_status_code, upstream_path, developer"
@@ -68,12 +68,14 @@ validation:
 
 artifacts:
   documentation: [README.md, charts.md, architecture.md, business-need.md]
+  agent_prompt: helix-agent-prompt.md
   script: scripts/query-analytics.sh
   infographic: [infographic.md]
   validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
   note: >-
-    No gateway/api-spec.yaml, no tests/, no agent prompt — this solution changes no
-    API and builds nothing. charts.md + scripts/query-analytics.sh are the deliverable.
+    No gateway/api-spec.yaml and no tests/ — this solution changes no API and builds
+    nothing. helix-agent-prompt.md, charts.md and scripts/query-analytics.sh are the
+    deliverable (agent / raw API / CLI — same data).
 
 assumptions:
   - Analytics is enabled globally on the platform (it is on this build). Every request is captured.

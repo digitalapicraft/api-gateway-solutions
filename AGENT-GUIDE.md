@@ -146,23 +146,23 @@ If the answer is vague, the config is probably wrong in a way that will only sho
 up as a 403 under load. This is also the fastest way to catch a plugin that's
 been placed on the wrong route or at the wrong scope.
 
-## 7. Analytics is captured for you — but you query it through the API, not the agent
+## 7. Analytics is captured for you — read it, don't build it
 
 Analytics is **already on**. Every request through the gateway is captured — you
-don't add a plugin, and a prompt that asks you to is a prompt to correct. But the
-agent's job is building APIs, not reading charts: **analytics is queried through a
-structured metrics API (and the portal over it), not by asking the agent in
-natural language.** A query is a POST to
-`/api/orgs/{orgId}/analytics/metrics/{metric}` with dimensions and filters — see
-[solution 04's catalogue](solutions/04-analytics/charts.md) for the real shapes.
+don't add a plugin, and a prompt that asks you to is a prompt to correct. You read
+it, and there are three ways: **ask the agent in plain English** — it calls its
+`get_metrics` tool and renders a chart in the chat; run a script against the metrics
+API; or POST the API yourself (`/api/orgs/{orgId}/analytics/metrics/{metric}` with
+dimensions and filters). See [solution 04](solutions/04-analytics/) — the
+[agent prompt](solutions/04-analytics/helix-agent-prompt.md) and the
+[catalogue](solutions/04-analytics/charts.md).
 
-Two configuration decisions, made *while you build the API*, are what make those
-queries useful later: **identity must be resolved** (so rows attribute to an app
-rather than an IP — that's `helix-auth`, solution 01) and **paths must be
-templated** (`/posts/{postId}`, so you group by `route_id` and get one row, not
-one per id). Know the limits, too: the metrics API does **averages/min/max, not
-percentiles**, and has **no quota-consumption metric**. Solution 04 covers all of
-this.
+Keep asks inside what the metrics API supports: it does **averages/min/max, not
+percentiles**, has **no quota-usage metric** (count 429s instead), and no
+per-request lookup (that's a log-side join on `X-Request-Id`). And two things about
+how an API is *already* built shape its rows: **identity resolved** (so rows
+attribute to an app rather than an IP — `helix-auth`, solution 01) and **templated
+paths** (group by `route_id`, not `api_path`). Solution 04 covers all of this.
 
 ## 8. What the agent won't do
 

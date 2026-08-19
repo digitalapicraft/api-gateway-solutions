@@ -11,17 +11,19 @@ API.**
 | **Difficulty** | 🟢 Beginner |
 | **Needs** | APIs that already receive traffic · a control-plane bearer token (the portal uses the same one) |
 | **Changes to your APIs** | **None.** Analytics is global; there is no plugin or config to add. |
-| **Run it** | 📊 [`scripts/query-analytics.sh`](scripts/query-analytics.sh) — prints the headline views · 📖 [`charts.md`](charts.md) — the full query catalogue |
-| **Assets** | ✅ [Query catalogue](charts.md) · ✅ [Query script](scripts/query-analytics.sh) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Infographic](infographic.md) · ✅ [Validation](validation/) · ✅ [Manifest](solution.yaml) |
+| **Run it** | 🤖 [ask the agent](helix-agent-prompt.md) — it charts it for you · 📊 [`scripts/query-analytics.sh`](scripts/query-analytics.sh) — CLI · 📖 [`charts.md`](charts.md) — raw queries |
+| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Query catalogue](charts.md) · ✅ [Query script](scripts/query-analytics.sh) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Infographic](infographic.md) · ✅ [Validation](validation/) · ✅ [Manifest](solution.yaml) |
 
 ---
 
 ## The point
 
-You don't turn analytics on, and you don't query it by prompting the agent. It's
-**already recording every request**, and you read it through a structured metrics
-API (or the portal over it). This solution is that API's common queries, verified
-against a live gateway — nothing is built or configured on your APIs.
+You don't turn analytics on — it's **already recording every request**. You just
+read it, three ways: **ask the agent in plain English** and it pulls the numbers and
+draws a chart ([agent prompt](helix-agent-prompt.md)); run
+[`scripts/query-analytics.sh`](scripts/query-analytics.sh) from the CLI; or POST the
+[metrics-API queries](charts.md) yourself. Nothing is built or configured on your
+APIs, and it's all read-only. Verified against a live gateway.
 
 ## The questions it answers
 

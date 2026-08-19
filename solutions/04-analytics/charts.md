@@ -5,11 +5,12 @@ you add nothing to your APIs. This file is the practical part: the queries that
 answer the common questions, each one a real request against the analytics metrics
 API, plus what the API can and cannot do.
 
-> **How you read analytics: the metrics API, or the portal.** It is a structured
-> API, not a natural-language prompt — the agent builds APIs, it does not read
-> charts. The runnable [`scripts/query-analytics.sh`](scripts/query-analytics.sh)
-> prints the headline views for the last hour; everything below is the same API it
-> calls. All queries here were run against a live gateway.
+> **Three ways to read analytics: ask the agent, run the script, or POST the API.**
+> The agent understands plain-English asks and calls this same metrics API for you,
+> rendering a chart ([agent prompt](helix-agent-prompt.md)); the runnable
+> [`scripts/query-analytics.sh`](scripts/query-analytics.sh) prints the headline
+> views; and everything below is the raw API. All queries here were run against a
+> live gateway.
 
 ---
 
