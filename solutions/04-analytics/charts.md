@@ -1,42 +1,44 @@
-# The analytics catalogue — what you can ask, and how
+# Analytics query catalogue — read what your gateway already captured
 
-Analytics is already capturing every request. This file is the part that matters:
-**which questions the analytics API can actually answer, the exact query for each,
-and — just as important — the ones it cannot.**
+Analytics is captured for **every** request through **every** API, automatically —
+you add nothing to your APIs. This file is the practical part: the queries that
+answer the common questions, each one a real request against the analytics metrics
+API, plus what the API can and cannot do.
 
-> **How you query analytics: the metrics API, or the portal.** You do **not** ask
-> analytics in natural language, and the agent does not run analytics queries — it
-> builds APIs, it doesn't read charts. Analytics is a structured API (and the portal
-> UI over it). Everything below is a real request against that API.
+> **How you read analytics: the metrics API, or the portal.** It is a structured
+> API, not a natural-language prompt — the agent builds APIs, it does not read
+> charts. The runnable [`scripts/query-analytics.sh`](scripts/query-analytics.sh)
+> prints the headline views for the last hour; everything below is the same API it
+> calls. All queries here were run against a live gateway.
 
 ---
 
-## The building blocks
+## The query shape
 
 Every query is one POST:
 
 ```
 POST /api/orgs/{orgId}/analytics/metrics/{metric}
-Authorization: Bearer <token>
+Authorization: Bearer <control-plane token>
 content-type: application/json
 
 {
   "startTime": "2026-01-01T00:00:00Z",
-  "endTime":   "2026-01-02T00:00:00Z",
-  "dimensions": ["route_id"],            // group by these (0..n)
-  "filters":    [                        // AND-combined
-    { "column": "api_name", "operator": "EQ", "value": ["posts-api"] }
+  "endTime":   "2026-01-01T01:00:00Z",       // last hour = now-1h .. now
+  "dimensions": ["api_name"],                // group by these
+  "filters":    [                            // optional, AND-combined
+    { "column": "api_name", "operator": "EQ", "value": ["my-api"] }
   ],
-  "aggregation": "AVG",                  // size/time metrics only (see below)
-  "timeUnit": "HOURS",                   // bucket over time; omit + excludeTimeUnit:true for a single total
-  "excludeTimeUnit": true,
-  "pageRequest": { "page": 1, "size": 100 }
+  "aggregation": "AVG",                       // size/time metrics only (see below)
+  "excludeTimeUnit": true,                    // one total per group; omit + set
+                                              // timeUnit for a time series
+  "pageRequest": { "page": 1, "size": 20,
+                   "sort": { "field": "value", "order": "DESC" } }  // top-N
 }
 ```
 
-The response is `{ value, timeRange, groupedResults[], meta }`, where each
-`groupedResults` row is either `{ dimensions:{…}, value }` (grouped) or
-`{ timeBucket, value }` (time series).
+Response: `{ value, timeRange, groupedResults[], meta }`, each `groupedResults`
+row `{ dimensions:{…}, value }` (or `{ timeBucket, value }` for a time series).
 
 **Metrics** (the `{metric}` path segment):
 
@@ -53,169 +55,119 @@ The response is `{ value, timeRange, groupedResults[], meta }`, where each
 `response_status_code`, `upstream_path`, `developer`.
 
 **Filter operators**: `EQ` `NEQ` `GT` `GTE` `LT` `LTE` `IN` `LIKE` `NOT_LIKE`
-(multiple filters are AND-combined).
-
-Two rules carry most of the value:
-
-- **Group route-level charts by `route_id`, not `api_path`.** `route_id` collapses a
-  templated route (`/posts/{postId}`) to one row; `api_path` gives one row per
-  concrete path — a "top routes" chart that is really a list of individual records.
-- **Attribution needs identity.** `app_name` / `developer` / `product_name` are only
-  populated when the route resolved identity (add `helix-auth`,
-  [solution 01](../01-oauth-jwt/)). Without it those dimensions are empty and traffic
-  groups by IP-level fields only.
+(multiple filters AND together).
 
 ---
 
-## What analytics CANNOT do — read this before promising a chart
+## The everyday questions
 
-These are real limits of the metrics API, confirmed against the platform. Don't build
-a report around them:
-
-- **No percentiles.** `response-time` supports `AVG`, `MIN`, `MAX`, `SUM` only —
-  there is **no p50/p95/p99**. Use `MAX` as a coarse tail signal and `AVG` for the
-  body; if you truly need percentiles, that's a separate telemetry pipeline
-  (e.g. Prometheus/OpenTelemetry), not this API.
-- **No quota-consumption metric.** There is no "percent of quota used" or "remaining
-  quota" metric. You can *count 429s* (`requests-count` filtered on
-  `response_status_code = 429`), but "apps at 80% of their limit" is **not**
-  answerable here — that lives in the products/subscription side, not analytics.
-- **No per-request lookup.** `X-Request-Id` is **not** a dimension. Narrow analytics
-  to a slice, then match the id in **your own logs** — analytics gives you the
-  aggregate, your logs give you the instance.
-- **No request/response bodies.** Analytics sees metadata (who, which route, status,
-  latency, size), never payloads — by design.
-- **Latency is edge-measured.** `response-time` is the gateway's view;
-  `upstream-response-time` isolates the backend's share, but neither breaks down your
-  internal hops.
-
----
-
-## Recipes that work on this minimal API
-
-Group by route/status/method — no identity required.
-
-### 1. Traffic over time
+### Requests in the last hour — by API
 
 ```json
 POST /api/orgs/{orgId}/analytics/metrics/requests-count
-{ "startTime":"…","endTime":"…",
-  "filters":[{"column":"api_name","operator":"EQ","value":["posts-api"]}],
-  "timeUnit":"HOURS" }
+{ "startTime":"<now-1h>", "endTime":"<now>",
+  "dimensions":["api_name"], "excludeTimeUnit":true,
+  "pageRequest":{ "page":1, "size":20, "sort":{ "field":"value", "order":"DESC" } } }
 ```
 
-Returns one `{timeBucket, value}` per hour. **For:** capacity planning (peak vs
-median) and spotting anomalies. Run it again grouped by `response_status_code` to see
-whether errors rise *with* traffic (capacity) or *without* it (a deploy/dependency).
+One row per API, busiest first. Swap `api_name` for **`app_name`** to see it by app,
+or **`product_name`** to see it by product. Rows with no identity (unauthenticated
+traffic) come back with an empty value — the "unattributed" bucket.
 
-### 2. Requests and errors by route and status
+### Requests in the last hour — for one specific API / product / app
 
-```json
-POST /api/orgs/{orgId}/analytics/metrics/requests-count
-{ "startTime":"…","endTime":"…",
-  "filters":[{"column":"api_name","operator":"EQ","value":["posts-api"]}],
-  "dimensions":["route_id","response_status_code"],
-  "excludeTimeUnit":true }
-```
-
-Counts per route × status. Compute the error rate client-side (errors ÷ total per
-route). **Keep 4xx and 5xx separate** — 5xx is your problem, 4xx is usually the
-caller's or your docs'. Filter to a class with
-`{"column":"response_status_code","operator":"IN","value":["500","502","503","504"]}`.
-**What breaks it:** grouping by `api_path` instead of `route_id` (one row per id).
-
-### 3. Latency by route (AVG / MAX — not percentiles)
+Add a filter and it applies to any view:
 
 ```json
-POST /api/orgs/{orgId}/analytics/metrics/response-time
-{ "startTime":"…","endTime":"…",
-  "filters":[{"column":"api_name","operator":"EQ","value":["posts-api"]}],
-  "dimensions":["route_id"], "aggregation":"MAX", "excludeTimeUnit":true }
-```
-
-Run once with `AVG` (typical) and once with `MAX` (worst case). A route whose `MAX`
-dwarfs its `AVG` has a tail problem — something is occasionally slow. **This is the
-percentile substitute; the API has no p95.** Query `upstream-response-time` the same
-way to see how much of the latency is your backend versus the edge.
-
-### 4. Data transfer
-
-```json
-POST /api/orgs/{orgId}/analytics/metrics/total-transfer-size
-{ "startTime":"…","endTime":"…",
-  "dimensions":["route_id"], "aggregation":"SUM", "excludeTimeUnit":true }
-```
-
-Bytes moved, by route. **For:** finding the endpoints driving egress cost;
-`request-size` / `response-size` split it by direction.
-
-### 5. Slow-route drift (two windows)
-
-Run recipe 3 (`response-time`, `AVG`, by `route_id`) for this week and last week and
-compare. **For:** catching a route that is 20% slower than it was, while it's still
-cheap to investigate. (Client-side comparison — the API returns one window at a time.)
-
----
-
-## Recipes that need identity (compose in [solution 01](../01-oauth-jwt/))
-
-Add `helix-auth` to the routes and `app_name` / `developer` populate; then:
-
-### 6. Traffic by app
-
-```json
-POST /api/orgs/{orgId}/analytics/metrics/requests-count
-{ "startTime":"…","endTime":"…",
-  "filters":[{"column":"api_name","operator":"EQ","value":["posts-api"]}],
+{ "startTime":"<now-1h>", "endTime":"<now>",
+  "filters":[{ "column":"api_name", "operator":"EQ", "value":["my-api"] }],
   "dimensions":["app_name"], "excludeTimeUnit":true }
 ```
 
-Your baseline: who is calling, and how much. Without identity every row is an IP.
+("Who called *my-api* in the last hour.") Filter on `product_name` or `app_name`
+the same way.
 
-### 7. Who is failing auth
+### Slowest / fastest performing API
 
-`requests-count`, `dimensions:["app_name"]`,
-`filters:[…,{"column":"response_status_code","operator":"EQ","value":["401"]}]`.
-An app failing *every* call is broken config (often the wrong credential); an app
-failing *some* is intermittent (expired tokens). Worth running proactively.
+```json
+POST /api/orgs/{orgId}/analytics/metrics/response-time
+{ "startTime":"<now-1h>", "endTime":"<now>",
+  "dimensions":["api_name"], "aggregation":"AVG", "excludeTimeUnit":true,
+  "pageRequest":{ "page":1, "size":20, "sort":{ "field":"value", "order":"DESC" } } }
+```
 
-### 8. Who is being throttled (needs [solution 03](../03-api-products/) too)
+Slowest APIs first (average response time, ms). Flip `order` to `ASC` for fastest.
+Run it again with `"aggregation":"MAX"` to see worst-case latency, and query
+`upstream-response-time` to see how much of it is your backend versus the edge.
 
-Same shape, filter `response_status_code = 429`, group by `app_name`. This is the
-*only* quota-related view analytics offers — a **count of rejections**, not
-consumption. "How close is an app to its limit?" is not answerable here.
+### Error rate — by API and status
 
-### 9. New and disappeared callers (two windows)
+```json
+POST /api/orgs/{orgId}/analytics/metrics/requests-count
+{ "startTime":"<now-1h>", "endTime":"<now>",
+  "dimensions":["api_name","response_status_code"], "excludeTimeUnit":true }
+```
 
-`requests-count`, `dimensions:["app_name"]`, for this week and last week; diff the app
-lists client-side. An app that **stopped** calling is the signal nobody watches —
-churn, a broken integration, or an expired credential.
+Counts per API × status; compute the rate client-side (errors ÷ total per API).
+Keep 4xx and 5xx separate — 5xx is your problem, 4xx is usually the caller's. Add
+`{"column":"response_status_code","operator":"IN","value":["500","502","503","504"]}`
+to see only server errors, or `["429"]` to see who is being throttled.
+
+### Traffic over time
+
+```json
+POST /api/orgs/{orgId}/analytics/metrics/requests-count
+{ "startTime":"<now-24h>", "endTime":"<now>", "timeUnit":"HOURS" }
+```
+
+Returns one `{timeBucket, value}` per hour (drop `excludeTimeUnit`, set `timeUnit`
+to `SECONDS`/`MINUTES`/`HOURS`/`DAYS`). Overlay the error count (same query, filter
+status ≥ 400) to tell a capacity problem (errors rise *with* traffic) from a
+deploy/dependency one (errors rise *without* it).
+
+### Data transferred
+
+```json
+POST /api/orgs/{orgId}/analytics/metrics/total-transfer-size
+{ "startTime":"<now-24h>", "endTime":"<now>",
+  "dimensions":["api_name"], "aggregation":"SUM", "excludeTimeUnit":true }
+```
+
+Bytes moved, by API — the endpoints driving egress cost. `request-size` /
+`response-size` split it by direction.
 
 ---
 
-## Not answerable from analytics (don't promise these)
+## What analytics CANNOT do — don't build a report on these
 
-- **"Apps above 80% of quota" / "under-utilised committed accounts."** No quota
-  metric — see § *What analytics cannot do*. Approximate abuse with the 429 count
-  (recipe 8); for true consumption, use the products/subscription side.
-- **"p95/p99 latency."** No percentiles. `MAX` is the closest signal.
-- **"Show me that one request."** Not a query — a log-side join on `X-Request-Id`.
+- **No percentiles.** `response-time` supports `AVG`/`MIN`/`MAX`/`SUM` only — no
+  p50/p95/p99. `MAX` well above `AVG` is your tail signal.
+- **No quota-usage metric.** You can count 429s (`requests-count` filtered on
+  `response_status_code = 429`), but "app X is at 80% of its limit" is not
+  available here — that lives on the products/subscription side.
+- **No per-request lookup.** `X-Request-Id` is not a dimension. Narrow analytics to
+  a slice, then match the id in **your own logs**.
+- **No request/response bodies.** Analytics sees metadata (who, which route,
+  status, latency, size), never payloads — by design.
 
----
+## What makes attribution work
 
-## Building a dashboard
+You add nothing to your APIs for analytics — but two properties of how an API is
+*already* built decide how useful its rows are:
 
-The portal renders these. A screen people actually read is about five panels:
+- **Per-app / per-developer / per-product breakdowns need identity resolved on the
+  API.** If an API authenticates callers (`helix-auth`), its rows carry
+  `app_name` / `developer` / `product_name`; if it's anonymous, that traffic is the
+  "unattributed" bucket. (Adding auth is [solution 01](../01-oauth-jwt/) /
+  [solution 03](../03-api-products/) — not something you do for analytics.)
+- **Group route-level views by `route_id`, not `api_path`.** `route_id` collapses a
+  templated route (`/orders/{id}`) to one row; `api_path` gives one row per concrete
+  id.
 
-| Panel | Recipe |
-|---|---|
-| Traffic per hour, error count overlaid | 1 |
-| Requests/errors by route, 4xx vs 5xx | 2 |
-| Latency by route, `AVG` and `MAX` | 3 |
-| Top routes (or apps, with identity) by volume | 2 / 6 |
-| Data transfer by route | 4 |
+## Getting a token
 
-Everything else in this catalogue is a question you run **when something looks
-wrong** — investigative, not a permanent panel. And the honest habit: when a chart
-moves, write down what you did about it. A chart with no history of action can be
-deleted.
+The analytics API uses a control-plane bearer token — the same session token the
+portal uses. Grab one from the portal (browser DevTools → any request's
+`Authorization` header), then run
+[`scripts/query-analytics.sh`](scripts/query-analytics.sh), or POST the queries
+above yourself.

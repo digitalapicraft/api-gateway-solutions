@@ -1,139 +1,79 @@
-# Infographic spec — Solution 04, Analytics
+# Infographic spec — Solution 04, Analytics (read what you already have)
 
-> Note: the shipped API for this solution is minimal (two routes, no auth). Identity
-> (`helix-auth`, solution 01) is a **compose-in** for per-app names; panels that show it
-> illustrate that optional step, not the base API.
+**Status:** specification only. `assets/infographic.html` is not built — this is the
+brief. Test any render at 300px wide; if the "one query → a ranked answer" idea
+isn't legible there, it fails.
 
-**Status:** specification only. `assets/infographic.html` is **not yet built** for this
-package — this file is the brief a designer or a generator works from.
-**Test before shipping:** shrink the render to 300px wide. If the before/after row
-contrast isn't readable at that size, it fails — that's how it appears in a feed.
-
-**Headline:** `You already have the data. It just can't answer the question.`
-**Sub:** `Analytics is always on — three request-path decisions decide whether it's useful`
+**Headline:** `You already have the data. Here's the query.`
+**Sub:** `Requests, latency and errors by API, product or app — read-only, nothing to install`
 
 ---
 
-### Panel 1 — BEFORE (muted, and deliberately not "broken")
+### Panel 1 — CAPTURE IS AUTOMATIC (muted, calm)
 
-A dashboard card, rendered competently rather than dysfunctionally: **`4.2M calls`**,
-**`1.8% errors`**, a clean traffic sparkline. It looks *good*. That's the point.
+Every request through any API flows into one store, with no plugin or config on the
+APIs. Draw several API boxes → a gateway band labelled `log phase — captured
+automatically` → a single **analytics store**. No "turn on" switch anywhere.
 
-Beneath it, the analytics table it can actually produce:
+Caption: *"Every request is recorded the moment it's served — you add nothing to
+your APIs."*
 
-```
-route              caller            status   latency
-/posts/ord_1a2b3c  203.0.113.47      200      41ms
-/posts/ord_4d5e6f  203.0.113.47      200      38ms
-/posts/ord_7g8h9i  198.51.100.22     500      2.1s
-/posts/ord_2j3k4l  203.0.113.47      200      44ms
-…
-```
+### Panel 2 — ONE QUERY, A RANKED ANSWER (the hero)
 
-Every row a different route. Every caller an IP. Nothing aggregates.
-
-Speech-bubble overlay, in the muted palette: *"Something hammered us at 3am. Which of
-our 400 integrations was it?"* — with no answer beneath it.
-
-Caption: *"Nothing is broken. Every request was captured faithfully. The question is
-just unanswerable."*
-
-### Panel 2 — AFTER (signal / healthy)
-
-The same table, same window, transformed:
+A single request card on the left, a result table on the right:
 
 ```
-route                   app               calls   errors   max ms
-/posts/{postId}       partner-b-prod    1,204   0.1%     52ms
-/posts/{postId}       partner-c-batch     318   0.0%     61ms
-/posts                 partner-b-prod      892   0.2%     44ms
-/posts/report          partner-d-analytics  14   0.0%     28s
+POST /analytics/metrics/requests-count           Requests by API — last 1h
+{ "dimensions": ["api_name"],           ─────►    orders-api        17
+  "sort": {"field":"value","order":"DESC"} }      checkout-api       9
+                                                  partners-api       9
 ```
 
-Four rows. Named apps. Templated routes. A max-latency that means something — and note the
-report route's 28s sitting visibly apart from the 44ms reads, which is the
-latency-profile point made without a word.
+Show the same idea for the two other headline questions as small chips:
+`group by app_name → who's calling` · `response-time AVG, sort DESC → slowest API`.
 
-Same speech bubble, now answered: *"partner-b-prod, 1,204 calls, from 03:02."*
+Verdict line: **A question is one POST. Read-only.**
 
-Verdict line: **Same data. Same window. Now it groups.**
+### Panel 3 — WHAT YOU CAN ASK (compact grid)
 
-### Panel 2b — THE THREE DECISIONS (the hero)
+Two columns.
 
-Three chips feeding one row of captured data. This is the mechanism, and it's the panel
-to give room to:
+*Metrics:* requests · req/sec · response time · request/response/transfer size ·
+upstream time.
+*Group or filter by:* api · product · app · developer · route · path · method ·
+status · env.
 
-```
-  helix-auth        ──►  app · developer      ← without it: an IP address
-  templated path    ──►  route                ← without it: one row per record
-  request-id        ──►  request_id           ← without it: no way to reach one call
-                              │
-                              ▼
-                    ┌───────────────────┐
-                    │  one captured row │  ← written in the LOG phase, last.
-                    └───────────────────┘     It records. It cannot investigate.
-```
+One line beneath: *"Group route-level views by `route_id`, not `api_path`. Per-app
+rows need the API to resolve identity."*
 
-Then, banded across the bottom in the emphasis colour — **this is the single most
-important sentence in the graphic:**
-
-> **All three must be true BEFORE the data is captured. Nothing fixes it afterwards.**
-
-### Panel 3 — THE ONE THING NOT TO DO (dark, diff-style)
+### Panel 4 — WHAT IT ISN'T (dark, short)
 
 ```
-- helix-analytics: {}     ← there is nothing to add. It is already global.
-                            Every request is being captured right now.
-
-+ helix-auth              identity, so rows have a name
-+ /posts/{postId}       templated, so a route is one row
-+ request-id              correlation, so a row leads to a request
+✓ averages / min / max        ✗ percentiles (p95/p99)
+✓ count of 429s               ✗ "% of quota used"
+✓ aggregate slices            ✗ single-request lookup (that's your logs)
 ```
-
-One pair. Keep it stark. This is the reflex to break: on most platforms observability
-*is* a plugin you enable, so both engineers and agents reach for one by name.
 
 ### Footer
 
-`analytics: already on` · `helix-auth · request-id · templated paths` · `~10 min` ·
-`real metrics-API queries → charts.md` · Solution 04 · repo URL.
+`read-only · nothing to install · no API changes` · `scripts/query-analytics.sh` ·
+Solution 04 · repo URL.
 
 ---
 
 ## Design notes
 
-- **Colour:** structural blue for the fix, green for the healthy "after" rows, red used
-  **once** — the `500 / 2.1s` row in panel 1, so the eye has somewhere to land in a table
-  of otherwise-fine data. The panel-1 dashboard card must be rendered in the *healthy*
-  palette, not a warning one.
-- **Panel 1 must look competent, not broken.** This is the most easily-lost point in the
-  piece. A designer's instinct will be to make the "before" state look alarming — red
-  numbers, error badges, a sad face. That inverts the argument. The before state is a
-  perfectly good dashboard that cannot answer a question, and if it looks broken the
-  reader concludes "we don't have that problem, ours is fine."
-- **The two tables are the hero of panels 1 and 2, not the dashboard card.** Same data,
-  same window, one groups and one doesn't. Set them in monospace and align the columns so
-  the row-count difference (many vs four) reads instantly at thumbnail size.
-- **Panel 2b is the hero of the piece.** Panels 1 and 2 show the symptom and the cure;
-  2b is the mechanism and the urgency. The "BEFORE the data is captured" band is the line
-  most worth someone remembering.
-- **Show the templated route with braces literally** — `/posts/{postId}`. The braces
-  are the whole visual difference between the two tables, so don't let a designer
-  prettify them away.
-- **Keep the `28s` report row in panel 2.** It makes the latency-profile-separation
-  argument silently, and it stops the "after" table looking uniformly rosy.
-- **Do NOT draw a helix-analytics plugin anywhere except crossed out in panel 3.** The
-  entire framing is that there's nothing to enable.
-- **Do not imply real-time alerting.** No bell icons, no "ALERT" badges, no threshold
-  lines. This is query-and-chart; alerting is a different tool and implying otherwise sets
-  up a disappointed reader.
-- **Do not show request or response bodies.** Not captured, by design — drawing a payload
-  would advertise something the platform deliberately doesn't do, and for a good reason.
-- **Do not imply per-hop / internal tracing.** No span waterfalls inside the backend.
-  Latency here is edge-measured; a waterfall diagram would promise distributed tracing.
-- **Do not show quota consumption as if it came free.** There is no quota-% metric; the 429/throttle recipe needs solution 03. If a
-  quota gauge appears, tag it `+ solution 03`.
-- **Use placeholder IPs from the documentation ranges only** (`203.0.113.x`,
-  `198.51.100.x`) and invented app names (`partner-b-prod`). No real addresses, hosts, org
-  ids or customer names.
+- **The whole story is "read, don't build."** Nothing in the art should imply
+  adding a plugin, a spec, or a route. No `helix-analytics` block anywhere — there
+  isn't one.
+- **Panel 2 is the hero:** one POST → a ranked table. If a viewer takes one thing,
+  it's that an answer is a single query.
+- Use real-looking but generic API names (`orders-api`, `checkout-api`); no real
+  hosts, org ids, or customer names.
+- **Do not draw percentiles, a quota gauge, or a single-request trace** — the API
+  doesn't do those, and panel 4 says so.
+- **Do not imply the agent runs the query.** Analytics is the metrics API / portal;
+  the agent builds APIs, it doesn't read charts.
+- Colour: calm/neutral for capture (panel 1), one accent for the query→answer (panel
+  2), red used only for the ✗ column in panel 4.
 - Keep the underlying gateway/runtime unnamed.

@@ -1,37 +1,34 @@
-# Gateway validation — this solution was imported, dry-run and deployed against a
-# gateway; the analytics claims were confirmed by querying the analytics API.
-# Re-run gateway/verify.sh against your own environment before you rely on it.
+# Gateway validation — this solution builds nothing, so there is no dry-run/deploy.
+# What was validated is that the READ QUERIES work against the live analytics API.
+# Re-run scripts/query-analytics.sh against your own org and token to see your data.
 
-gateway_validation:
+analytics_validation:
   solution: 04-analytics
-  version: 1.0.0
+  version: 2.0.0
 
-  dry_run:
-    status: PASS
-    detail: The spec contains NO analytics plugin and deploys cleanly — analytics is global.
+  changes_to_apis: none
 
-  deployment:
-    status: DEPLOYED
-    detail: Two simple routes ACTIVE — /posts and the templated /posts/{postId} — each proxying the public jsonplaceholder upstream.
-
-  functional_tests:
-    executor: gateway/verify.sh
-    status: PASS
-    detail: verify.sh calls the two routes, seeds a labelled traffic pattern, and confirms X-Request-Id is present.
-
-  analytics_verification:
+  live_queries:
     status: VERIFIED
-    method: control-plane analytics metrics API, filtered by api_name and grouped by dimensions.
-    findings:
-      - Analytics is global — with no analytics plugin in the spec, every call is captured and queryable.
-      - Path templating holds — several distinct /posts/{postId} values aggregate to ONE row grouped by route_id, versus one row per id grouped by api_path. Group route-level charts by route_id.
-      - Per-app attribution is available WHEN identity is resolved (add helix-auth, see solution 01); without it, rows attribute to a source IP.
-      - X-Request-Id is NOT an analytics dimension — correlate a single request in your own logs via the forwarded header.
+    method: POST /api/orgs/{orgId}/analytics/metrics/{metric} against a live gateway (read-only).
+    confirmed:
+      - Requests in the last hour grouped by api_name — one row per API, sortable busiest-first.
+      - The same grouped by app_name and by product_name; unauthenticated traffic lands in an unattributed bucket.
+      - Slowest and fastest APIs by AVG response-time, using server-side sort on value (DESC / ASC).
+      - Error picture by api_name + response_status_code (200 / 401 / 429 all distinguished).
+      - scripts/query-analytics.sh executed end to end and printed every view.
+    metrics_available: [REQUESTS_PER_SECOND, REQUESTS_COUNT, RESPONSE_TIME, REQUEST_SIZE, RESPONSE_SIZE, TOTAL_TRANSFER_SIZE, UPSTREAM_RESPONSE_TIME]
+    dimensions_available: [env_name, app_id, app_name, product_name, api_name, route_id, route_name, api_path, request_method, response_status_code, upstream_path, developer]
+    filter_operators: [EQ, NEQ, GT, GTE, LT, LTE, IN, LIKE, NOT_LIKE]
 
-  overall: READY
+  confirmed_limits:
+    - No percentiles — response-time supports AVG/MIN/MAX/SUM only (a percentile aggregation is rejected).
+    - No quota-usage metric — 429s can be counted, but not "percent of a limit used".
+    - X-Request-Id is not a dimension — correlate a single request in your own logs.
+
+  overall: READY   # read-only; all documented queries verified live
 
 what_you_should_do:
-  - Do NOT add an analytics plugin; it is global.
-  - Group route-level analytics by route_id (templated), not api_path (concrete path).
-  - Add helix-auth (solution 01) if you need per-app attribution rather than per-IP.
-  - Confirm your retention window covers the queries in charts.md.
+  - Get a control-plane bearer token (the portal uses the same one).
+  - Run scripts/query-analytics.sh with your CP host, ORG and TOKEN.
+  - For per-app / per-product rows, make sure the API resolves identity (solution 01/03); otherwise traffic is unattributed.

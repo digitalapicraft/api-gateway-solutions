@@ -1,4 +1,0 @@
-### Case: list-route — GET /posts. No auth on this minimal API.
-### Expect 200 with the standard canned response and an X-Request-Id header.
-GET {{GATEWAY}}/posts
-accept: application/json

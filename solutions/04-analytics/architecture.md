@@ -1,209 +1,93 @@
-# Architecture — analytics that can answer a question
+# Architecture — how analytics is captured, and how you read it
 
-Analytics is not something this solution turns on. It is already on: `helix-analytics`
-is enabled globally on the platform, and every request through every API is being
-captured right now.
-
-What this solution does is make the capture **useful**. That is a request-path concern,
-not an observability concern, and the distinction is the whole architecture.
+This solution adds nothing to your APIs. Analytics is a platform capability that
+records every request as it passes through the gateway; your job is only to query
+what's already there. So the "architecture" here is two things: where the data
+comes from, and the shape of the read API.
 
 ---
 
 ## Where the data comes from
 
-This solution's API is deliberately minimal — two routes returning a standard
-the two routes proxy the public jsonplaceholder upstream, no auth. Analytics still captures every call; the
-only question is how usefully. Here is a call to the templated route:
-
 ```
-┌────────┐   ┌───────────────────────────────────────────────┐
-│ Client │   │                   Gateway                     │
-└───┬────┘   │                                               │
-    │ GET /posts/ord_1a2b3c                                 │
-    ├────────►│  ┌──────────── rewrite phase ─────────────┐  │
-    │        │  │ request-id → X-Request-Id: 7f3c…        │  │
-    │        │  └──────────────┬─────────────────────────┘  │
-    │        │  ┌──────────── proxy ───────────────────────┐  │
-    │  200   │  │ forwards to jsonplaceholder, returns data│  │
-    │◄───────┼──┴─────────────────────────────────────────┘  │
-    │        │  ┌──────────── log phase ──────────────────┐  │
-    │        │  │ helix-analytics  (GLOBAL — NOT in your   │  │
-    │        │  │                   API's spec)            │  │
-    │        │  │ writes one row:                          │  │
-    │        │  │   route      /posts/{postId}  ← templated (group by route_id)
-    │        │  │   api_path   /posts/ord_1a2b3c ← the concrete path
-    │        │  │   status     200                         │  │
-    │        │  │   latency    2ms                         │  │
-    │        │  │   request_id 7f3c…             ← correlation (log-side)
-    │        │  │   app        (none) ── a SOURCE IP unless you add identity
-    │        │  └─────────────────┬───────────────────────┘  │
-    └────────┴────────────────────┼──────────────────────────┘
-                                 ▼
-                    ┌────────────────────────┐
-                    │   analytics store      │ ──► portal
-                    │   (platform-managed)   │ ──► the agent / metrics API
-                    └────────────────────────┘
+        every request through any API
+                    │
+        ┌───────────▼───────────────┐
+        │  Gateway (log phase)       │   captured automatically —
+        │  records one row per call: │   no plugin, no config on your API
+        │   api_name, route_id,      │
+        │   app_name, developer,     │
+        │   product_name, status,    │
+        │   response_time, sizes …   │
+        └───────────┬───────────────┘
+                    ▼
+        ┌───────────────────────────┐        ┌───────── you ──────────┐
+        │   analytics store          │◄──────►│  metrics API  /  portal │
+        │   (platform-managed)       │  read  │  (read-only queries)    │
+        └───────────────────────────┘        └─────────────────────────┘
 ```
 
-Two fields in that row are useful *because of a request-path choice* baked into this
-API: **route** is templated (group by the `route_id` dimension and `/posts/{postId}`
-collapses to one row), and **request_id** is a correlation handle you match in your own
-logs. A third — **who called** — is a *source IP* here, because the API has no identity.
-Add `helix-auth` ([solution 01](../01-oauth-jwt/)) and that same row carries the app and
-developer instead; you change nothing on the analytics side.
+Capture happens in the **log phase**, after the request is served, so it never
+affects latency or behaviour — and it happens whether or not you ever look. There
+is no "turn on analytics" step and no `helix-analytics` block to add to a spec.
 
-## The fields that matter, and where they come from
+## The read API
 
-| Field in the row | Comes from | Without it |
-|---|---|---|
-| `route` (by `route_id`) | The **templated** OpenAPI path `/posts/{postId}` | Group by `api_path` and you get one row per order id — a per-route breakdown that is a list of individual records, with per-route latency from one sample each. |
-| `request_id` | `request-id`, forwarded upstream | You can see 3% of calls failed but cannot reach the failing request, or the matching line in your backend's logs. |
-| `app` / `developer` *(compose-in)* | `helix-auth` ([solution 01](../01-oauth-jwt/)) resolving identity | Not present on this minimal API — the row attributes to a source IP. Add solution 01 when you need per-app numbers. |
-Templating and correlation are baked into this minimal API; identity is the one you
-add ([solution 01](../01-oauth-jwt/)) when per-app numbers matter. There is no analytics
-configuration in the spec at all, and there should not be.
+One endpoint, one request shape:
 
-## The property that makes this urgent
+```
+POST /api/orgs/{orgId}/analytics/metrics/{metric}
+{ startTime, endTime, dimensions[], filters[], aggregation, timeUnit, pageRequest }
+```
 
-**Templating and identity must be in place *before* the data you want to query is
-generated.**
+- **metric** (path): `requests-count`, `requests-per-second`, `response-time`,
+  `request-size`, `response-size`, `total-transfer-size`, `upstream-response-time`.
+  The size/time metrics take an `aggregation` of `AVG`/`MIN`/`MAX`/`SUM`; counts
+  and rates take none.
+- **dimensions**: group by any of `env_name`, `app_id`, `app_name`, `product_name`,
+  `api_name`, `route_id`, `route_name`, `api_path`, `request_method`,
+  `response_status_code`, `upstream_path`, `developer`.
+- **filters**: `{column, operator, value[]}` with `EQ NEQ GT GTE LT LTE IN LIKE
+  NOT_LIKE`, AND-combined — e.g. one API, or only 5xx statuses.
+- **pageRequest.sort** on `value` gives you top-N (busiest / slowest); `timeUnit`
+  (`SECONDS`/`MINUTES`/`HOURS`/`DAYS`) turns a total into a time series.
 
-This is the structural fact that justifies a gateway configuration in a solution about
-reading charts:
+The full request bodies for the everyday questions are in
+[`charts.md`](charts.md); [`scripts/query-analytics.sh`](scripts/query-analytics.sh)
+runs the headline set.
 
-- Analytics **cannot retroactively attribute** traffic captured without identity. The
-  gateway didn't know who was calling; nothing recovers that later.
-- Analytics **cannot collapse** literal paths into a template after the fact. A year of
-  `/posts/ord_1a2b3c` rows stays a year of individual rows.
-- A correlation id **not written down by your backend** cannot be reconstructed.
+## Two things about attribution
 
-So the failure mode isn't "the dashboard is missing a feature". It's "the question was
-made unanswerable months ago, by a decision nobody framed as an observability
-decision."
+You configure nothing for analytics, but two properties of how an API is *already*
+built decide how useful its rows are:
 
-The one piece of good news: fixing the configuration fixes it *going forward*
-immediately. There's no migration, no backfill — just a line under the old data.
-
-## Execution order
-
-| Order | Plugin / step | Phase | Contributes to the row |
-|---|---|---|---|
-| 1 | `helix-auth` (validate) | access | `app`, `developer` — and gates everything after it |
-| 2 | `request-id` | rewrite | `request_id`, also sent upstream |
-| 3 | *(upstream call)* | — | `status`, `latency` |
-| 4 | `helix-analytics` **(global)** | log | writes the row |
-
-The dependency that matters: **analytics runs in the log phase, last.** It records
-whatever the earlier phases established. It has no ability to enrich a row with
-information that was never resolved — it is a recorder, not an investigator.
-
-That's why identity has to be step 1 rather than an afterthought, and why an
-unauthenticated route produces a permanently anonymous row.
-
-## Route design is an analytics decision
-
-Two modelling choices in the spec exist purely for observability reasons, and neither
-is obvious as such.
-
-**Templating.** `/posts/{postId}` declared as a parameter is one row. Declared as
-literals, it's one row per order. The API behaves identically — this is invisible until
-you ask a route-level question.
-
-**Splitting by latency profile.** If you later add routes with very different latency
-profiles — say a 30-second report and a 40ms lookup — keep them as separate routes. Sharing
-one path pattern gives a per-route latency (`AVG`/`MAX`) that describes neither — a number
-worse than useless because it looks authoritative.
-
-> **If two routes have wildly different latency profiles, they want separate rows.**
-
-Nobody frames "should these be two routes?" as an observability question. It is one.
+- **Identity → attribution.** An API that resolves the caller (`helix-auth`)
+  produces rows carrying `app_name` / `developer` / `product_name`. An anonymous API
+  attributes to a source-address bucket ("unattributed"). Adding identity is
+  [solution 01](../01-oauth-jwt/) / [solution 03](../03-api-products/) — a decision
+  about the API, not about analytics.
+- **Templating → one row per route.** Group by `route_id` and a templated route
+  (`/orders/{id}`) is one row; group by `api_path` and it fragments into one row per
+  concrete id.
 
 ## Native vs custom
 
-There is nothing to build. **No custom code is required, and the analytics capture
-itself is not yours to configure.**
+There is nothing to build. You do not run a telemetry pipeline, add a logger, or
+write code. Where custom tooling *would* be justified — and is out of scope here —
+is anything the metrics API deliberately doesn't do:
 
-| Requirement | How it's met | Note |
-|---|---|---|
-| Capture every request | `helix-analytics`, **enabled globally by the platform** | Not in your spec. Adding a block is the mistake this solution prevents. |
-| Attribute to an app | `helix-auth` in the access phase | The one decision that determines whether per-app anything is possible |
-| Group by route | Templated OpenAPI paths | A modelling decision, not a plugin |
-| Correlate to one request | `request-id`, forwarded upstream | Half the value is your backend logging it |
-| Query it | The portal, or the agent in natural language | See [`charts.md`](charts.md) |
-
-Where custom work **would** be justified, and is out of scope here:
-
-- **Per-hop tracing inside your own services.** Analytics measures at the edge. For
-  internal spans you want distributed tracing, and `X-Request-Id` is the thread that
-  joins the two datasets.
-- **Threshold alerting.** This is query-and-chart. Alerting is a different tool fed by
-  different data.
-- **Long-term warehousing beyond the platform's retention window.** If you need
-  multi-year trend analysis, that's an export pipeline.
-
-## What the data cannot tell you
-
-Worth stating precisely, because assuming otherwise wastes an afternoon:
-
-- **Requests, not bodies.** Which app called `POST /posts` and what status came back —
-  yes. What was in the payload — no, and deliberately: capturing bodies means capturing
-  customer data.
-- **The gateway's view of latency.** It includes your upstream's total time but cannot
-  decompose it into your internal hops.
-- **Rejected requests attribute only when identity resolved.** A 401 from an unknown key
-  has no app. Expect an "unidentified" bucket and don't read it as zero.
-- **Retention is finite and is a platform setting.** It bounds which questions are
-  answerable at all. Confirm your window before building a 30-day report.
+- **Percentiles** (p95/p99): the API gives `AVG`/`MIN`/`MAX` only. True percentiles
+  need a tracing/metrics pipeline (Prometheus/OpenTelemetry).
+- **Per-request tracing** across your internal hops: analytics is edge-measured;
+  `upstream-response-time` isolates the backend's share but not the hops within it.
+- **Long-term warehousing** beyond the platform's retention window: export the data.
 
 ## When to use this
 
-Use it when:
+Use it when you want to see request volume, latency, or errors across your APIs,
+products, or apps — for triage, capacity planning, or a quick "who's calling what"
+— and you want it now, read-only, with nothing to install.
 
-- **You have analytics and cannot get an actionable answer out of it.** The common case,
-  and it's a request-path problem wearing a tooling problem's clothes.
-- **You're about to onboard partners at scale.** Get these three right before the data
-  arrives — two of them are unrecoverable.
-- **Incident attribution is slow.** "Which of our 400 integrations caused this" should be
-  a query, not forty minutes.
-- **You need chargeback or upgrade signals.** Per-app counts are the input to both.
-
-Don't use it when:
-
-- **You need per-hop latency inside your services.** Distributed tracing.
-- **You need bodies.** Not captured, by design.
-- **You need real-time threshold alerting.** Different tool.
-- **Your API is genuinely anonymous and must stay so.** Then attribution is impossible in
-  principle. Volume, latency and error rate still work; per-app charts never will.
-
-## Prerequisites
-
-- The API is deployed to an environment.
-- For per-app attribution, **identity is resolved** on the routes — see
-  [solution 01](../01-oauth-jwt/). Optional here; without it, rows attribute to a source IP.
-- Paths are templated wherever a segment is an identifier.
-- `request-id` applied API-wide, and ideally your backend teams logging it.
-- Traffic actually exists. Analytics is capture-then-query; there is nothing to look at
-  until calls have been made. [`gateway/verify.sh`](gateway/verify.sh) seeds a known,
-  labelled pattern for exactly this reason.
-- For the quota charts (5–7 in [`charts.md`](charts.md)):
-  [solution 03](../03-api-products/) deployed, since consumption requires a quota to
-  exist.
-
-## Failure behaviour
-
-Analytics has no failure mode that affects the request path — it runs in the log phase
-and does not gate traffic. The failures are all *epistemic*: the data is captured
-faithfully and cannot answer you.
-
-| Symptom | Cause | Recoverable? |
-|---|---|---|
-| Every row is an IP address | Identity not resolved on that route | **No** for existing data. Fix the route; future data is fine. |
-| One row per order id | Path not templated | **No** for existing data. Fix the spec; future data is fine. |
-| `X-Request-Id` found at the gateway but not in backend logs | Your services aren't recording the forwarded header | Yes — ask your teams |
-| Per-route `AVG`/`MAX` looks implausible | Too few samples in that row | Yes — check the row's request count |
-| A route's latency describes nothing | Fast and slow operations share one path pattern | Yes — split the routes |
-| Query returns nothing | No traffic yet, or outside the retention window | Yes — seed traffic; check retention |
-| A 401 spike attributes to no app | Identity never resolved for those requests — correct behaviour | N/A — expect the unidentified bucket |
-
-The first two rows are the ones worth acting on today, because they are the only two
-that get worse the longer you wait.
+Don't reach for it when you need **percentile latency**, **per-request traces**, or
+**alerting on thresholds** — those are a tracing/metrics/alerting stack, fed by
+different data. The metrics API answers aggregate questions, not those.

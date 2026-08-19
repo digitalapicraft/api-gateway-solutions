@@ -263,5 +263,5 @@ that's the metrics API / portal, covered in
   properly.
 - **[Solution 03 — API Products](../03-api-products/helix-agent-prompt.md)** —
   metering the partners now reaching your legacy system.
-- **[Solution 04 — Analytics](../04-analytics/helix-agent-prompt.md)** — the
+- **[Solution 04 — Analytics](../04-analytics/charts.md)** — the
   questions worth asking once this is live.

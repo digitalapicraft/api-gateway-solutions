@@ -1,6 +1,0 @@
-### Case: item-route-templated — GET /posts/{postId}.
-### Send several DISTINCT ids so the analytics templating check has data:
-###   for id in a1 b2 c3 d4 e5; do curl -s {{GATEWAY}}/posts/$id; done
-### They must aggregate to ONE row grouped by route_id (not one row per id).
-GET {{GATEWAY}}/posts/a1
-accept: application/json

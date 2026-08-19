@@ -150,5 +150,5 @@ validate with validate_auth_type jwt-auth, keeping api-product-enforcer behind i
 
 - **[Solution 01 — OAuth 2.0 with JWT](../01-oauth-jwt/helix-agent-prompt.md)** —
   swap the static key for a token flow; keep the quota behind it.
-- **[Solution 04 — Analytics](../04-analytics/helix-agent-prompt.md)** — see who is
+- **[Solution 04 — Analytics](../04-analytics/charts.md)** — see who is
   approaching a limit and who got 429s.

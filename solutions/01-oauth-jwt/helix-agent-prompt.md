@@ -166,5 +166,5 @@ quota already counts per app.
   same auth acts, with protocol mediation in front (bring your own SOAP backend).
 - **[Solution 03 — API Products](../03-api-products/helix-agent-prompt.md)** —
   metering the callers this solution identifies.
-- **[Solution 04 — Analytics](../04-analytics/helix-agent-prompt.md)** — the usage
+- **[Solution 04 — Analytics](../04-analytics/charts.md)** — the usage
   questions you can ask once identity is resolved here.
