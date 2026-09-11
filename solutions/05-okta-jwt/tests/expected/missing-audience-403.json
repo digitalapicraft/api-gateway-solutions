@@ -1,0 +1,7 @@
+{
+  "_case": "missing-audience",
+  "_status": 403,
+  "_note": "A correctly signed, unexpired token with NO aud claim. Rejected because claim_validator.audience.required is true. EXECUTED against a deployed route.",
+  "_why_403_matters": "Every other caller-side rejection in this solution returns 401. This one returns 403. If you are writing client-side error handling, or an alert on auth failures, a 403 here will not match a rule that only looks for 401.",
+  "_do_not_confuse_with": "A 403 from required_scopes, which looks identical from outside. Decode the token: no aud means this case; aud present but scopes missing means the other."
+}

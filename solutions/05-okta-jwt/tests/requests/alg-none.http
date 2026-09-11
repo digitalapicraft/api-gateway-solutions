@@ -1,0 +1,8 @@
+### Case: alg-none — a token whose header declares {"alg":"none"} and which carries
+### no signature at all. Expect 401.
+### This case exists because accept_unsupported_alg DEFAULTS TO TRUE on this plugin
+### ("Ignore ID token signature to accept unsupported signature algorithm"), and
+### accept_none_alg exists as a separate switch. Both are set false in the spec.
+GET {{GATEWAY}}/posts
+authorization: Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJhdHRhY2tlciIsImlzcyI6ImF0dGFja2VyIn0.
+accept: application/json

@@ -1,0 +1,6 @@
+### Case: forged-signature — a real Okta token with its signature replaced.
+### Expect 401. A 200 here means the signature is not being verified against
+### Okta's JWKS at all, which is the most serious way this solution can fail.
+GET {{GATEWAY}}/posts
+authorization: Bearer {{ACCESS_TOKEN_WITH_BROKEN_SIGNATURE}}
+accept: application/json

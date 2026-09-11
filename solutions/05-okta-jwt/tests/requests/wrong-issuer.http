@@ -1,0 +1,10 @@
+### Case: wrong-issuer — a correctly signed, unexpired token from a DIFFERENT Okta
+### authorization server. Expect 401.
+###
+### This is the case that proves the token is specific to THIS API rather than
+### merely "a valid token from somewhere". It is the counterpart to solution 01's
+### wrong-client-secret case: without it you have demonstrated that signatures are
+### checked, not that the right issuer is required.
+GET {{GATEWAY}}/posts
+authorization: Bearer {{OTHER_ISSUER_TOKEN}}
+accept: application/json

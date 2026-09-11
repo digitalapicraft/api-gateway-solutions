@@ -1,0 +1,10 @@
+{
+  "_case": "valid-token",
+  "_status": 200,
+  "_note": "The upstream's own response body, passed through untouched — this solution adds authentication, not transformation. Assert the status and that the body is your backend's normal payload. The array below is illustrative for a Posts API.",
+  "_headers_present": ["X-Request-Id"],
+  "_upstream_receives": "X-Access-Token, because set_access_token_header is true. set_id_token_header and set_userinfo_header are false, so no X-ID-Token and no X-Userinfo — and no userinfo round trip to Okta per request.",
+  "_body_example": [
+    { "userId": 1, "id": 1, "title": "sample post", "body": "..." }
+  ]
+}

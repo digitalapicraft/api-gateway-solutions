@@ -1,0 +1,175 @@
+# Solution manifest — the traceability spine for this package.
+# Every artifact below corresponds to this one solution version. If the gateway
+# config changes, bump `version` and re-derive the docs and infographic from it
+# — never the other way round.
+
+solution:
+  name: OAuth with Okta — verify the token, don't issue it
+  slug: 05-okta-jwt
+  version: 1.0.0
+  category:
+    - Security & Access
+  tags: [oauth2, oidc, okta, jwt, jwks, rs256, external-idp, openid-connect, authentication]
+
+problem:
+  statement: >-
+    An organisation already runs Okta as its identity provider, but its APIs still
+    authenticate with static keys that never expire and cannot be deprovisioned,
+    because making each service verify Okta tokens means writing JWKS fetching,
+    key caching and signature verification once per service and per language.
+
+business_need:
+  summary: >-
+    Bring the API estate under the identity provider the organisation already owns
+    and governs, without a release in any backend service. Replace a distributed
+    static credential with a token minted on demand and measured in minutes, so
+    that deprovisioning is an Okta action rather than a hunt for every copy of a
+    key, and so APIs are covered by the access review that already runs.
+
+implementation:
+  gateway_capabilities:
+    - openid-connect          # API-wide — verifies Okta's RS256 tokens against its JWKS via discovery
+    - request-id              # correlation, the only handle an integrator has on an opaque 401
+    - cors                    # browser access; authorization must be in allow_headers
+  custom_code_required: false
+  notes: >-
+    openid-connect is used because OKTA is the issuer and the gateway is only a
+    verifier. helix-auth cannot do this job: its live schema is
+    additionalProperties:false over mode, validate_auth_type, signing_secret,
+    private_key, algorithm, token_ttl, payload, apikey, client_id_claim,
+    ctx_namespace, base64_* and _meta — no JWKS URL, no issuer, no audience, no
+    public key, and no way to add one. It verifies tokens it minted. This and
+    solution 01 sit on opposite sides of the issuer boundary and are not
+    interchangeable implementations of the same thing.
+    The plugin is applied at the DOCUMENT ROOT, unlike solution 01's per-route
+    scoping. Solution 01 must leave POST /oauth/token reachable without a token;
+    here there is no token endpoint at all, so API-wide is correct and leaves no
+    route unprotected by omission.
+    use_jwks: true is REQUIRED and is not in the published plugin schema. Without
+    it the plugin never verifies the JWT against the JWKS — it falls back to token
+    introspection, and neither Auth0 nor an Okta org authorization server publishes
+    an introspection endpoint, so every token is rejected with 401 and
+    error_description "no endpoint URI for introspection". It is accepted because
+    openid-connect does not set additionalProperties: false, and it is persisted on
+    the revision. Verified by ablation on a live gateway.
+    bearer_only: true is also required: the DEPLOY (not the import) is rejected
+    without it — 'property "session.secret" is required when "bearer_only" is
+    false'. It is what makes an unauthenticated call return 401 rather than a 302
+    redirect. unauth_action: deny is redundant alongside it and is set for clarity.
+    Two further defaults are overridden for security: ssl_verify (false -> true;
+    the default fetches the root of trust unverified) and accept_unsupported_alg
+    (true -> false; documented as "ignore ID token signature to accept unsupported
+    signature algorithm"). claim_validator.issuer is added because nothing beyond
+    the signature is validated by default — proven by pointing valid_issuers at a
+    wrong issuer, which correctly rejected a genuine token.
+
+validation:
+  # See validation/gateway-validation.yaml for the full record and provenance.
+  local:
+    status: PASS
+    basis: >-
+      structural review of api-spec.yaml and verify.sh, plus JSON-Schema validation
+      of every plugin block against the schemas returned by
+      GET /orgs/{orgId}/plugin-schemas on the target org
+    verified_this_session: true
+  gateway_dry_run:
+    status: PASS
+    verified_this_session: true
+    detail: >-
+      Spec imported cleanly and a non-destructive dry-run deploy returned HTTP 200
+      {"success": true, "message": "Dry-run validation successful"}.
+  deployment:
+    status: DEPLOYED
+    verified_this_session: true
+    detail: Revision deployed ACTIVE to a test environment and exercised.
+  functional_test:
+    status: PASS
+    verified_this_session: true
+    executor: manual curl against the deployed route; gateway/verify.sh codifies the same cases
+    detail: >-
+      THIS spec, deployed verbatim with only the four placeholders substituted,
+      tested with a real IdP-issued token: valid token -> 200 with the upstream
+      body; same token on a second route -> 200; repeat -> 200; no token -> 401
+      (not a redirect); forged signature -> 401; alg=none -> 401; Authorization
+      without a scheme -> 400. 7/7.
+    also_established: >-
+      valid_issuers pointed at a wrong issuer rejects a genuine token (401), so
+      issuer pinning genuinely runs. required_scopes satisfied -> 200, unsatisfied
+      -> 403. A missing aud claim -> 403.
+    supersedes: >-
+      An earlier revision of this manifest reported functional_test PASS on the
+      basis of a CONTROL configuration with public_key pinned, run when the test
+      client had no audience grant and no real token could be minted. Pinning a key
+      bypasses the introspect-vs-JWKS decision, so it passed while the shipped spec
+      rejected every token for want of use_jwks. That result is withdrawn.
+    confirmed_gap: >-
+      A correctly signed, unexpired token whose aud is an unrelated API is ACCEPTED
+      (200). The audience is not enforced by value.
+    caveat: >-
+      The IdP exercised was Auth0, not an Okta tenant — same OIDC mechanism and
+      identical configuration, but no Okta tenant was touched.
+
+artifacts:
+  documentation: [README.md, architecture.md, business-need.md]
+  source_code: [gateway/api-spec.yaml, gateway/verify.sh]
+  agent_prompt: helix-agent-prompt.md
+  infographic: [infographic.md]
+  tests: [tests/test-plan.yaml, tests/requests/, tests/expected/]
+  validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
+
+assumptions:
+  - API name is "Partner Posts API" and the protected paths are /posts* (illustrative — replace with yours).
+  - The target org's build includes openid-connect. This is NOT universal — see limitations.
+  - The Okta authorization server issues JWT access tokens, not opaque ones.
+  - Callers obtain tokens from Okta directly; the gateway exposes no token endpoint.
+  - The four <OKTA_...> placeholders are replaced with real values before deploy, and the completed spec is kept out of version control.
+  - The upstream is bound on the service per environment at import/bind time, not in the OpenAPI paths.
+
+limitations:
+  - openid-connect is absent from some builds. On the free-trial build the entire
+    Authentication category is helix-auth alone, and this solution cannot be
+    deployed there at all. Confirm with GET /orgs/{orgId}/plugin-schemas first.
+  - The AUDIENCE is not enforced by value, and this was PROVEN against a deployed
+    route — a correctly signed, unexpired token whose aud was an unrelated API
+    returned 200. claim_validator.audience offers only required (claim present),
+    claim (which name) and match_with_client_id (inapplicable to access tokens,
+    whose aud is the API's audience URI rather than the client id). There is no
+    expected-value field. Issuer pinning — which IS enforced — plus required_scopes
+    is the available control. Never describe this solution as checking the audience.
+  - A token with NO aud claim is rejected with 403, not 401. It is the only
+    caller-side rejection distinguishable from the others; alerting that matches
+    only on 401 will miss it.
+  - 401 responses carry a WWW-Authenticate header of `Bearer realm="apisix"`,
+    naming the underlying runtime. `realm` is settable if that matters to you.
+  - There are THREE rejection codes, not one. 401 for a bad, absent, expired or
+    wrong-issuer token; 403 when the aud claim is missing or required_scopes is not
+    satisfied; 400 when the Authorization value carries no recognised auth scheme
+    (rejected at header parse, before the plugin runs). Client error handling or
+    alerting that keys only on 401 will miss two of the three. All verified.
+  - unauth_action is redundant while bearer_only is true. Verified on a live
+    gateway — a no-token call still returns 401 rather than a 302. bearer_only is
+    the field that cannot be omitted, and its absence fails the DEPLOY, not the
+    import.
+  - This is authentication, not authorization. The token proves who is calling; no
+    scopes are enforced in this configuration. required_scopes exists and is
+    deliberately unused.
+  - No per-caller metering. An Okta-issued token does not resolve an app
+    credential, so api-product-enforcer has nothing to key off. Quotas need
+    solution 03's model and the two do not compose for free.
+  - Token lifetime is Okta's decision. There is no token_ttl to set here — that is
+    the trade made by not being the issuer.
+  - No revocation before expiry. Disabling an app in Okta stops NEW tokens;
+    already-issued ones remain valid until they expire. Closing that gap means
+    introspection_endpoint, which puts Okta on the request path.
+  - Opaque access tokens cannot be verified locally at all. That configuration is a
+    different solution with different latency and availability properties.
+  - A stale JWKS cache across an Okta key rotation rejects valid tokens until it
+    expires. jwk_expires_in is set to 3600 rather than the 86400 default to bound
+    this, but it is not eliminated.
+  - client_secret is schema-required yet unused by local JWKS verification. Its
+    presence should not be read as protecting the request path.
+  - All caller-side failure causes return an indistinguishable 401. Correct
+    security behaviour, and genuinely hard for integrators to self-diagnose —
+    document the causes and give them X-Request-Id.
+
+status: READY WITH WARNINGS   # deployed and functionally tested; the warning is that the audience is not enforced by value

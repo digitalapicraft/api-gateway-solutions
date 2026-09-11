@@ -108,9 +108,9 @@ Get this wrong and you build the wrong half of the flow.
       (no IdP exists)                (Keycloak, Auth0,
             │                         Entra ID, Okta)
             ▼                                   ▼
-   helix-auth generate              jwt-auth on the routes
+   helix-auth generate              openid-connect on the API
    + helix-auth validate            + NO token route here
-   (this solution)
+   (this solution)                  (solution 05-okta-jwt)
             │                                   │
    Gateway is the                    Gateway is a
    AUTHORIZATION SERVER              VERIFIER ONLY
@@ -123,9 +123,11 @@ These are not interchangeable implementations of the same idea:
 - **`helix-auth` generate** makes the gateway the authorization server. It holds
   the signing secret, so it can both mint and verify. Right when there's no IdP
   and you don't want to run one for a partner API.
-- **`jwt-auth`** makes the gateway a verifier against someone else's issuer. It
-  holds a public key or a JWKS URL, so it can verify but not mint. Right whenever
-  an IdP already exists.
+- **`openid-connect`** makes the gateway a verifier against someone else's
+  issuer. It fetches that issuer's public keys from a JWKS endpoint via
+  `discovery`, so it can verify but not mint. Right whenever an IdP already
+  exists — see [solution 05](../05-okta-jwt/). `helix-auth` cannot stand in for
+  it: no JWKS URL, no issuer, no audience, and `additionalProperties: false`.
 
 The failure mode of choosing wrong is subtle: two systems both believe they're
 authoritative about identity, and you find out during an incident.

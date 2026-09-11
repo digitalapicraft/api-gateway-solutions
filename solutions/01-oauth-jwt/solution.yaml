@@ -36,7 +36,9 @@ implementation:
     helix-auth generate is used because the GATEWAY is the token issuer. If an
     external identity provider (Keycloak, Auth0, Entra ID, Okta) already issues
     the tokens, this solution is the wrong shape: drop the token route and use the
-    jwt-auth plugin as a verifier against that issuer instead. The two are not
+    openid-connect plugin as a verifier against that issuer instead (solution
+    05-okta-jwt). helix-auth cannot do it — no JWKS URL, issuer or audience field,
+    and additionalProperties:false. The two are not
     interchangeable implementations — they sit on opposite sides of the issuer
     boundary.
     validate is applied PER ROUTE, not API-wide, so POST /oauth/token stays

@@ -1,0 +1,8 @@
+{
+  "_case": "wrong-audience",
+  "_status": 200,
+  "_note": "THIS IS NOT A PASS. It is a documented gap, recorded so nobody assumes otherwise. A correctly signed, unexpired token whose aud was 'https://totally-unrelated-api.example.com/' was ACCEPTED and proxied to the upstream. Reproduced twice against a deployed route.",
+  "_cause": "claim_validator.audience exposes only: required (is the claim present), claim (which claim name to read), match_with_client_id (must the value equal/contain the client id). There is NO expected-value field. IdP access tokens carry aud = the API's audience URI, not the client id, so match_with_client_id does not apply to them either.",
+  "_what_to_do": "Pin claim_validator.issuer.valid_issuers, which IS enforced, and use required_scopes to distinguish APIs within one tenant. Do not rely on aud to scope a token to a single API on this plugin.",
+  "_body_example": "the upstream's normal payload — the request was proxied as if fully authorized"
+}

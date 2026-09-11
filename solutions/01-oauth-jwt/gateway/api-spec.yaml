@@ -38,10 +38,13 @@
 # version control. App client_id/client_secret are provisioned on the credential
 # by the control plane and never appear here.
 #
-# EXTERNAL ISSUER? If Keycloak / Auth0 / Entra ID / Okta issues the tokens, drop
-# the /oauth/token route and keep helix-auth in validate mode with
-# validate_auth_type jwt-auth pointed at the issuer's key material. NOTE: jwt-auth
-# and key-auth are validate_auth_type VALUES of helix-auth, not standalone plugins.
+# EXTERNAL ISSUER? If Keycloak / Auth0 / Entra ID / Okta issues the tokens, this
+# solution is the wrong shape and helix-auth is the wrong plugin. helix-auth
+# verifies tokens IT minted: its schema is additionalProperties:false with no JWKS
+# URL, no issuer and no audience field, so it cannot be pointed at another
+# issuer's key material at all. Use openid-connect instead — see solution
+# 05-okta-jwt. NOTE: jwt-auth and key-auth are validate_auth_type VALUES of
+# helix-auth, not standalone plugins.
 
 openapi: 3.0.3
 

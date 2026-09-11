@@ -1,0 +1,211 @@
+# Solution 05 — an API protected by tokens OKTA issues. The gateway only verifies.
+#
+# This is the importable artifact: an OpenAPI 3.0.3 document carrying
+# x-helix-gateway.plugins. Import it, bind an upstream, fill in the four Okta
+# values below, and deploy the revision.
+#
+# THIS IS THE MIRROR OF SOLUTION 01. There, the gateway ISSUES the token
+# (helix-auth generate on POST /oauth/token) and verifies its own signature with a
+# shared HMAC secret. Here Okta issues, Okta holds the private key, and the
+# gateway's only job is to verify an RS256 signature against Okta's published
+# JWKS. Pick by who owns the identity, not by preference — see README.
+#
+# WHY NOT helix-auth. helix-auth cannot do this. Its schema (confirmed live via
+# GET /orgs/{orgId}/plugin-schemas) is additionalProperties:false over mode,
+# validate_auth_type, signing_secret, private_key, algorithm, token_ttl, payload,
+# apikey, client_id_claim, ctx_namespace, base64_* and _meta. There is no JWKS
+# URL, no issuer, no audience, and no public-key field — and because
+# additionalProperties is false, one cannot be added. helix-auth verifies tokens
+# IT minted. openid-connect is the plugin that verifies somebody else's.
+#
+# CONFIRM THE PLUGIN EXISTS IN YOUR ORG FIRST. Builds vary: on the free-trial
+# build the entire Authentication category is helix-auth alone and
+# openid-connect is NOT present. Check with
+# GET /orgs/{orgId}/plugin-schemas?page=1&size=300 before you rely on this.
+#
+# RUNNABLE AGAINST A REAL UPSTREAM. The upstream is the public
+# https://jsonplaceholder.typicode.com, so GET /posts returns real data with no
+# backend of your own. Route paths match upstream paths, so no proxy-rewrite.
+#
+# FILL IN FOUR VALUES BEFORE DEPLOY — THEY ARE LITERALS, NOT INDIRECTIONS.
+# This build does NOT resolve <ENV:...> or ${...}; whatever string is in the
+# field is used verbatim. Shipping <OKTA_CLIENT_SECRET> as-is puts a placeholder
+# where a secret belongs and it will simply fail. Replace all four, and keep the
+# filled-in spec out of version control:
+#   <OKTA_DISCOVERY_URL>  https://<your-okta-domain>/oauth2/<authServerId>/.well-known/openid-configuration
+#                         (org authorization server: https://<your-okta-domain>/.well-known/openid-configuration)
+#   <OKTA_ISSUER_URL>     the "issuer" value that discovery document reports — must match exactly
+#   <OKTA_CLIENT_ID>      the Okta application's client id
+#   <OKTA_CLIENT_SECRET>  its client secret (see the note on the plugin block — it is schema-required)
+#
+# AUTH IS AT THE DOCUMENT ROOT, NOT PER ROUTE — the deliberate opposite of
+# solution 01. Solution 01 must scope helix-auth per route because POST
+# /oauth/token has to stay reachable without a token. Here there is no token
+# endpoint at all: Okta issues, off-gateway. So every route is protected by one
+# root-level block and there is no hole to leave open by accident.
+
+openapi: 3.0.3
+
+info:
+  title: Partner Posts API
+  version: 1.0.0
+  description: >-
+    A sample API protected by OAuth 2.0 access tokens issued by Okta. The gateway
+    verifies each token's RS256 signature against Okta's published JWKS and checks
+    the issuer, then proxies the public jsonplaceholder service. Point it at your
+    own upstream when ready; nothing about the auth configuration changes.
+
+paths:
+  /posts:
+    get:
+      summary: List posts
+      description: >-
+        Requires a valid Okta-issued Bearer access token. Rejected in the access
+        phase before the upstream is contacted.
+      responses:
+        '200': { description: Array of posts }
+        '401': { description: Missing, malformed, expired, wrong-issuer or badly signed Bearer token }
+    post:
+      summary: Create a post
+      description: Requires a valid Okta-issued Bearer access token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, body, userId]
+              properties:
+                title:  { type: string }
+                body:   { type: string }
+                userId: { type: integer }
+      responses:
+        '201': { description: Created }
+        '400': { description: Invalid payload }
+        '401': { description: Missing or invalid Bearer token }
+
+  /posts/{postId}:
+    get:
+      summary: Get a post
+      description: Requires a valid Okta-issued Bearer access token.
+      parameters:
+        - { name: postId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Post }
+        '401': { description: Missing, malformed, expired, wrong-issuer or badly signed Bearer token }
+        '404': { description: Not found }
+
+# API-WIDE POLICY — every route above is protected by this one block.
+x-helix-gateway:
+  plugins:
+    # Verify Okta's access tokens. Priority 2599, access phase, so a rejected
+    # request never reaches the upstream.
+    #
+    # EVERY NON-DEFAULT VALUE BELOW IS DELIBERATE. The plugin's defaults are
+    # tuned for browser login, not for an API, and four of them are actively
+    # wrong here. Each is called out where it appears.
+    openid-connect:
+      # Okta's discovery document. The gateway reads jwks_uri from it and caches
+      # the signing keys — that is what lets it verify RS256 locally, with no
+      # call to Okta on the request path.
+      discovery: "<OKTA_DISCOVERY_URL>"
+
+      # Schema-REQUIRED (client_id, client_secret and discovery are the three
+      # required fields), even though local JWKS verification never exercises the
+      # secret. It is used only if you switch to introspection. You must still
+      # supply a real one — and it is stored encrypted by the control plane.
+      client_id: "<OKTA_CLIENT_ID>"
+      client_secret: "<OKTA_CLIENT_SECRET>"
+
+      # TRAP 1, the big one. unauth_action defaults to "auth", which REDIRECTS an
+      # unauthenticated caller to Okta's login page. For an API that means your
+      # 401 becomes a 302 to an HTML login form, and every API client breaks in a
+      # confusing way. "deny" is the only correct value for a machine API.
+      # bearer_only says the same thing in the older vocabulary; both are set
+      # explicitly so neither a schema change nor a reader can misread the intent.
+      # bearer_only is NOT optional and NOT merely stylistic. Its default is
+      # false, which puts the plugin in the browser-session flow — and the deploy
+      # is then REJECTED with 'property "session.secret" is required when
+      # "bearer_only" is false'. Note that check runs at DEPLOY, not import.
+      # It is also what makes an unauthenticated call return 401 instead of a 302
+      # redirect to the IdP's login page. unauth_action: deny says the same thing
+      # in newer vocabulary and is redundant alongside it; both are set so the
+      # intent survives a reader who knows only one of them.
+      unauth_action: deny
+      bearer_only: true
+
+      # THE LINE WITHOUT WHICH NOTHING WORKS.
+      #
+      # Verified against a live gateway: omit this and EVERY token — including a
+      # genuine, unexpired, correctly-signed one — is rejected with 401 and
+      #   www-authenticate: ... error_description="no endpoint URI for introspection"
+      # Without use_jwks the plugin does not verify the JWT locally against the
+      # JWKS at all. It falls back to token INTROSPECTION, i.e. asking the IdP
+      # over HTTP whether the token is valid — and Auth0 (and Okta org
+      # authorization servers) publish no introspection_endpoint. No URI to call,
+      # so everything 401s while the config looks complete and correct.
+      #
+      # use_jwks is NOT in this build's published plugin schema — it is absent
+      # from all 49 properties GET /orgs/{orgId}/plugin-schemas returns. It is
+      # accepted anyway because openid-connect's schema does not set
+      # additionalProperties: false, and it IS persisted on the revision. Do not
+      # remove it because a schema dump does not mention it.
+      use_jwks: true
+
+      # TRAP 2. ssl_verify defaults to FALSE — the gateway would fetch Okta's
+      # signing keys over TLS without verifying Okta's certificate. The keys are
+      # the entire root of trust for this solution.
+      ssl_verify: true
+
+      # TRAP 3. accept_unsupported_alg defaults to TRUE: "Ignore ID token
+      # signature to accept unsupported signature algorithm." Pin the algorithm
+      # instead and refuse anything else. Okta signs with RS256.
+      accept_unsupported_alg: false
+      accept_none_alg: false
+      token_signing_alg_values_expected: RS256
+
+      # TRAP 4. Nothing is validated beyond the signature unless you ask.
+      # valid_issuers pins the exact Okta authorization server: a correctly
+      # signed token from a DIFFERENT Okta authorization server is rejected here.
+      # This is the control that makes the token specific to this API.
+      # (audience.required only asserts that an aud claim is PRESENT. There is no
+      # field to pin an arbitrary expected audience value — audience can only be
+      # required-present or matched against client_id, and Okta ACCESS tokens
+      # carry aud = the API's audience URI, not the client id. The issuer pin is
+      # therefore the real control. See README § Gotchas.)
+      claim_validator:
+        issuer:
+          valid_issuers:
+            - "<OKTA_ISSUER_URL>"
+        audience:
+          required: true
+          claim: aud
+
+      # JWKS cache lifetime. The default is 86400 — a full day. If Okta rotates
+      # its signing keys, a day-long cache can reject freshly-issued, perfectly
+      # valid tokens until it expires. An hour keeps rotation cheap to absorb.
+      jwk_expires_in: 3600
+
+      # Give the upstream the verified token and nothing else. The userinfo and
+      # id-token headers default to TRUE and are for browser login flows; leaving
+      # set_userinfo_header on adds a userinfo round trip to Okta per request.
+      set_access_token_header: true
+      set_id_token_header: false
+      set_userinfo_header: false
+      set_refresh_token_header: false
+
+    # Correlation id on every call, so a 401 can be traced across the gateway and
+    # your backend logs. All rejection causes return an identical 401 by design,
+    # which makes this the only handle an integrator can give you.
+    request-id:
+      algorithm: uuid
+      header_name: X-Request-Id
+
+    # Browser access. authorization MUST be in allow_headers or a browser client
+    # cannot send the Bearer token — the preflight fails and you see a CORS error
+    # rather than a 401, which sends people debugging the wrong layer.
+    cors:
+      allow_origins: "*"
+      allow_methods: "GET,POST,OPTIONS"
+      allow_headers: "authorization,content-type"
+      allow_credential: false

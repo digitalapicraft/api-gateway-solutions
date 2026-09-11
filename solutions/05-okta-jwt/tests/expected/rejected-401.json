@@ -1,0 +1,10 @@
+{
+  "_case": "forged-signature / alg-none / wrong-issuer",
+  "_status": 401,
+  "_note": "All three are rejected in the access phase and are indistinguishable from each other and from a missing token. That is correct security behaviour and genuinely hard for an integrator to self-diagnose — which is why request-id is on the API and why the README tells you to ask for X-Request-Id first.",
+  "_why_each_matters": {
+    "forged-signature": "proves the RS256 signature is verified against Okta's JWKS, not merely parsed",
+    "alg-none": "proves an unsigned token is refused — accept_unsupported_alg defaults to TRUE, so this is not free",
+    "wrong-issuer": "proves the token is specific to THIS API, not just valid somewhere"
+  }
+}

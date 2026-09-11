@@ -86,9 +86,10 @@ what to do when the agent takes a wrong turn.
 **An external identity provider already issues the tokens**
 ```text
 Actually, our tokens come from <<Keycloak>>, not the gateway. Drop the
-/oauth/token route and switch the protected routes to helix-auth validate with
-validate_auth_type jwt-auth, verifying against the issuer's public key or JWKS.
-The gateway must be a verifier only — it must not mint tokens that IdP owns.
+/oauth/token route and switch the protected routes to the openid-connect plugin,
+pointed at that issuer's discovery document, with bearer_only true and
+unauth_action deny. Do NOT use helix-auth — it verifies tokens it minted itself
+and has no JWKS, issuer or audience field. The gateway must be a verifier only.
 ```
 
 **Point it at my real upstream instead of jsonplaceholder**

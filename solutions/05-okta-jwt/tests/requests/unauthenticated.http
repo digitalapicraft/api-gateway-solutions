@@ -1,0 +1,8 @@
+### Case: unauthenticated — no Authorization header at all.
+### Expect 401. Rejected in the access phase; the upstream is never contacted.
+###
+### A 302/303/307 here is the signature failure of this solution: unauth_action
+### is still at its default "auth", so the gateway is redirecting API clients to
+### Okta's HTML login page instead of refusing them.
+GET {{GATEWAY}}/posts
+accept: application/json

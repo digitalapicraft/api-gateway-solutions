@@ -1,0 +1,14 @@
+### Case: okta-token-issue — obtain an access token FROM OKTA, not from the gateway.
+### The gateway is not involved in this request at all. That is the whole point of
+### this solution: Okta is the issuer, the gateway is only a verifier.
+### Expect 200 with an RS256-signed JWT access_token.
+POST {{OKTA_TOKEN_URL}}
+authorization: Basic {{BASE64(OKTA_CLIENT_ID:OKTA_CLIENT_SECRET)}}
+content-type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&scope={{OKTA_SCOPE}}
+
+### curl equivalent:
+###   curl -i -X POST {{OKTA_TOKEN_URL}} \
+###     -u '{{OKTA_CLIENT_ID}}:{{OKTA_CLIENT_SECRET}}' \
+###     -d 'grant_type=client_credentials' -d 'scope={{OKTA_SCOPE}}'

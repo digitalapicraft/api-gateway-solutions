@@ -1,0 +1,7 @@
+{
+  "_case": "malformed-authorization",
+  "_status": 400,
+  "_note": "A valid token sent with no auth scheme — 'authorization: <jwt>' rather than 'authorization: Bearer <jwt>'. EXECUTED against a deployed route: 400 Bad Request, not 401. The header is rejected at parse time, before openid-connect runs, so no plugin-level WWW-Authenticate is emitted.",
+  "_deterministic": "Reproduced on two separate APIs, and with a short junk value ('authorization: junk'), so it is the missing scheme rather than the token length.",
+  "_why_it_matters": "Three distinct rejection codes exist on this solution: 400 (no auth scheme), 401 (bad/absent/expired/wrong-issuer token), 403 (aud claim missing, or required_scopes not satisfied). Client error handling and alerting that keys only on 401 will miss two of them."
+}

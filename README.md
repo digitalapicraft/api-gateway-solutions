@@ -14,7 +14,7 @@ it, and an honest record of what was and wasn't validated.
 
 ---
 
-## The four solutions
+## The five solutions
 
 | # | Solution | The problem it solves | Build it with the Agent |
 |---|---|---|---|
@@ -22,11 +22,17 @@ it, and an honest record of what was and wasn't validated.
 | **02** | [SOAP to REST](solutions/02-soap-to-rest/) | *"Our core system speaks SOAP/XML and every partner wants JSON."* Mediate both directions at the gateway; the SOAP service is untouched. | [prompt](solutions/02-soap-to-rest/helix-agent-prompt.md) |
 | **03** | [API Products](solutions/03-api-products/) | *"We sell an 'Enterprise tier' with no way to enforce it, and one partner's retry loop can take down everyone."* Bundle APIs into products with quotas, enforced per app. | [prompt](solutions/03-api-products/helix-agent-prompt.md) |
 | **04** | [Analytics](solutions/04-analytics/) | *"We can't tell which of our 400 integrations caused the 3am pager."* Analytics is already capturing every call — this is how you query it, through the metrics API, for the answers that matter. | [prompt](solutions/04-analytics/helix-agent-prompt.md) · [charts](solutions/04-analytics/charts.md) · [script](solutions/04-analytics/scripts/query-analytics.sh) |
+| **05** | [OAuth with Okta](solutions/05-okta-jwt/) | *"We already run Okta, but our APIs still check a static key from 2021."* Verify the IdP's own tokens at the edge — the mirror of 01, for when someone else is the issuer. | [prompt](solutions/05-okta-jwt/helix-agent-prompt.md) |
 
 They compose. 01 gives you identity, 02 gives you the protocol bridge, 03 turns
 the result into something sellable, and 04 tells you what happened. Running all
 four against one API takes you from *internal SOAP endpoint* to *metered,
 observable, partner-facing product* without a backend change.
+
+**01 and 05 are alternatives, not layers.** They sit on opposite sides of the
+issuer boundary: in 01 the gateway mints the tokens, in 05 Okta does and the
+gateway only verifies. Pick by who owns identity today. You do not want both on
+the same route.
 
 ## Agent-first, on purpose
 
@@ -91,13 +97,21 @@ account for most early mistakes:
   only read a `ctx.*` value that a *higher-priority* plugin on the same route
   already produced. Listing plugins in the order you want them to run does
   nothing.
-- **Identity is `helix-auth`.** In `validate` mode it resolves the calling app
-  *and* the product it's subscribed to. It takes a `validate_auth_type` of
-  `key-auth` (static app key) or `jwt-auth` (a JWT — issued by the gateway itself
-  in `generate` mode, or by an external IdP). Note: `key-auth` and `jwt-auth` are
-  **not** standalone plugins on this build — they exist only
-  as `validate_auth_type` values of `helix-auth`. Use `jwt-auth` mode when an
-  external identity provider issues the tokens.
+- **Identity is `helix-auth` — for tokens the gateway itself issues.** In
+  `validate` mode it resolves the calling app *and* the product it's subscribed
+  to. It takes a `validate_auth_type` of `key-auth` (static app key) or `jwt-auth`
+  (a JWT the gateway signed in `generate` mode). Note: `key-auth` and `jwt-auth`
+  are **not** standalone plugins on this build — they exist only as
+  `validate_auth_type` values of `helix-auth`.
+- **When an external IdP issues the tokens, it's `openid-connect` instead.**
+  `helix-auth` has no JWKS URL, issuer or audience field — and its schema is
+  `additionalProperties: false`, so one cannot be added. It cannot verify a token
+  it did not mint. For Okta, Entra ID, Auth0 or Keycloak use `openid-connect` with
+  `discovery`, and set `unauth_action: deny` — the default is `auth`, which
+  answers an unauthenticated API call with a **302 redirect to the IdP's login
+  page**. `openid-connect` is not on every build; check
+  `GET /orgs/{orgId}/plugin-schemas` first. See
+  [solution 05](solutions/05-okta-jwt/).
 - **Per-caller metering is API Products, counted per app.** The quota lives on
   the product, not on the route, and is keyed on the credential — not on an IP,
   not on `consumer_name`. Solution 03 covers this in full.
@@ -147,6 +161,8 @@ repo. You will see:
 | `<CLIENT_ID>` · `<CLIENT_SECRET>` | your app's credentials — the control plane issues these |
 | `<UPSTREAM_URL>` · `<SOAP_UPSTREAM_URL>` | your backend |
 | `<YOUR_JWT_SIGNING_SECRET>` · `<YOUR_REDIS_HOST>` | a **literal** value you fill in — see the warning below |
+| `<OKTA_DISCOVERY_URL>` · `<OKTA_ISSUER_URL>` | your IdP's discovery document, and the `issuer` value that document reports |
+| `<OKTA_CLIENT_ID>` · `<OKTA_CLIENT_SECRET>` | the IdP application's credentials — also **literals**, see the warning below |
 
 App **keys and secrets** (the `client_id`/`client_secret` on an app) are
 provisioned on the credential by the control plane and never belong in a spec.
@@ -158,7 +174,9 @@ provisioned on the credential by the control plane and never belong in a spec.
 > environment-variable reference — replace it with a real, high-entropy secret
 > before deploy, and keep the filled-in spec out of version control. If you ship
 > the placeholder literally, your signing key is a publicly known constant and
-> anyone can forge tokens.
+> anyone can forge tokens. The same applies to `<OKTA_CLIENT_SECRET>` in solution
+> 05 — it is a literal too, and the control plane stores it encrypted only after
+> you have supplied a real one.
 
 ## Prerequisites
 

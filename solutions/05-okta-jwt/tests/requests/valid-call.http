@@ -1,0 +1,7 @@
+### Case: valid-token — an Okta-issued access token on a protected route.
+### Expect 200.
+### A 401 here almost always means claim_validator.issuer.valid_issuers does not
+### match the "issuer" reported by your discovery document, character for character.
+GET {{GATEWAY}}/posts
+authorization: Bearer {{ACCESS_TOKEN}}
+accept: application/json

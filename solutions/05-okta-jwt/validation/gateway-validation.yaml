@@ -1,0 +1,115 @@
+# Gateway validation — what a live control plane and a live gateway established
+# for this solution. Re-run gateway/verify.sh against your own environment before
+# relying on it.
+
+gateway_validation:
+  solution: 05-okta-jwt
+  version: 1.0.0
+  executed_on: 2026-08-30
+
+  provenance:
+    identity_provider: >-
+      Auth0 (a dev tenant), NOT an Okta tenant. Identical OIDC mechanism —
+      discovery, JWKS, RS256 — and identical plugin configuration, but no Okta
+      tenant was exercised. Read "Okta" in this package as "an OIDC provider,
+      verified against Auth0".
+    what_was_tested: >-
+      THIS spec, deployed verbatim with only the four <OKTA_...> placeholders
+      substituted. No control configuration, no pinned public_key. The only edit
+      was routing it to /comments so it would not collide with another API in the
+      same environment.
+
+  supersedes:
+    prior_claim: functional_tests PASS (6/6), recorded 2026-08-27
+    why_withdrawn: >-
+      That run used a CONTROL configuration with public_key pinned, because the
+      test client had no audience grant and no real token could be minted. Pinning
+      a key bypasses the plugin's introspect-vs-JWKS decision entirely, so it
+      returned 200 — while the shipped spec was in fact rejecting every token,
+      valid ones included, for want of use_jwks. The rejection cases in that run
+      were genuine; the single acceptance case was not evidence about the shipped
+      artifact. A control that changes the mechanism validates only the mechanism
+      it changed to.
+
+  plugin_availability:
+    status: CONFIRMED
+    detail: >-
+      GET /orgs/{orgId}/plugin-schemas returned 96 plugins including
+      openid-connect (priority 2599, Authentication).
+    counter_example: >-
+      The same query against a free-trial org returned 86 plugins whose entire
+      Authentication category is helix-auth alone. This solution cannot be deployed
+      on that build.
+
+  import:   { status: PASS, detail: "HTTP 201 — OpenAPI and the openid-connect block accepted, including use_jwks, which is not in the published schema" }
+  dry_run:  { status: PASS, detail: 'HTTP 200 {"success": true, "message": "Dry-run validation successful"}' }
+  deployment: { status: DEPLOYED, detail: "Revision ACTIVE in a test environment and exercised with a real IdP token" }
+
+  functional_tests:
+    executor: manual curl against the deployed route; gateway/verify.sh codifies the same cases
+    status: PASS
+    summary: 7/7 against the shipped spec.
+    cases:
+      - { id: valid-token,             expected: 200, actual: 200, result: PASS, note: "returned the upstream's real body" }
+      - { id: valid-token-second-route, expected: 200, actual: 200, result: PASS }
+      - { id: valid-token-repeat,      expected: 200, actual: 200, result: PASS, note: "stability check" }
+      - { id: unauthenticated,         expected: 401, actual: 401, result: PASS, note: "401, not a 302 redirect" }
+      - { id: forged-signature,        expected: 401, actual: 401, result: PASS }
+      - { id: alg-none,                expected: 401, actual: 401, result: PASS }
+      - { id: malformed-authorization, expected: 400, actual: 400, result: PASS, note: "400, NOT 401 — see findings" }
+
+  also_established:
+    - { id: wrong-issuer,     detail: "valid_issuers pointed at a wrong issuer rejected a genuine token (401). Issuer pinning genuinely runs." }
+    - { id: scopes-satisfied, detail: "required_scopes matching a granted scope -> 200." }
+    - { id: scopes-denied,    detail: "required_scopes naming an ungranted scope -> 403." }
+    - { id: missing-audience, detail: "A token with no aud claim -> 403." }
+    - { id: wrong-audience,   detail: "A token whose aud is an unrelated API -> 200. CONFIRMED GAP." }
+
+  findings:
+    - id: use-jwks-required-and-undocumented
+      severity: critical
+      detail: >-
+        Without use_jwks: true the plugin never verifies the JWT against the JWKS.
+        It falls back to token introspection and, since neither Auth0 nor an Okta
+        org authorization server publishes an introspection_endpoint, every token
+        is rejected with 401 and error_description "no endpoint URI for
+        introspection". The field is absent from all 49 properties the
+        plugin-schemas endpoint returns, is accepted because openid-connect does
+        not set additionalProperties: false, and is persisted on the revision.
+    - id: three-rejection-codes
+      severity: important
+      detail: >-
+        401 for a bad, absent, expired or wrong-issuer token; 403 when the aud
+        claim is missing or required_scopes is unsatisfied; 400 when the
+        Authorization value carries no recognised auth scheme, rejected at header
+        parse before the plugin runs. Deterministic, and independent of value
+        length. Error handling or alerting keyed only on 401 misses two of three.
+    - id: audience-not-enforced-by-value
+      severity: important
+      detail: >-
+        A correctly signed, unexpired token whose aud names an unrelated API is
+        ACCEPTED. claim_validator.audience offers only required, claim and
+        match_with_client_id — no expected-value field. Pin
+        claim_validator.issuer.valid_issuers and use required_scopes instead.
+    - id: bearer-only-checked-at-deploy
+      severity: minor
+      detail: >-
+        Omitting bearer_only imports cleanly and then fails to DEPLOY with
+        'property "session.secret" is required when "bearer_only" is false'. An
+        import-only gate does not catch it. unauth_action is redundant alongside it.
+    - id: rate-limit-is-per-gateway
+      severity: minor
+      detail: >-
+        The environment applied 10 requests / 60s ACROSS routes, not per route. A
+        sweep over 12 distinct paths tripped it at ~10 total requests, and the 429s
+        read like auth failures. verify.sh paces itself (PACE, default 7s).
+
+  overall: READY WITH WARNINGS
+
+what_you_should_do:
+  - Confirm openid-connect exists in YOUR org before anything else.
+  - Keep use_jwks: true. Do not remove it because a schema dump omits it.
+  - Replace the four <OKTA_...> placeholders; keep the completed spec out of git.
+  - Copy valid_issuers out of your discovery document — the trailing slash is load-bearing.
+  - Do NOT rely on aud to scope a token to one API. Use required_scopes.
+  - Run gateway/verify.sh with TOKEN_AUDIENCE set if your IdP needs one.

@@ -60,7 +60,7 @@ the flow.
 | Your situation | Use | Why |
 |---|---|---|
 | **You have no identity provider**, and you want partners to exchange a client id and secret for a token | **`helix-auth` generate + validate** — this solution | The gateway *is* the issuer. It holds the signing secret, verifies the app's credentials, and mints the JWT. |
-| **Keycloak / Auth0 / Entra ID / Okta already issues tokens** to your partners | **`helix-auth` validate, `validate_auth_type: jwt-auth`**, pointed at the issuer's key material. Drop the `/oauth/token` route. | The gateway is a *verifier only*. It must not mint tokens a separate IdP is authoritative for. |
+| **Keycloak / Auth0 / Entra ID / Okta already issues tokens** to your partners | **`openid-connect`** with `discovery` + `bearer_only` — see [solution 05](../05-okta-jwt/). Drop the `/oauth/token` route. **Not `helix-auth`:** it has no JWKS URL, issuer or audience field and its schema is `additionalProperties: false`, so it cannot verify a token it did not mint. | The gateway is a *verifier only*. It must not mint tokens a separate IdP is authoritative for. |
 
 `helix-auth` `generate` and `helix-auth` `validate` (jwt-auth) are not
 alternatives to each other — they sit on opposite sides of the same boundary.
