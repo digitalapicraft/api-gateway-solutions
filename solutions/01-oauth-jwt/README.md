@@ -10,7 +10,7 @@ authentication happened.**
 | **Needs** | A fresh org (its default **test** environment) · a real signing-secret value to paste into the spec (used literally — see below) · one developer + app to test with. The upstream is public jsonplaceholder, so no backend of your own. |
 | **Plugins** | `helix-auth` (generate + validate) · `request-id` · `cors` |
 | **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Infographic](infographic.md) · ✅ [Manifest](solution.yaml) |
+| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Manifest](solution.yaml) |
 
 ---
 
@@ -73,35 +73,32 @@ Everything below is the first row.
 
 ## How a request flows
 
-```
-─── getting a token ────────────────────────────────────────────────────
-Client
-  │  POST /oauth/token
-  │  Authorization: Basic base64(client_id:client_secret)
-  ▼
-helix-auth  (mode: generate)
-  │  looks up the credential by client_id
-  │  verifies client_secret        ← the ONLY mode that checks the secret
-  │  signs a JWT with JWT_SIGNING_SECRET, ttl 900s
-  ▼
-200 { "access_token": "eyJ...", "token_type": "Bearer", "expires_in": 900 }
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant GW as Gateway
+    participant UP as Upstream
 
-  bad credentials → 401, and no token is minted
+    Note over C,GW: Step 1 — get a token (helix-auth, mode generate)
+    C->>GW: POST /oauth/token, Basic client_id and client_secret
+    Note over GW: look up the credential by client_id<br/>verify client_secret — the ONLY mode that checks it<br/>sign a JWT, ttl 900s
+    alt credentials good
+        GW-->>C: 200 access_token, token_type, expires_in
+    else bad credentials
+        GW--xC: 401 — no token is minted
+    end
 
-
-─── calling the API ────────────────────────────────────────────────────
-Client
-  │  GET /posts
-  │  Authorization: Bearer eyJ...
-  ▼
-helix-auth  (mode: validate, validate_auth_type: jwt-auth)   [access phase]
-  │  verifies the signature with the SAME JWT_SIGNING_SECRET
-  │  checks expiry
-  │  resolves the calling app → identity is available to later plugins
-  │
-  ├── invalid / missing / expired → 401, request stops here
-  ▼
-Upstream  ← only ever sees requests that already passed
+    Note over C,GW: Step 2 — call the API (helix-auth, mode validate)
+    C->>GW: GET /posts, Authorization Bearer token
+    Note over GW: verify the signature with the SAME signing secret<br/>check expiry, resolve the calling app
+    alt token valid
+        GW->>UP: GET /posts
+        UP-->>GW: 200
+        GW-->>C: 200
+    else missing, invalid or expired
+        GW--xC: 401 — access phase, upstream never sees it
+    end
 ```
 
 The important structural detail: validation happens in the **access phase**, so a

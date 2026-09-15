@@ -1,6 +1,6 @@
 # Solution manifest — the traceability spine for this package.
 # Every artifact below corresponds to this one solution version. If the gateway
-# config changes, bump `version` and re-derive the docs and infographic from it
+# config changes, bump `version` and re-derive the docs and diagrams from it
 # — never the other way round.
 
 solution:
@@ -80,7 +80,7 @@ artifacts:
   documentation: [README.md, architecture.md, business-need.md]
   source_code: [gateway/api-spec.yaml, gateway/verify.sh]
   agent_prompt: helix-agent-prompt.md
-  infographic: [infographic.md]
+  diagrams: [README.md]   # mermaid blocks, rendered inline by GitHub
   tests: [tests/test-plan.yaml, tests/requests/, tests/expected/]
   validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
 

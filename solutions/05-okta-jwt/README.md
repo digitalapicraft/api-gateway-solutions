@@ -10,7 +10,7 @@ four of the plugin's defaults are wrong for an API.**
 | **Needs** | An org whose build includes **`openid-connect`** (not all do — see below) · an Okta tenant with an authorization server and an application · one upstream. The upstream here is public jsonplaceholder, so no backend of your own. |
 | **Plugins** | `openid-connect` · `request-id` · `cors` |
 | **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Infographic](infographic.md) · ✅ [Manifest](solution.yaml) |
+| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Manifest](solution.yaml) |
 
 ---
 
@@ -55,18 +55,11 @@ here.
 
 This is the fork, and getting it wrong wastes the build.
 
-```
-Does an identity provider already exist and already issue tokens
-to the callers of this API?
-
-  YES ──► Okta / Entra ID / Auth0 / Keycloak is the issuer.
-          The gateway VERIFIES. Use openid-connect.
-          ── this solution ──
-
-  NO  ──► There is no IdP, and the callers are your own partner apps
-          holding a client_id/client_secret you issued.
-          The gateway ISSUES and verifies. Use helix-auth generate + validate.
-          ── solution 01 ──
+```mermaid
+flowchart TD
+    Q{"Does an identity provider already issue<br/>tokens to this API's callers?"}
+    Q -->|Yes| V["Okta / Entra ID / Auth0 / Keycloak is the issuer.<br/>The gateway only VERIFIES.<br/><br/>openid-connect — THIS SOLUTION"]
+    Q -->|No| I["No IdP. Callers are your own partner apps<br/>holding credentials you issued.<br/>The gateway ISSUES and verifies.<br/><br/>helix-auth generate + validate — SOLUTION 01"]
 ```
 
 **These are not two styles of the same thing.** They sit on opposite sides of
@@ -101,29 +94,31 @@ deployed there, and no amount of spec editing changes it. Confirm first.
 
 ## How a request flows
 
-```
-CLIENT                          GATEWAY                         UPSTREAM
-  │
-  │  (1) get a token — the gateway is not involved
-  ├────────────────────────────────────────────────►  OKTA
-  │  ◄──────────────── RS256-signed JWT ─────────────
-  │
-  │  (2) call the API
-  ├──► GET /posts
-  │    authorization: Bearer <jwt>
-  │                     │
-  │                     ├─ openid-connect  [access phase, priority 2599]
-  │                     │    ├ signature? verified against Okta's JWKS,
-  │                     │    │            fetched once and cached locally
-  │                     │    ├ issuer?    must be in valid_issuers
-  │                     │    ├ expiry?    exp in the past → reject
-  │                     │    └ alg?       must be RS256; "none" refused
-  │                     │
-  │                     │  fail ──► 401, upstream never contacted
-  │                     │  pass ──┐
-  │                     │         ├─ request-id → X-Request-Id
-  │                     │         └────────────────────────────► GET /posts
-  │  ◄────────────────────────────────────────────────────────── 200
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant IDP as Identity Provider
+    participant GW as Gateway
+    participant UP as Upstream
+
+    Note over C,IDP: Step 1 — get a token. The gateway plays no part in this.
+    C->>IDP: client credentials (+ audience)
+    IDP-->>C: RS256-signed JWT
+
+    Note over C,GW: Step 2 — call the API
+    C->>GW: GET /posts, Authorization Bearer token
+    GW->>IDP: fetch JWKS — once, then cached
+    IDP-->>GW: public keys
+    Note over GW: verify signature, issuer, expiry and alg<br/>locally. The IdP is NOT on the request path.
+
+    alt token valid
+        GW->>UP: GET /posts
+        UP-->>GW: 200
+        GW-->>C: 200 with the upstream body
+    else rejected
+        GW--xC: 401 — upstream never contacted
+    end
 ```
 
 The important structural detail: **Okta is not on the request path.** The gateway
@@ -400,51 +395,25 @@ Not this solution if: no IdP exists and you'd be deploying Okta *for* this
 
 ## Validation status
 
-| Stage | Status | Provenance |
-|---|---|---|
-| Configuration generated | **YES** | [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| Local validation | **PASS** | Offline gate + every plugin block validated against the org's live schema |
-| Gateway dry-run | **PASS** | `{"success": true, "message": "Dry-run validation successful"}` |
-| Gateway deployed | **DEPLOYED** | Revision ACTIVE in a test environment |
-| Functional tests | **PASS (7/7)** | This spec, deployed verbatim with only the four placeholders filled, exercised with a real IdP token |
-
-**The IdP exercised was Auth0, not Okta.** Same OIDC mechanism — discovery, JWKS,
-RS256 — and the configuration is identical, but no Okta tenant was tested. Read
-"Okta" throughout as "an OIDC provider, verified against Auth0".
-
-| Case | Result |
+| Stage | Status |
 |---|---|
-| Valid IdP token → 200 with upstream body | **PASS** |
-| Same token on a second route → 200 | **PASS** |
-| Repeat valid token → 200 (stability) | **PASS** |
-| No token → 401, not a redirect | **PASS** |
-| Forged signature → 401 | **PASS** |
-| `alg: none` → 401 | **PASS** |
-| No `Bearer` prefix → 400 | **PASS** (400, not 401 — see above) |
+| Configuration generated | **YES** |
+| Local validation | **PASS** — every plugin block checked against the org's live schema |
+| Gateway dry-run | **PASS** |
+| Gateway deployed | **DEPLOYED** |
+| Functional tests | **PASS (7/7)** — this spec, deployed verbatim, exercised with a real IdP token |
 
-Separately verified while establishing which fields matter:
+Overall: **READY WITH WARNINGS.** It works, and it rejects everything it should.
+The warning is the audience — not enforced by value, a property of the plugin
+rather than of this spec. See [Gotchas](#gotchas).
 
-| Case | Result |
-|---|---|
-| `valid_issuers` pointed at a wrong issuer → 401 | **PASS** — issuer pinning genuinely runs |
-| `required_scopes` satisfied → 200 | **PASS** |
-| `required_scopes` not satisfied → 403 | **PASS** |
-| `aud` claim missing → 403 | **PASS** |
-| **`aud` = an unrelated API → 200** | **CONFIRMED GAP** — see Gotchas |
+Valid token → `200`; no token → `401`; forged signature, `alg:none` → `401`;
+no auth scheme → `400`. Separately confirmed: a wrong `valid_issuers` rejects a
+genuine token, `required_scopes` gates on granted scope, and a missing `aud`
+returns `403`. Full record in [`validation/`](validation/).
 
-### A correction to an earlier version of this package
-
-An earlier revision reported *"Functional tests PASS (6/6)"*. That result was
-obtained against a **control** configuration with `public_key` pinned, because the
-test client had no audience grant and no real token could be minted. Pinning a key
-bypasses the introspect-vs-JWKS decision entirely — so it passed, and hid the fact
-that **the shipped spec rejected every token**, valid ones included, for want of
-`use_jwks`. The bug was found only once a client with a grant produced a real
-token. The table above is the shipped spec, tested with a real token.
-
-Overall: **READY WITH WARNINGS.** It works and it rejects everything it should.
-The warning is the audience: not enforced by value, and that is a property of the
-plugin, not of this spec. Run `gateway/verify.sh` against your own IdP.
+**The IdP exercised was Auth0, not Okta** — same OIDC mechanism and an identical
+configuration, but no Okta tenant was tested.
 
 ## Related solutions
 

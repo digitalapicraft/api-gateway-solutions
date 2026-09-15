@@ -20,7 +20,7 @@ other.**
 | **Needs** | **Your own SOAP endpoint** reachable from the gateway (this is a SOAP use case — a REST placeholder like jsonplaceholder can't stand in) and its handler path · a real signing-secret value (literal — see solution 01) · one developer + app · `xml-to-json` in your org · a **test** environment |
 | **Plugins** | `xml-to-json` (`transform_request` + `transform_response`) · `proxy-rewrite` · `helix-auth` (generate + validate) · `request-id` · `cors` |
 | **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Infographic](infographic.md) · ✅ [Manifest](solution.yaml) |
+| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Manifest](solution.yaml) |
 
 ---
 
@@ -69,38 +69,25 @@ claim, and it's the one that compounds.
 
 ## How a request flows
 
-```
-Partner                        Gateway                          SOAP system
-  │                                                              (unchanged)
-  │  POST /locations
-  │  Authorization: Bearer eyJ...
-  │  content-type: application/json
-  │  {"region":"EMEA","activeOnly":true}
-  ▼
-  ├─► helix-auth (validate, jwt-auth)          [access phase]
-  │     valid?  no  ──► 401, stops here. No transform, no SOAP call.
-  │              yes ▼
-  │
-  ├─► proxy-rewrite                            [rewrite phase]
-  │     uri: /locations ──► <SOAP_HANDLER_PATH>
-  │     (do NOT set Content-Type here — it defeats the transform; see below)
-  │              ▼
-  │
-  ├─► xml-to-json  (request direction)
-  │     {"region":"EMEA"} ──► <region>EMEA</region>
-  │              │
-  │              └──────────────────────────────────► POST <SOAP_HANDLER_PATH>
-  │                                                    text/xml
-  │                                                        │
-  │                                                   ◄────┘
-  │                                                   <Locations>
-  │                                                     <Site>...</Site>
-  │                                                   </Locations>
-  ├─◄ xml-to-json  (response direction)
-  │     <Locations>...  ──► {"Locations":{"Site":[...]}}
-  ▼
-  200 application/json
-  {"Locations":{"Site":[...]}}
+```mermaid
+sequenceDiagram
+    autonumber
+    participant P as Partner
+    participant GW as Gateway
+    participant S as SOAP system
+
+    P->>GW: POST /locations, JSON body, Bearer token
+    Note over GW: helix-auth validate — access phase, runs FIRST
+    alt token invalid
+        GW--xP: 401 — no transform, no SOAP call
+    else token valid
+        Note over GW: proxy-rewrite — /locations to the SOAP handler path<br/>do NOT set Content-Type here, it defeats the transform
+        Note over GW: xml-to-json, REQUEST direction<br/>JSON body becomes XML
+        GW->>S: POST the SOAP handler path, text/xml
+        S-->>GW: XML response
+        Note over GW: xml-to-json, RESPONSE direction<br/>XML becomes JSON
+        GW-->>P: 200 application/json
+    end
 ```
 
 Two things to notice, because both are load-bearing:

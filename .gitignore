@@ -1,5 +1,5 @@
-# Rendered infographic exports and recorded media. Commit the SOURCE
-# (infographic.md) and the built .html; large binaries generally do not belong here.
+# Recorded media and large binaries. Diagrams live in README.md as mermaid blocks,
+# which GitHub renders inline — there is no image to export or build.
 solutions/*/assets/*.mp4
 solutions/*/assets/*.mov
 solutions/*/assets/*.psd

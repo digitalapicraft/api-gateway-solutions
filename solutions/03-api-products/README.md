@@ -10,7 +10,7 @@ exhausts their own budget and nobody else's.**
 | **Needs** | A fresh org (its default **test** environment) · a developer with **two** apps · Redis if the gateway runs more than one node. Upstream is public jsonplaceholder — no backend of your own. |
 | **Plugins** | `helix-auth` (validate / key-auth) · `api-product-enforcer` · `request-id` · `cors` |
 | **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) + [`products.json`](gateway/products.json) |
-| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec + products](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Infographic](infographic.md) · ✅ [Manifest](solution.yaml) |
+| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec + products](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Manifest](solution.yaml) |
 
 ---
 
@@ -80,25 +80,15 @@ Two keys on the *same* app always share one bucket. This matters for testing —
 
 ## How a request flows
 
-```
-Client
-  │  apikey: <the app's client id>
-  ▼
-helix-auth  (validate + key-auth)
-  │  resolves the credential → attaches the consumer
-  │  key-auth does NOT check the app's secret — only generate mode does
-  ▼
-product resolution   (a shared step, before the access phase)
-  │  picks the TOP-RANKED product the app subscribes to that ALSO
-  │  covers this route's service_id
-  │  no match → 403, before quota is considered at all
-  ▼
-api-product-enforcer
-  │  consumes one unit of THAT product's quota
-  │  under quota → forward, attributed to the app and developer
-  │  over quota  → 429 {"error":"quota exceeded"}
-  ▼
-Upstream
+```mermaid
+flowchart TD
+    C["Client sends apikey — the app's client id"]
+    C --> A["helix-auth, validate + key-auth<br/>resolves the credential, attaches the consumer<br/>key-auth does NOT check the app's secret"]
+    A --> P{"Product resolution — a shared step, before the access phase<br/>pick the TOP-RANKED product the app subscribes to<br/>that ALSO covers this route's service"}
+    P -->|no match| F403["403 — before quota is considered at all"]
+    P -->|match| E["api-product-enforcer<br/>consumes one unit of THAT product's quota"]
+    E -->|under quota| U["Upstream — attributed to the app and developer"]
+    E -->|over quota| F429["429 quota exceeded<br/>NO fallback to another subscribed product"]
 ```
 
 **One product is evaluated per request, and there is no fallback.** If the

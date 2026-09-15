@@ -70,7 +70,7 @@ artifacts:
   documentation: [README.md, charts.md, architecture.md, business-need.md]
   agent_prompt: helix-agent-prompt.md
   script: scripts/query-analytics.sh
-  infographic: [infographic.md]
+  diagrams: [README.md]   # mermaid blocks, rendered inline by GitHub
   validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
   note: >-
     No gateway/api-spec.yaml and no tests/ — this solution changes no API and builds

@@ -12,7 +12,7 @@ API.**
 | **Needs** | APIs that already receive traffic · a control-plane bearer token (the portal uses the same one) |
 | **Changes to your APIs** | **None.** Analytics is global; there is no plugin or config to add. |
 | **Run it** | 🤖 [ask the agent](helix-agent-prompt.md) — it charts it for you · 📊 [`scripts/query-analytics.sh`](scripts/query-analytics.sh) — CLI · 📖 [`charts.md`](charts.md) — raw queries |
-| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Query catalogue](charts.md) · ✅ [Query script](scripts/query-analytics.sh) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Infographic](infographic.md) · ✅ [Validation](validation/) · ✅ [Manifest](solution.yaml) |
+| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Query catalogue](charts.md) · ✅ [Query script](scripts/query-analytics.sh) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Validation](validation/) · ✅ [Manifest](solution.yaml) |
 
 ---
 
@@ -24,6 +24,25 @@ draws a chart ([agent prompt](helix-agent-prompt.md)); run
 [`scripts/query-analytics.sh`](scripts/query-analytics.sh) from the CLI; or POST the
 [metrics-API queries](charts.md) yourself. Nothing is built or configured on your
 APIs, and it's all read-only. Verified against a live gateway.
+
+```mermaid
+flowchart LR
+    subgraph REC["Already happening — nothing to configure, nothing to deploy"]
+        C["Client calls"] --> GW["Gateway"]
+        GW --> UP["Your APIs"]
+        GW -. captures every request .-> ST[("Analytics store")]
+    end
+
+    subgraph READ["Reading it — all read-only"]
+        A["Ask the Helix Agent<br/>in plain English"]
+        S["scripts/query-analytics.sh"]
+        M["POST the metrics API<br/>yourself"]
+    end
+
+    ST --> A
+    ST --> S
+    ST --> M
+```
 
 ## The questions it answers
 

@@ -65,7 +65,6 @@ solutions/<NN>-<slug>/
 ├── business-need.md        # why it matters
 ├── architecture.md         # request flow, native-vs-custom, when not to use it
 ├── helix-agent-prompt.md   # the paste-into-Agent-Mode prompt, and why it's shaped that way
-├── infographic.md          # panel spec for the one-glance version
 ├── gateway/
 │   ├── api-spec.yaml       # importable OpenAPI 3.0.3 + x-helix-gateway.plugins
 │   ├── products.json       # API Products, where the solution needs them
@@ -73,6 +72,9 @@ solutions/<NN>-<slug>/
 ├── tests/                  # test-plan.yaml + request fixtures + expected responses
 └── validation/             # what was checked, by whom, and what wasn't
 ```
+
+Diagrams live inside `README.md` as mermaid blocks, which GitHub renders inline —
+there is no separate image to open, and nothing to build.
 
 Only files that apply are present — a solution needing no API Products has no
 `products.json`. Some packages carry an extra file where the subject warrants it:
