@@ -33,6 +33,10 @@ cases:
       downstream does any work.
     request: requests/unauthenticated.http
     expected: expected/unauthenticated.json
+    response_notes: >-
+      helix-auth validate rejects in the access phase. No transform ran and the SOAP
+      handler was never contacted. The response body is whatever your gateway build
+      emits for an auth rejection — assert the STATUS, not this shape.
     expected_status: 401
     notes: >-
       Worth confirming the handler really wasn't called. If your SOAP system logs
@@ -43,6 +47,9 @@ cases:
     intent: An app's client credentials are exchanged for a signed JWT. See solution 01 for the full treatment.
     request: requests/token-request.http
     expected: expected/token-200.json
+    response_notes: >-
+      Shape of a successful client-credentials exchange. access_token must be a
+      three-segment JWT. expires_in must match the configured token_ttl.
     expected_status: 200
     assertions:
       - body.access_token is present and is a three-segment JWT
@@ -56,6 +63,17 @@ cases:
       handler is called on its real path, and its XML response comes back as JSON.
     request: requests/valid-locations.http
     expected: expected/locations-200.json
+    response_notes: >-
+      ILLUSTRATIVE SHAPE ONLY — do not assert this structure. The JSON is a
+      mechanical projection of whatever XML your handler returned, so the keys will
+      be YOUR element names, including PascalCase and any vendor prefixes. What you
+      SHOULD assert: content-type is application/json, the body parses, and the body
+      contains no XML markup. The last one is the real test — a content-type header
+      is a claim, a body with no angle brackets is evidence. If the handler returns
+      exactly ONE <Site>, this may be an object rather than a one-element array. XML
+      cannot distinguish an item from a list of one. Test both shapes and publish
+      both — see tests/test-plan.yaml case single-vs-multiple-elements.
+      application/json
     expected_status: 200
     assertions:
       - response content-type is application/json
@@ -88,6 +106,11 @@ cases:
     intent: A forged or garbage JWT is rejected before the SOAP hop.
     request: requests/invalid-token.http
     expected: expected/invalid-token-401.json
+    response_notes: >-
+      A JWT with a valid three-segment shape but a signature this gateway did not
+      produce. Rejected in the access phase, so no transform ran and the SOAP
+      handler was not contacted. Assert the status only — all four caller-side auth
+      failures are indistinguishable by design.
     expected_status: 401
 
   - id: empty-result-envelope
@@ -98,6 +121,14 @@ cases:
       broke", which look similar from a client.
     request: requests/valid-locations.http
     expected: expected/locations-empty-200.json
+    response_notes: >-
+      A legitimate no-results response. The point of this case is to distinguish 'no
+      data' from 'the transform broke' — both can look like an empty body from a
+      client. Valid, parseable, empty JSON is the correct outcome, not an error. An
+      empty result is MORE often a request whose field names didn't match the
+      elements the handler reads than a genuinely empty dataset. verify.sh warns
+      rather than fails here for exactly that reason. Check what XML your JSON is
+      producing before concluding there's no data. application/json
     expected_status: 200
     type_of_execution: manual
     procedure: Send a query that legitimately matches nothing (e.g. a nonexistent region code).
@@ -117,7 +148,7 @@ cases:
       1) Query so the handler returns exactly one <Site>. Record the JSON shape.
       2) Query so it returns several. Record the JSON shape.
       3) Compare: is the single case an object or a one-element array?
-    expected: >-
+    expected_outcome: >-
       Both shapes documented, and BOTH published in your developer documentation.
     notes: >-
       Run this before you onboard anyone. Partner code written against a
@@ -135,7 +166,7 @@ cases:
       Call an operation whose response carries namespace prefixes and elements with
       attributes. Inspect the JSON: are prefixes preserved, stripped or mangled? Do
       attributes appear as fields, or vanish?
-    expected: Documented behaviour for your build, and configuration set deliberately if the defaults are wrong for you.
+    expected_outcome: Documented behaviour for your build, and configuration set deliberately if the defaults are wrong for you.
     notes: >-
       The spec leaves xml-to-json as a default block. This case is how you find out
       whether the defaults suit your envelope.
@@ -164,6 +195,18 @@ cases:
       rather than a malformed 200.
     request: requests/valid-locations.http
     expected: expected/upstream-502.json
+    response_notes: >-
+      The SOAP handler was unreachable or errored. The important property is that
+      the gateway surfaces a 5xx rather than a malformed 200 — a partner must never
+      receive a success status carrying a failure. Assert the status class, not the
+      body; the exact payload is build-dependent. 504: The handler was reached but
+      answered too slowly. Legacy handlers built for batch use often do — check the
+      route timeout before concluding the upstream is down. 415: The handler
+      rejected the content type. Confirm proxy-rewrite sets text/xml; SOAP 1.2
+      handlers want application/soap+xml. 500: The handler errored. Suspect double
+      conversion (a json-to-xml added alongside the bidirectional xml-to-json), a
+      missing SOAPAction header, or request field names that don't match the
+      elements it reads.
     expected_status: 502
     type_of_execution: manual
     optional: true

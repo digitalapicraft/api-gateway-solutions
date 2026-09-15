@@ -1,10 +1,9 @@
 {
-  "_case": "unauthenticated / malformed-authorization",
-  "_status": 401,
-  "_note": "openid-connect rejects in the access phase. The upstream is never contacted, so nothing appears in your backend logs. EXECUTED: returns 401. Most caller-side failure causes (no header, no Bearer prefix, non-JWT garbage, bad signature, alg=none, expired, wrong issuer) return an indistinguishable 401 \u2014 but a MISSING aud claim returns 403, see missing-audience-403.json.",
-  "_headers_present": [
-    "X-Request-Id",
-    "WWW-Authenticate: Bearer realm=\"apisix\" \u2014 observed; note it names the underlying runtime, and `realm` is a settable plugin field"
-  ],
-  "_not_this": "A 302/303/307 with a Location pointing at your Okta domain means unauth_action is still 'auth'. That is a misconfiguration, not an alternative style \u2014 API clients cannot follow it usefully."
+  "status": 401,
+  "headers": {
+    "present": [
+      "X-Request-Id",
+      "WWW-Authenticate"
+    ]
+  }
 }

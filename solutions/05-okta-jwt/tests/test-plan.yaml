@@ -43,6 +43,15 @@ cases:
       than redirecting the caller to Okta.
     request: requests/unauthenticated.http
     expected: expected/unauthenticated.json
+    response_notes: >-
+      openid-connect rejects in the access phase. The upstream is never contacted,
+      so nothing appears in your backend logs. EXECUTED: returns 401. Most caller-
+      side failure causes (no header, no Bearer prefix, non-JWT garbage, bad
+      signature, alg=none, expired, wrong issuer) return an indistinguishable 401 —
+      but a MISSING aud claim returns 403, see missing-audience-403.json. A
+      302/303/307 with a Location pointing at your Okta domain means unauth_action
+      is still 'auth'. That is a misconfiguration, not an alternative style — API
+      clients cannot follow it usefully.
     expected_status: 401
     assertions:
       - status is exactly 401
@@ -60,6 +69,11 @@ cases:
       solution.
     request: requests/okta-token-request.http
     expected: expected/okta-token-200.json
+    response_notes: >-
+      Okta's own response, not the gateway's. access_token must be a three-segment
+      JWT whose header declares alg RS256 and carries a kid. An opaque access_token
+      means this authorization server does not issue JWTs, and local JWKS
+      verification cannot work — you would need introspection_endpoint instead.
     expected_status: 200
     assertions:
       - body.access_token is present
@@ -76,6 +90,13 @@ cases:
     intent: A valid Okta-issued Bearer token is accepted on a protected route.
     request: requests/valid-call.http
     expected: expected/valid-200.json
+    response_notes: >-
+      The upstream's own response body, passed through untouched — this solution
+      adds authentication, not transformation. Assert the status and that the body
+      is your backend's normal payload. The array below is illustrative for a Posts
+      API. X-Access-Token, because set_access_token_header is true.
+      set_id_token_header and set_userinfo_header are false, so no X-ID-Token and no
+      X-Userinfo — and no userinfo round trip to Okta per request.
     expected_status: 200
     notes: >-
       A 401 here, with a token minted seconds earlier, is almost always
@@ -91,6 +112,15 @@ cases:
       against Okta's published JWKS rather than the header merely being parsed.
     request: requests/forged-signature.http
     expected: expected/rejected-401.json
+    response_notes: >-
+      All three are rejected in the access phase and are indistinguishable from each
+      other and from a missing token. That is correct security behaviour and
+      genuinely hard for an integrator to self-diagnose — which is why request-id is
+      on the API and why the README tells you to ask for X-Request-Id first. forged-
+      signature: proves the RS256 signature is verified against Okta's JWKS, not
+      merely parsed alg-none: proves an unsigned token is refused —
+      accept_unsupported_alg defaults to TRUE, so this is not free wrong-issuer:
+      proves the token is specific to THIS API, not just valid somewhere
     expected_status: 401
     notes: >-
       A 200 here is the most serious possible failure of this solution: the route
@@ -117,6 +147,17 @@ cases:
       header-parsing boundary rather than the signature.
     request: requests/no-bearer-prefix.http
     expected: expected/no-scheme-400.json
+    response_notes: >-
+      A valid token sent with no auth scheme — 'authorization: <jwt>' rather than
+      'authorization: Bearer <jwt>'. EXECUTED against a deployed route: 400 Bad
+      Request, not 401. The header is rejected at parse time, before openid-connect
+      runs, so no plugin-level WWW-Authenticate is emitted. Three distinct rejection
+      codes exist on this solution: 400 (no auth scheme), 401
+      (bad/absent/expired/wrong-issuer token), 403 (aud claim missing, or
+      required_scopes not satisfied). Client error handling and alerting that keys
+      only on 401 will miss two of them. Reproduced on two separate APIs, and with a
+      short junk value ('authorization: junk'), so it is the missing scheme rather
+      than the token length.
     expected_status: 400
     result: PASS
     notes: >-
@@ -154,6 +195,7 @@ cases:
       A correctly signed token with NO aud claim is rejected, because
       claim_validator.audience.required is true.
     expected_status: 403
+    expected: expected/missing-audience-403.json
     result: PASS
     notes: >-
       Note the status code: 403, NOT 401. This is the one caller-side rejection
@@ -188,6 +230,7 @@ cases:
       Document, rather than assert, that a token minted for a DIFFERENT API is
       accepted. This is a property of the plugin, not of this spec.
     expected_status: 200
+    expected: expected/wrong-audience-200.json
     result: >-
       CONFIRMED-GAP — a correctly signed, unexpired token with
       aud=https://totally-unrelated-api.example.com/ returned 200. Reproduced twice.

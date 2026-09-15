@@ -52,6 +52,23 @@ fail() { printf '\033[31mFAIL\033[0m  %s\n' "$1"; exit 1; }
 pass() { printf '\033[32mPASS\033[0m  %s\n' "$1"; }
 info() { printf '\033[34mNOTE\033[0m  %s\n' "$1"; }
 
+# --- expected statuses come from the fixtures, not from literals here ---------
+# tests/expected/*.json is the single source of truth for what each case expects,
+# so this script and the fixtures cannot drift apart. Parsed with sed, so verify.sh
+# still needs nothing beyond bash and curl. If a fixture is missing (someone copied
+# this script on its own) the second argument is used instead.
+FIXTURES="$(cd "$(dirname "${BASH_SOURCE[0]}")/../tests/expected" 2>/dev/null && pwd || true)"
+expect() {
+  local f="${FIXTURES:-}/$1" v=""
+  [ -n "${FIXTURES:-}" ] && [ -f "$f" ] && \
+    v="$(sed -n 's/.*"status"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$f" | head -1)"
+  printf '%s' "${v:-$2}"
+}
+EXP_UNAUTH="$(expect unauthenticated.json 401)"
+EXP_TOKEN="$(expect token-200.json 200)"
+EXP_VALID="$(expect locations-200.json 200)"
+EXP_BADTOKEN="$(expect invalid-token-401.json 401)"
+
 echo "→ Token endpoint: $TOKEN_URL"
 echo "→ Mediated API:   $API_URL"
 echo "→ Request body:   $REQ_BODY"
@@ -63,7 +80,7 @@ status="$(curl -s -o "$BODY_FILE" -w '%{http_code}' -X POST "$API_URL" \
 [[ "$status" == "000" ]] && fail "could not reach $API_URL at all — curl got no HTTP
      response. Check GATEWAY, DNS and network reachability before anything else;
      every assertion below depends on the gateway answering."
-[[ "$status" == "401" ]] \
+[[ "$status" == "$EXP_UNAUTH" ]] \
   && pass "no token → 401 (rejected in the access phase, before any transform work)" \
   || fail "no token → ${status} (expected 401 — is helix-auth validate on ${API_PATH}?)"
 
@@ -71,7 +88,7 @@ status="$(curl -s -o "$BODY_FILE" -w '%{http_code}' -X POST "$API_URL" \
 echo
 status="$(curl -s -o "$BODY_FILE" -w '%{http_code}' -X POST "$TOKEN_URL" \
   -u "${CLIENT_ID}:${CLIENT_SECRET}" -H 'content-type: application/json')"
-[[ "$status" == "200" ]] \
+[[ "$status" == "$EXP_TOKEN" ]] \
   || fail "token request → ${status} (expected 200). Body: $(tr -d '\n' < "$BODY_FILE")
      Check the app's client_id/secret, and that helix-auth generate is on ${TOKEN_PATH}."
 
@@ -135,7 +152,7 @@ echo
 status="$(curl -s -o "$BODY_FILE" -w '%{http_code}' -X POST "$API_URL" \
   -H 'authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJmb3JnZWQifQ.not-a-valid-signature' \
   -H 'content-type: application/json' -H 'accept: application/json' -d "$REQ_BODY")"
-[[ "$status" == "401" ]] \
+[[ "$status" == "$EXP_BADTOKEN" ]] \
   && pass "forged token → 401" \
   || fail "forged token → ${status} (expected 401). A token this gateway did not sign MUST be rejected before the SOAP hop."
 

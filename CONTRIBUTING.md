@@ -15,6 +15,13 @@ PROBLEM → BUSINESS NEED → DESIGN → GATEWAY SPEC → LOCAL VALIDATION →
 GATEWAY DRY-RUN → TESTS → RESULTS → DOCUMENTATION
 ```
 
+**`tests/expected/*.json` are read by machines, not people.** They carry `status`,
+`headers` and `body` — nothing else. `gateway/verify.sh` parses the status out of
+them, so a case's expectation lives in exactly one place and the script cannot
+drift from the fixtures. Explanation, caveats and anything manual go in
+`test-plan.yaml` (`intent`, `notes`, `response_notes`, `expected_outcome`), where
+YAML handles prose properly.
+
 **The gateway configuration is the source of truth.** The README, the
 architecture doc, the agent prompt and the README's diagrams all
 describe the solution that was actually generated and validated — never an
@@ -38,9 +45,9 @@ solutions/<NN>-<slug>/
 │   ├── products.json       only if the solution needs API Products
 │   └── verify.sh           required — must exit 0 against a live environment
 ├── tests/
-│   ├── test-plan.yaml      required
-│   ├── requests/           request fixtures
-│   └── expected/           expected responses
+│   ├── test-plan.yaml      required — cases, intent, and the prose
+│   ├── requests/           request fixtures (.http)
+│   └── expected/           machine-read: {status, headers, body} ONLY
 └── validation/
     ├── local-validation.yaml    required
     └── gateway-validation.yaml  required
@@ -179,6 +186,10 @@ A solution is mergeable when all of these hold:
 - [ ] Agent prompt and README present
 - [ ] README carries at least one ```mermaid diagram — GitHub renders it inline, so
       readers get the one-glance version without opening anything
+- [ ] Every `expected/*.json` has `status` and nothing outside {status, headers, body}
+- [ ] Every fixture is referenced by a case's `expected:`, and every `expected:` is a
+      path — narrative belongs in `expected_outcome:` or `response_notes:`
+- [ ] `gateway/verify.sh` reads its expected statuses from the fixtures, not literals
 - [ ] Limitations stated
 - [ ] Validation status reported accurately, with provenance
 - [ ] `solution.yaml` version matches every artifact in the package

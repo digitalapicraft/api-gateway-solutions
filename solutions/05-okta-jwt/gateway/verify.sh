@@ -74,6 +74,24 @@ fail() { printf '\033[31mFAIL\033[0m  %s\n' "$1"; exit 1; }
 pass() { printf '\033[32mPASS\033[0m  %s\n' "$1"; }
 info() { printf '\033[34mNOTE\033[0m  %s\n' "$1"; }
 
+# --- expected statuses come from the fixtures, not from literals here ---------
+# tests/expected/*.json is the single source of truth for what each case expects,
+# so this script and the fixtures cannot drift apart. Parsed with sed, so verify.sh
+# still needs nothing beyond bash and curl. If a fixture is missing (someone copied
+# this script on its own) the second argument is used instead.
+FIXTURES="$(cd "$(dirname "${BASH_SOURCE[0]}")/../tests/expected" 2>/dev/null && pwd || true)"
+expect() {
+  local f="${FIXTURES:-}/$1" v=""
+  [ -n "${FIXTURES:-}" ] && [ -f "$f" ] && \
+    v="$(sed -n 's/.*"status"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$f" | head -1)"
+  printf '%s' "${v:-$2}"
+}
+EXP_UNAUTH="$(expect unauthenticated.json 401)"
+EXP_TOKEN="$(expect okta-token-200.json 200)"
+EXP_VALID="$(expect valid-200.json 200)"
+EXP_REJECTED="$(expect rejected-401.json 401)"
+EXP_NOSCHEME="$(expect no-scheme-400.json 400)"
+
 # Decode a JWT segment (base64url, no padding) without any dependency but base64.
 b64url() { local s="${1//-/+}"; s="${s//_//}"; case $(( ${#s} % 4 )) in 2) s="$s==";; 3) s="$s=";; esac; printf '%s' "$s" | base64 -d 2>/dev/null; }
 
@@ -85,7 +103,7 @@ status="$(curl -s -o "$BODY_FILE" -w '%{http_code}' "$API_URL")"
 [[ "$status" == "000" ]] && fail "could not reach $API_URL at all — curl got no HTTP
      response. Check GATEWAY, DNS and network reachability before anything else."
 case "$status" in
-  401) pass "no token → 401 (rejected in the access phase, never reached upstream)" ;;
+  "$EXP_UNAUTH") pass "no token → ${status} (rejected in the access phase, never reached upstream)" ;;
   302|303|307) fail "no token → ${status}, a REDIRECT. unauth_action is still \"auth\" (its
      default), so the gateway is bouncing API clients to Okta's login page instead
      of refusing them. Set unauth_action: deny (and bearer_only: true)." ;;
@@ -107,7 +125,7 @@ if [[ -z "$ACCESS_TOKEN" ]]; then
     -u "${OKTA_CLIENT_ID}:${OKTA_CLIENT_SECRET}" \
     -H 'content-type: application/x-www-form-urlencoded' \
     --data-urlencode 'grant_type=client_credentials' "${extra[@]}")"
-  [[ "$status" == "200" ]] \
+  [[ "$status" == "$EXP_TOKEN" ]] \
     || fail "token request → ${status} (expected 200). Body: $(tr -d '\n' < "$BODY_FILE")
      This is the IdP refusing, not the gateway. Common causes: the app is not
      enabled for the client-credentials grant; the scope is not granted to it; or
@@ -165,7 +183,7 @@ pace
 echo
 forged="${ACCESS_TOKEN%.*}.bm90LWEtdmFsaWQtc2lnbmF0dXJl"
 status="$(curl -s -o "$BODY_FILE" -w '%{http_code}' "$API_URL" -H "authorization: Bearer ${forged}")"
-[[ "$status" == "401" ]] \
+[[ "$status" == "$EXP_REJECTED" ]] \
   && pass "forged signature → 401 (the RS256 signature is actually verified against Okta's JWKS)" \
   || fail "forged signature → ${status} (expected 401). This is the most serious possible
      failure: the header is being parsed but the signature is not being checked."
@@ -175,7 +193,7 @@ pace
 echo
 none_tok="eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJhdHRhY2tlciIsImlzcyI6ImF0dGFja2VyIn0."
 status="$(curl -s -o "$BODY_FILE" -w '%{http_code}' "$API_URL" -H "authorization: Bearer ${none_tok}")"
-[[ "$status" == "401" ]] \
+[[ "$status" == "$EXP_REJECTED" ]] \
   && pass "alg=none token → 401 (unsigned tokens are refused)" \
   || fail "alg=none token → ${status} (expected 401). Check accept_none_alg is false and
      accept_unsupported_alg is false — the latter DEFAULTS TO TRUE."
@@ -189,7 +207,7 @@ status="$(curl -s -o "$BODY_FILE" -w '%{http_code}' "$API_URL" -H "authorization
 # Deterministic, and independent of the value's length. Accept either, because
 # the point of the case is that a scheme-less credential never reaches upstream.
 case "$status" in
-  400) pass "token without the Bearer prefix → 400 (rejected at header parse, before the plugin)" ;;
+  "$EXP_NOSCHEME") pass "token without the Bearer prefix → ${status} (rejected at header parse, before the plugin)" ;;
   401) pass "token without the Bearer prefix → 401" ;;
   200|201) fail "token without the Bearer prefix → ${status}. A credential with no auth
      scheme was ACCEPTED. The route is not parsing the Authorization header correctly." ;;
@@ -201,7 +219,7 @@ pace
 echo
 if [[ -n "$OTHER_ISSUER_TOKEN" ]]; then
   status="$(curl -s -o "$BODY_FILE" -w '%{http_code}' "$API_URL" -H "authorization: Bearer ${OTHER_ISSUER_TOKEN}")"
-  [[ "$status" == "401" ]] \
+  [[ "$status" == "$EXP_REJECTED" ]] \
     && pass "token from a different issuer → 401 (valid_issuers pinning holds)" \
     || fail "token from a different issuer → ${status} (expected 401). A correctly
      signed token from ANOTHER authorization server is being accepted. Check

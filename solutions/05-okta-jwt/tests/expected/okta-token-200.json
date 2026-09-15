@@ -1,9 +1,9 @@
 {
-  "_case": "okta-token-issue",
-  "_status": 200,
-  "_note": "Okta's own response, not the gateway's. access_token must be a three-segment JWT whose header declares alg RS256 and carries a kid. An opaque access_token means this authorization server does not issue JWTs, and local JWKS verification cannot work — you would need introspection_endpoint instead.",
-  "token_type": "Bearer",
-  "expires_in": 3600,
-  "access_token": "eyJraWQiOiI8a2V5LWlkPiIsImFsZyI6IlJTMjU2In0.<payload>.<signature>",
-  "scope": "<the scope your authorization server granted>"
+  "status": 200,
+  "body": {
+    "token_type": "Bearer",
+    "expires_in": 3600,
+    "access_token": "eyJraWQiOiI8a2V5LWlkPiIsImFsZyI6IlJTMjU2In0.<payload>.<signature>",
+    "scope": "<the scope your authorization server granted>"
+  }
 }

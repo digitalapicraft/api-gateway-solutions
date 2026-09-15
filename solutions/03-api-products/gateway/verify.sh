@@ -47,6 +47,22 @@ fail() { printf '\033[31mFAIL\033[0m  %s\n' "$1"; exit 1; }
 pass() { printf '\033[32mPASS\033[0m  %s\n' "$1"; }
 info() { printf '\033[34mNOTE\033[0m  %s\n' "$1"; }
 
+# --- expected statuses come from the fixtures, not from literals here ---------
+# tests/expected/*.json is the single source of truth for what each case expects,
+# so this script and the fixtures cannot drift apart. Parsed with sed, so verify.sh
+# still needs nothing beyond bash and curl. If a fixture is missing (someone copied
+# this script on its own) the second argument is used instead.
+FIXTURES="$(cd "$(dirname "${BASH_SOURCE[0]}")/../tests/expected" 2>/dev/null && pwd || true)"
+expect() {
+  local f="${FIXTURES:-}/$1" v=""
+  [ -n "${FIXTURES:-}" ] && [ -f "$f" ] && \
+    v="$(sed -n 's/.*"status"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$f" | head -1)"
+  printf '%s' "${v:-$2}"
+}
+EXP_UNAUTH="$(expect unauthenticated-401.json 401)"
+EXP_VALID="$(expect valid-200.json 200)"
+EXP_QUOTA="$(expect quota-exceeded-429.json 429)"
+
 if [[ "$FREE_KEY" == "$PRO_KEY" ]]; then
   fail "FREE_KEY and PRO_KEY are identical. They must be keys from TWO SEPARATE APPS —
      quota is counted per app, so two keys on one app share a bucket and case 5
@@ -70,14 +86,14 @@ status="$(call "")"
 [[ "$status" == "000" ]] && fail "could not reach $API_URL at all — curl got no HTTP
      response. Check GATEWAY, DNS and network reachability before anything else;
      every assertion below depends on the gateway answering."
-[[ "$status" == "401" ]] \
+[[ "$status" == "$EXP_UNAUTH" ]] \
   && pass "no key → 401" \
   || fail "no key → ${status} (expected 401 — is helix-auth validate on this API?)"
 
 # --- 2: unknown key ----------------------------------------------------------
 echo
 status="$(call "definitely-not-a-real-client-id")"
-[[ "$status" == "401" ]] \
+[[ "$status" == "$EXP_UNAUTH" ]] \
   && pass "unknown key → 401" \
   || fail "unknown key → ${status} (expected 401)."
 
@@ -104,7 +120,7 @@ info "spending the Free app's window (up to ${MAX_TRIES} calls)…"
 free_429_at=0
 for (( i=2; i<=MAX_TRIES; i++ )); do
   status="$(call "$FREE_KEY")"
-  if [[ "$status" == "429" ]]; then free_429_at=$i; break; fi
+  if [[ "$status" == "$EXP_QUOTA" ]]; then free_429_at=$i; break; fi
   if [[ "$status" != "200" && "$status" != "201" ]]; then
     fail "unexpected ${status} on Free call #${i} while filling the window. Body: $(tr -d '\n' < "$BODY_FILE")"
   fi
