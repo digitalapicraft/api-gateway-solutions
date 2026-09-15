@@ -48,25 +48,13 @@ implementation:
     validate route; nothing in either plugin block hints that the value is shared.
 
 validation:
-  # Validated against a gateway. See validation/gateway-validation.yaml.
-  local:
-    status: PASS
-    basis: structural review of api-spec.yaml and verify.sh — syntax, schema fields, plugin scoping, secret handling, test-to-implementation mapping
-    verified_this_session: true
-  gateway_dry_run:
-    status: PASS
-    verified_this_session: true
-    detail: dry-run passed; first attempt correctly failed on the missing upstream binding.
-  deployment:
-    status: DEPLOYED
-    environment: a Helix test environment (identifiers withheld)
-    detail: revision ACTIVE; service_id auto-assigned on import.
-  functional_test:
-    status: PASS
-    verified_this_session: true
-    executor: gateway/verify.sh
-    detail: verify.sh exit 0, 6/6 cases, as shipped.
-
+  # Stage statuses only. What was checked and what happened is in validation/;
+  # dates and who ran it are in the machinery verification record.
+  local: PASS
+  gateway_dry_run: PASS
+  deployment: DEPLOYED
+  functional_test: PASS
+  record: validation/
 
 artifacts:
   documentation: [README.md, architecture.md, business-need.md]

@@ -307,6 +307,12 @@ behaviour:
 
 ## Gotchas
 
+- **The per-IP `limit-count` needs `real-ip` in front of it.** If the gateway sits
+  behind a load balancer or proxy and `real-ip` isn't configured, every caller
+  presents the balancer's address. The per-IP ceiling then collapses into a single
+  global cap on that endpoint — a self-inflicted outage waiting for a traffic
+  spike. Nothing in the spec can detect your topology; you have to know it.
+
 Each of these has cost somebody an afternoon.
 
 - **The quota backend isn't on the route.** On more than one node, `quota_policy`

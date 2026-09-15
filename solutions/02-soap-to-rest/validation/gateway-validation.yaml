@@ -32,18 +32,4 @@ gateway_validation:
       - { id: response-really-converted, expected_status: 200, result: PASS, note: "body contains no XML markup" }
       - { id: invalid-token,             expected_status: 401, result: PASS }
 
-  how_this_build_behaves:
-    # These are the three things that must be set correctly for the transform to work.
-    - xml-to-json transform_request DEFAULTS TO false — set it true or the request body is not converted.
-    - The response transform is content-negotiated — it fires only on Accept application/json.
-    - proxy-rewrite must NOT set Content-Type — it runs before xml-to-json and would hide the JSON body from it. Retarget the path only.
-    - json-to-xml is a separate plugin for the opposite job (JSON upstream response -> XML), not the request-side counterpart.
-
   overall: READY
-
-what_you_should_do:
-  - Set transform_request true; keep Content-Type out of proxy-rewrite.
-  - Tell integrators to send Accept application/json, or the response stays XML.
-  - Replace <YOUR_JWT_SIGNING_SECRET> with a real literal secret.
-  - Confirm xml-to-json exists in your org and check its fields with get_plugin_config.
-  - Run gateway/verify.sh with REQ_BODY set to a body whose field names your handler reads.

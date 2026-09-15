@@ -27,8 +27,3 @@ analytics_validation:
     - X-Request-Id is not a dimension — correlate a single request in your own logs.
 
   overall: READY   # read-only; all documented queries verified live
-
-what_you_should_do:
-  - Get a control-plane bearer token (the portal uses the same one).
-  - Run scripts/query-analytics.sh with your CP host, ORG and TOKEN.
-  - For per-app / per-product rows, make sure the API resolves identity (solution 01/03); otherwise traffic is unattributed.

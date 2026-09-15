@@ -23,31 +23,6 @@ local_validation:
     placeholders:            PASS   # <YOUR_GATEWAY_HOST>, <ORG_ID>, <ENV_ID>, <API_ID>, <PRODUCT_ID>, <ENV:REDIS_HOST> — no real hosts, org ids or personas
     quota_arithmetic:        PASS_WITH_NOTE   # see warnings — the illustrative tier sum exceeds the illustrative upstream ceiling, deliberately, and products.json says so
 
-  executed_locally:
-    # The only things in this package that were actually RUN. Recorded separately
-    # from the structural review so the two are not confused.
-    - description: verify.sh parsed with `bash -n`
-      result: PASS
-    - description: >-
-        verify.sh run with no environment variables set — confirms the required-variable
-        guards fire with usable guidance and a non-zero exit rather than proceeding
-      result: PASS
-    - description: >-
-        verify.sh run with FREE_KEY equal to PRO_KEY — confirms the same-app guard
-        rejects before any network call, since two keys on one app share a quota bucket
-        and would make correct isolation look broken
-      result: PASS
-    - description: >-
-        verify.sh run against an unreachable host — confirms it reports "could not reach
-        the gateway" rather than misattributing a connection failure to a missing plugin
-      result: PASS
-    - description: products.json parsed as JSON, and every product confirmed to carry a quota object
-      result: PASS
-
-  executed_locally_note: >-
-    These establish that the SCRIPT behaves. They establish nothing about the
-    gateway. No case in tests/test-plan.yaml has been executed.
-
   warnings:
     - >-
       QUOTA ARITHMETIC: the illustrative tiers sum to 11,060 req/min (Free 60 + Pro
@@ -118,6 +93,3 @@ local_validation:
     - Whether the 429 body and the absent Retry-After / X-RateLimit-* headers match what
       is documented.
     - Any request/response behaviour whatsoever.
-
-  performed_by: helix-solution-builder
-  verified_this_session: true

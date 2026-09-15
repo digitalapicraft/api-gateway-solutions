@@ -18,6 +18,3 @@ local_validation:
   not_established_here:
     - Whether your specific org has data in a given window (that is a live query).
     - Whether a given API resolves identity (that depends on how the API is built).
-
-  performed_by: helix-solution-builder
-  verified_this_session: true

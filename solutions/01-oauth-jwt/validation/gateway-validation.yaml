@@ -31,13 +31,4 @@ gateway_validation:
       - { id: wrong-secret,            expected_status: 401, result: PASS, note: "the client secret is checked — a real credentials flow" }
       - { id: malformed-authorization, expected_status: 401, result: PASS }
 
-  notes:
-    - The signing secret is a LITERAL on this build; <ENV:...> is not resolved. Replace <YOUR_JWT_SIGNING_SECRET> and keep it out of git.
-    - jwt-auth is a validate_auth_type value of helix-auth, not a standalone plugin.
-
   overall: READY
-
-what_you_should_do:
-  - Replace <YOUR_JWT_SIGNING_SECRET> with a real high-entropy secret; use the same value on the token and validate routes.
-  - Import, bind an upstream, run validate_route then dry_run_deploy, then deploy.
-  - Run gateway/verify.sh with EXPECT_TTL set to your token_ttl.

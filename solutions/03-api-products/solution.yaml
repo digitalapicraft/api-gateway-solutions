@@ -54,28 +54,13 @@ implementation:
     no separate limiter in this simplified design.
 
 validation:
-  # Validated against a gateway. See validation/gateway-validation.yaml.
-  local:
-    status: PASS
-    basis: >-
-      structural review of api-spec.yaml and products.json (valid JSON, every product
-      carries a quota object), plus verify.sh syntax-checked under bash and its
-      same-key guardrail and unreachable-host paths actually executed.
-    verified_this_session: true
-  gateway_dry_run:
-    status: PASS
-    verified_this_session: true
-    detail: dry-run passed.
-  deployment:
-    status: DEPLOYED
-    environment: a Helix test environment (identifiers withheld)
-    detail: two products + two apps on different products; revision ACTIVE.
-  functional_test:
-    status: PASS
-    verified_this_session: true
-    executor: gateway/verify.sh
-    detail: verify.sh exit 0, 5/5 incl. isolation; quota exact; 429 body and absent headers as documented.
-
+  # Stage statuses only. What was checked and what happened is in validation/;
+  # dates and who ran it are in the machinery verification record.
+  local: PASS
+  gateway_dry_run: PASS
+  deployment: DEPLOYED
+  functional_test: PASS
+  record: validation/
 
 artifacts:
   documentation: [README.md, architecture.md, business-need.md]

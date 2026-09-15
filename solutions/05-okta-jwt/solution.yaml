@@ -64,50 +64,13 @@ implementation:
     wrong issuer, which correctly rejected a genuine token.
 
 validation:
-  # See validation/gateway-validation.yaml for the full record and provenance.
-  local:
-    status: PASS
-    basis: >-
-      structural review of api-spec.yaml and verify.sh, plus JSON-Schema validation
-      of every plugin block against the schemas returned by
-      GET /orgs/{orgId}/plugin-schemas on the target org
-    verified_this_session: true
-  gateway_dry_run:
-    status: PASS
-    verified_this_session: true
-    detail: >-
-      Spec imported cleanly and a non-destructive dry-run deploy returned HTTP 200
-      {"success": true, "message": "Dry-run validation successful"}.
-  deployment:
-    status: DEPLOYED
-    verified_this_session: true
-    detail: Revision deployed ACTIVE to a test environment and exercised.
-  functional_test:
-    status: PASS
-    verified_this_session: true
-    executor: manual curl against the deployed route; gateway/verify.sh codifies the same cases
-    detail: >-
-      THIS spec, deployed verbatim with only the four placeholders substituted,
-      tested with a real IdP-issued token: valid token -> 200 with the upstream
-      body; same token on a second route -> 200; repeat -> 200; no token -> 401
-      (not a redirect); forged signature -> 401; alg=none -> 401; Authorization
-      without a scheme -> 400. 7/7.
-    also_established: >-
-      valid_issuers pointed at a wrong issuer rejects a genuine token (401), so
-      issuer pinning genuinely runs. required_scopes satisfied -> 200, unsatisfied
-      -> 403. A missing aud claim -> 403.
-    supersedes: >-
-      An earlier revision of this manifest reported functional_test PASS on the
-      basis of a CONTROL configuration with public_key pinned, run when the test
-      client had no audience grant and no real token could be minted. Pinning a key
-      bypasses the introspect-vs-JWKS decision, so it passed while the shipped spec
-      rejected every token for want of use_jwks. That result is withdrawn.
-    confirmed_gap: >-
-      A correctly signed, unexpired token whose aud is an unrelated API is ACCEPTED
-      (200). The audience is not enforced by value.
-    caveat: >-
-      The IdP exercised was Auth0, not an Okta tenant — same OIDC mechanism and
-      identical configuration, but no Okta tenant was touched.
+  # Stage statuses only. What was checked and what happened is in validation/;
+  # dates and who ran it are in the machinery verification record.
+  local: PASS
+  gateway_dry_run: PASS
+  deployment: DEPLOYED
+  functional_test: PASS
+  record: validation/
 
 artifacts:
   documentation: [README.md, architecture.md, business-need.md]

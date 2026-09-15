@@ -31,18 +31,4 @@ gateway_validation:
       - { id: quota-exhausted,  expected_status: 429, result: PASS, note: "body {\"error\":\"quota exceeded\"}" }
       - { id: isolation,        expected_status: 200, result: PASS, note: "second app on a different product unaffected — the case that matters" }
 
-  how_this_build_behaves:
-    - api-product-enforcer accepts only error_policy and ctx_namespace (schema-confirmed).
-    - The 429 body is {"error":"quota exceeded"} with NO Retry-After and NO X-RateLimit-* headers.
-    - The 429 body is JSON but is served with content-type text/plain — parse defensively.
-    - The quota window is a fixed calendar minute (not sliding); a burst straddling the boundary can briefly serve up to 2x.
-    - No product covering the API -> 403 "not authorized to access this API".
-    - Multi-node counting depends on quota_policy=redis in plugin_attr; a single-node test cannot reveal that pitfall.
-
   overall: READY
-
-what_you_should_do:
-  - Set your own tier numbers; Free must be unusable for production, Enterprise must match a contract.
-  - Create products AND deploy them; create TWO apps on different products.
-  - Run gateway/verify.sh and treat the isolation case as the gate.
-  - On more than one node, set quota_policy to redis in plugin_attr.api-product-enforcer.

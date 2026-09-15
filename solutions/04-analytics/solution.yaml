@@ -52,19 +52,11 @@ limits:
   - No request/response bodies — metadata only, by design.
 
 validation:
-  local:
-    status: PASS
-    basis: structural review of charts.md and scripts/query-analytics.sh against the analytics metadata (metrics, dimensions, filter operators).
-    verified_this_session: true
-  live_queries:
-    status: VERIFIED
-    detail: >-
-      Every view was run against the live analytics API and returned the expected
-      shapes: requests in the last hour grouped by api_name / app_name /
-      product_name / response_status_code; slowest and fastest APIs by AVG
-      response-time (server-side sort on value); error counts by status.
-      scripts/query-analytics.sh was executed end to end and printed all views.
-    verified_this_session: true
+  # Stage statuses only. What was checked and what happened is in validation/;
+  # dates and who ran it are in the machinery verification record.
+  local: PASS
+  live_queries: VERIFIED
+  record: validation/
 
 artifacts:
   documentation: [README.md, charts.md, architecture.md, business-need.md]
