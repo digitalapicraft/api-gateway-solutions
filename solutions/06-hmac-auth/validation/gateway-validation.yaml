@@ -42,28 +42,64 @@ gateway_validation:
     detail: '{"success": true, "message": "Dry-run validation successful"} with an upstream bound.'
 
   deployment:
-    status: NOT_RUN
+    status: DEPLOYED
     detail: >-
-      VALIDATE mode. No revision was deployed, so no route exists to send a
-      request to.
+      Deployed to a TEMPORARY test API on a test environment; the revision went
+      ACTIVE. A product with authMethods ["hmac-auth"], and an app created with
+      plugins {"hmac-auth": {}}, produced a key_id/secret_key pair in the create
+      response exactly as documented. Every resource created was deleted
+      afterwards and the routes now return 404.
 
   functional_tests:
     executor: gateway/verify.sh
-    status: NOT_EXECUTED
-    detail: >-
-      verify.sh is written and its eight cases are defined, but running it needs a
-      deployed route and an app credential, neither of which exists. No request has
-      been sent through this configuration.
+    status: PASS
+    detail: verify.sh exits 0 — all eight cases pass as written, unmodified.
+    cases:
+      - { id: unauthenticated,   expected_status: 401, result: PASS }
+      - { id: signed-post,       expected_status: 201, result: PASS, note: "the signing base this package documents is the one the gateway rebuilds" }
+      - { id: tampered-body,     expected_status: 401, result: PASS, note: "the Digest genuinely binds the body" }
+      - { id: stale-date,        expected_status: 401, result: PASS, note: "clock_skew enforced at 300s" }
+      - { id: wrong-secret,      expected_status: 401, result: PASS, note: "the secret is verified, not just the key_id" }
+      - { id: weak-signed-set,   expected_status: 401, result: PASS, note: "signed_headers enforced — rejected before the signature is checked" }
+      - { id: replay,            expected_status: 201, result: PASS, note: "ACCEPTED again, as documented. There is no nonce." }
+      - { id: signed-get,        expected_status: 200, result: PASS, note: "no-digest signing set on the read route" }
     client_cross_check:
       status: PASS
       detail: >-
-        The signing function in verify.sh was compared against an independent
-        reimplementation of the plugin's generate_signature. Both signed sets
-        (with and without digest) produced identical signatures, and each of the
-        three draft-cavage deviations — omitting the keyId line, dropping the
-        trailing newline, and using cavage's lowercase "(request-target)" form —
-        was shown to produce a different signature. This establishes that the
-        CLIENT is correct. It does not establish that a deployed route behaves as
-        described.
+        Before deployment, the signing function in verify.sh was compared against
+        an independent reimplementation of the plugin's generate_signature. Both
+        signed sets produced identical signatures, and each of the three
+        draft-cavage deviations — omitting the keyId line, dropping the trailing
+        newline, and cavage's lowercase "(request-target)" form — produced a
+        different one. The live run then confirmed the same construction end to end.
 
-  overall: READY WITH WARNINGS
+  additional_findings:
+    path_binding:
+      status: PASS
+      detail: >-
+        @request-target binds the path, confirmed by request: a signature minted
+        for GET /posts/1 returns 200 on /posts/1 and 401 when replayed against
+        /posts/2.
+    error_body_grouping:
+      status: CORRECTED
+      detail: >-
+        Exactly two failures are explained to the caller — a missing Authorization
+        header, and one that does not begin with "Signature". Both are raised while
+        PARSING. Everything raised during VALIDATION is collapsed to
+        "client request can't be validated", and that includes
+        "keyId or signature missing", which is raised inside validate() after
+        parsing has succeeded. An earlier draft of this package listed that third
+        case as explained; the live run disproved it and the README is corrected.
+    api_product_enforcer_composition:
+      status: PASS
+      detail: >-
+        Previously recorded as untested. api-product-enforcer (error_policy
+        fail_close) was added to the signed POST route and the product quota set to
+        3/minute: three signed requests returned 201 and the next three returned
+        429 {"error":"quota exceeded"}, while the route without the enforcer kept
+        returning 200. The enforcer resolves the consumer and credential_id from
+        hmac-auth with no extra configuration. NOTE the x-ratelimit-* headers on
+        these responses are NOT from the enforcer — they appear identically on a
+        route with no enforcer on it, so they are a gateway-level default (1000/s).
+
+  overall: READY

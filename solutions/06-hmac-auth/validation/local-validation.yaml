@@ -64,8 +64,9 @@ local_validation:
       normalises, reorders or appends query parameters invalidates every signature
       it touches.
     - >-
-      Whether api-product-enforcer resolves a quota from an hmac-auth consumer is
-      untested. The mechanism suggests it should, but the package does not claim it.
+      Metering is out of scope here by choice, not by limitation: api-product-enforcer
+      added to a signed route meters per app exactly as solution 03 describes, which
+      was tested against a deployed route.
     - >-
       The upstream is bound on the service at import/bind time, not expressed in
       the OpenAPI paths. Nothing in this document can confirm it is reachable.
@@ -76,9 +77,13 @@ local_validation:
     - One product with authMethods ["hmac-auth"], one developer, one app per integration provides the key_id/secret_key used in testing.
 
   not_established_here:
+    # This file is the PRE-GATEWAY review and deliberately stays that way: what a
+    # structural read can and cannot settle does not change because a later stage
+    # passed. The request-path results live in gateway-validation.yaml.
     - Whether a gateway accepts this configuration (that is a dry-run).
     - Whether hmac-auth in this org exposes these exact fields at deploy time.
     - Any request/response behaviour whatsoever — including whether the signing
       base this package documents is the one a deployed route rebuilds. The
       client implementation was cross-checked against the plugin's algorithm;
-      that is not the same as having sent a request.
+      that is not the same as having sent a request. It subsequently was — see
+      validation/gateway-validation.yaml, which records verify.sh at 8/8.

@@ -9,10 +9,10 @@ gateway configuration, the agent prompt that produces it, the tests that prove
 it, and an honest record of what was and wasn't validated.
 
 > **Every solution here has been generated and validated against our gateway**,
-> and each package says exactly how far that went. Solutions 01–05 were imported,
-> dry-run, deployed and exercised with their `verify.sh`. Solutions 06 and 07 were
-> imported and dry-run, but not deployed — their `verify.sh` is written and has
-> not been executed, and both say so in their own validation table. Each package's
+> and each package says exactly how far that went. Solutions 01–06 were imported,
+> dry-run, deployed and exercised with their `verify.sh`. Solution 07 was imported
+> and dry-run, but not deployed — its `verify.sh` is written and has not been
+> executed, and it says so in its own validation table. Each package's
 > `validation/` records the outcome.
 
 ---

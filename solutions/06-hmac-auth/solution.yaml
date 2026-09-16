@@ -58,8 +58,8 @@ validation:
   # dates and who ran it are in the machinery verification record.
   local: PASS
   gateway_dry_run: PASS
-  deployment: NOT_RUN
-  functional_test: NOT_EXECUTED
+  deployment: DEPLOYED
+  functional_test: PASS
   record: validation/
 
 artifacts:
@@ -87,7 +87,7 @@ limitations:
   - The integration cost lands on the caller, who must get canonicalisation byte-exact. Off-the-shelf draft-cavage libraries do NOT interoperate — the keyId line, the trailing newline and the @request-target form each differ.
   - Not usable from browser JavaScript. Date is a forbidden header for fetch and XHR, and a secret shipped to a user's device is not a secret.
   - request-validation cannot be added to a signed route. It re-encodes the body ahead of the digest check.
-  - Whether api-product-enforcer resolves a quota from an hmac-auth consumer is UNTESTED. The mechanism suggests it should — hmac-auth attaches a consumer and the enforcer reads credential_id from it — but this package did not exercise the combination and does not claim it.
+  - Metering is not included here, but it does compose: api-product-enforcer added to a signed route meters per app exactly as solution 03 describes (tested — a 3/minute quota gave three 201s then 429 "quota exceeded"). This is a scope decision, not a limitation of signing.
   - hmac-auth's exact schema varies by build. Confirm with get_plugin_config in your org before deploying rather than trusting the field names in this spec.
 
-status: READY WITH WARNINGS   # imported and dry-run on a gateway; not deployed, so verify.sh has not been executed
+status: READY   # deployed to a temporary test API and verified: verify.sh exit 0, 8/8

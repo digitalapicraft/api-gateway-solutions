@@ -300,10 +300,13 @@ The body depends on **where** the failure happened, and the split is not obvious
 |---|---|
 | No `Authorization` header | `{"message":"client request can't be validated: missing Authorization header"}` |
 | Header does not start with `Signature` | `…: Authorization header does not start with 'Signature'` |
-| `keyId` or `signature` field absent | `…: keyId or signature missing` |
-| **Bad signature, bad digest, clock skew, unknown `key_id`, weak signed set** | **`{"message":"client request can't be validated"}`** — and nothing more |
+| **Everything else** — `keyId`/`signature` field absent, bad signature, bad digest, clock skew, unknown `key_id`, weak signed set | **`{"message":"client request can't be validated"}`** — and nothing more |
 
-Parsing failures are explained; **validation failures are not**. That is correct
+Exactly **two** failures are explained, and they are the two raised while *parsing*
+the header. Everything raised while *validating* is collapsed, including
+`keyId or signature missing` — which reads like a parsing error but is raised
+after parsing succeeds, and so is opaque like the rest. (Verified by request
+against a deployed route.) That is correct
 security behaviour — the second group must not tell an attacker which check
 failed — and it is genuinely hard for an honest integrator to self-diagnose. The
 detail exists only in the gateway error log:
@@ -413,31 +416,34 @@ supported configuration in this package and is not covered by its validation.
 - **The integration cost lands on the caller.** Every partner writes and debugs
   canonicalisation. Budget for the support load, and send them the worked example
   above rather than a link to the RFC.
-- **Whether quota composes with this is untested.** `hmac-auth` attaches a
-  consumer, and `api-product-enforcer` reads `credential_id` from it, so
-  [solution 03](../03-api-products/)'s metering *should* work on a signed route.
-  This package does not put the enforcer on the route and did not test the
-  combination — treat it as plausible, not proven.
+- **Quota composes — this was tested, and it works.** Adding
+  `api-product-enforcer` to a signed route meters it per app exactly as
+  [solution 03](../03-api-products/) describes: with a 3/minute product quota,
+  three signed requests returned 201 and the next three returned
+  `429 {"error":"quota exceeded"}`. The enforcer resolves the consumer and its
+  `credential_id` from `hmac-auth` without any extra configuration. This package
+  still ships without the enforcer, because metering is solution 03's subject —
+  but you can add it, and nothing about signing gets in the way.
 
 ## Validation status
 
-**Imported and dry-run against a gateway. Not deployed, so no request has been
-sent through this configuration.**
+**Validated against a gateway — imported, dry-run, deployed, and passed
+`verify.sh` 8/8.**
 
 | Stage | Status | Provenance |
 |---|---|---|
 | Configuration generated | **YES** | [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
 | Local validation | **PASS** | [`validation/local-validation.yaml`](validation/local-validation.yaml) |
-| Gateway dry-run | **PASS** | `{"success":true,"message":"Dry-run validation successful"}` after a clean import |
-| Gateway deployed | **NOT RUN** | — |
-| Functional tests | **NOT EXECUTED** | `gateway/verify.sh` is written but needs a deployed route and an app credential |
+| Gateway dry-run | **PASS** | `{"success":true,"message":"Dry-run validation successful"}` |
+| Gateway deployed | **DEPLOYED** | Revision ACTIVE on a temporary test API, since torn down |
+| Functional tests | **PASS (8/8)** | `gateway/verify.sh` exit 0 — including the weak-signed-set and replay cases |
 
-Overall: **READY WITH WARNINGS.** The configuration is accepted by a gateway and
-the plugin fields are confirmed against the live schema. The client signing
-implementation in `verify.sh` was cross-checked against an independent
-reimplementation of the plugin's signature construction — which establishes that
-the client is correct, not that the deployed route behaves as described. Run
-`verify.sh` in your own environment before relying on it.
+Overall: **READY.** Every claim in this package was exercised against a deployed
+route with a real app credential: the signing base is the one the gateway builds,
+the digest binds the body, `clock_skew` and `signed_headers` are both enforced, a
+wrong secret is rejected, and `@request-target` binds the path (a signature for
+`/posts/1` returns 401 against `/posts/2`). The replay case passed by being
+**accepted** — which is the documented limitation, demonstrated.
 [`validation/gateway-validation.yaml`](validation/gateway-validation.yaml) has
 the detail.
 

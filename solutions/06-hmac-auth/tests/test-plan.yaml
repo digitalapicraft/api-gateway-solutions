@@ -21,13 +21,11 @@ meta:
     language runtime and case 10 (removing signed_headers) mutates the route
     configuration, so both are manual and deliberately outside verify.sh.
   status: >-
-    NOT EXECUTED for this package. The solution was imported and dry-run against a
-    gateway, but not deployed, so no request has been sent through this
-    configuration and no app credential exists to sign with. These are the
-    assertions verify.sh makes, not results that have been obtained. The signing
-    implementation in verify.sh was cross-checked against an independent
-    reimplementation of the plugin's signature construction — that establishes the
-    client is correct, not that the route behaves as described.
+    EXECUTED. Cases 1-8 were run by verify.sh against a deployed route with a real
+    app credential, on a temporary test API that was torn down afterwards.
+    verify.sh exited 0 with all eight passing. Case 9 (a cavage client) and case 10
+    (removing signed_headers) remain manual and were not run; the three cavage
+    deviations were instead each shown, offline, to produce a different signature.
 
 cases:
   - id: unauthenticated
@@ -38,13 +36,13 @@ cases:
     request: requests/unauthenticated.http
     expected: expected/unauthenticated.json
     response_notes: >-
-      This is one of the few hmac-auth rejections that tells the caller WHY. Errors
-      raised while parsing the Authorization header — absent, wrong scheme keyword,
-      malformed fields — are returned in the body. Errors raised while VALIDATING
-      (bad signature, bad digest, clock skew, unknown key_id) are collapsed to a
-      bare "client request can't be validated" and the detail goes only to the
-      gateway log. Assert the status; treat the message as a diagnostic nicety that
-      exists for exactly this one class of failure.
+      One of exactly TWO hmac-auth rejections that tell the caller why — this one,
+      and an Authorization header that does not begin with "Signature". Both are
+      raised while PARSING the header. Everything raised while VALIDATING is
+      collapsed to a bare "client request can't be validated" with the detail going
+      only to the gateway log, and that includes "keyId or signature missing",
+      which reads like a parsing error but is raised after parsing succeeds.
+      Verified by request against a deployed route. Assert the status, not the body.
     expected_status: 401
     notes: >-
       A 2xx here means the route is not authenticating at all. A 403 means something
@@ -165,8 +163,9 @@ cases:
     notes: >-
       Sending a Digest this route does not require is harmless — it is simply not in
       the signed set. Omitting one that a route DOES require is the weak-signed-set
-      case. To confirm the path binding, replay this signature against /posts/2: it
-      returns 401, because @request-target expanded to "GET /posts/1" inside the base.
+      case. The path binding was confirmed against a deployed route: this exact
+      signature returns 200 on /posts/1 and 401 on /posts/2, because
+      @request-target expanded to "GET /posts/1" inside the signing base.
 
   - id: cavage-client
     type: failure
