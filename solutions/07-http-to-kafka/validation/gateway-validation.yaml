@@ -40,37 +40,82 @@ gateway_validation:
     detail: '{"success": true, "message": "Dry-run validation successful"} with an upstream bound.'
 
   deployment:
-    status: NOT_RUN
+    status: DEPLOYED
     detail: >-
-      VALIDATE mode. No revision was deployed, so no route exists to send an event
-      to.
+      Deployed to a TEMPORARY test API against a real Kafka cluster, publishing to
+      a dedicated topic created for the run and deleted afterwards. The demo topic
+      on that cluster was deliberately not written to. Every resource created was
+      removed; the route now returns 404.
 
   functional_tests:
     executor: gateway/verify.sh
-    status: NOT_EXECUTED
-    detail: >-
-      verify.sh is written and its four edge-contract cases are defined, but
-      running it needs a deployed route. NO KAFKA BROKER WAS INVOLVED AT ANY POINT
-      in producing this package, and no event has been published by this
-      configuration.
+    status: PASS
+    detail: verify.sh exits 0 — all four edge-contract cases pass as written.
+    cases:
+      - { id: valid-event,            expected_status: 202, result: PASS }
+      - { id: correlation-id,         expected_status: 202, result: PASS }
+      - { id: schema-rejected,        expected_status: 400, result: PASS }
+      - { id: mock-header-suppressed, expected_status: 202, result: PASS }
     kafka_leg:
-      status: NOT_EXECUTED
+      status: PASS
       detail: >-
-        The four manual cases — message on the topic with a non-empty event field,
-        a rejected event absent from the topic, broker-down still returning 202,
-        and topic auto-creation dropping the first message — all require a running
-        broker and a topic browser. None was run.
-    phase_ordering_claim:
-      status: DERIVED_NOT_OBSERVED
-      detail: >-
-        The claim that request-validation is required for a non-empty event field
-        is derived from three facts read out of the plugins' source and the live
-        schemas: kafka-logger implements include_req_body in its access handler;
-        mocking is an access-phase plugin at priority 1999 against kafka-logger's
-        403, and it short-circuits the request; and the rewrite phase completes
-        before the access phase begins. The conclusion follows, and it matches the
-        behaviour reported by an earlier proof-of-concept on a local stack, but it
-        was NOT observed as an empty message on a topic while producing this
-        package. Treat it as well-founded and confirm it with test case 5.
+        Confirmed on the topic, not inferred from a status code.
+      cases:
+        - id: message-on-topic
+          result: PASS
+          detail: >-
+            The published message carries the posted body in full under "event",
+            plus request_id and received_at. Key order is the re-encoded order,
+            because request-validation re-serialises the body — the same behaviour
+            that makes it incompatible with hmac-auth, here observed directly.
+        - id: rejected-event-not-published
+          result: PASS
+          detail: >-
+            Two valid events produced exactly two messages; the malformed event
+            that returned 400 produced none. _meta.filter on status == 202 works.
+        - id: broker-down-still-202
+          result: PASS
+          detail: >-
+            With brokers[].host pointed at an unroutable address, two valid events
+            each returned 202 at normal latency (~0.56s) and nothing reached the
+            topic. The headline limitation, demonstrated.
+        - id: topic-autocreate-drops-first
+          result: NOT_EXECUTED
+          detail: >-
+            Needs a broker with auto.create.topics.enable and a topic that does not
+            yet exist. Not run.
 
-  overall: READY WITH WARNINGS
+  corrections:
+    request_id_variable:
+      severity: BUG
+      detail: >-
+        The shipped log_format used "$request_id", which does NOT equal the
+        X-Request-Id returned to the caller, so the correlation field correlated
+        with nothing. Proven by logging three candidates on one request and
+        comparing: $request_id was 32 hex chars with no dashes and did not match;
+        $apisix_request_id and $http_x_request_id both matched the returned header
+        exactly. Cause: ngx_tpl seeds $apisix_request_id from nginx's $request_id,
+        then the request-id plugin overwrites $apisix_request_id with its own UUID
+        and never touches $request_id. The spec now uses $apisix_request_id.
+    request_validation_not_load_bearing:
+      severity: FALSE_CLAIM_WITHDRAWN
+      detail: >-
+        This package previously claimed — as DERIVED_NOT_OBSERVED — that removing
+        request-validation would leave every published message with an empty event
+        field, because mocking short-circuits the access phase before
+        kafka-logger's include_req_body read can run. The short-circuit is real and
+        readable in the sources, but the conclusion is FALSE. Tested twice: with
+        request-validation removed the event field was complete, and with
+        include_req_body set to false it was complete again. $request_body resolves
+        independently of both. The claim has been withdrawn everywhere it appeared
+        rather than softened, and request-validation is now justified only by what
+        it actually does — rejecting malformed events at the edge.
+
+  observations:
+    extra_log_fields:
+      detail: >-
+        Published messages carry route_id and service_id in addition to the keys
+        named in log_format. Harmless, but do not assume log_format is the complete
+        set when writing a consumer schema.
+
+  overall: READY

@@ -44,12 +44,9 @@ Put three plugins on POST /events, in this combination:
    Give it _meta.filter [["status","==",202]] so a rejected event is not
    published.
 
-KEEP request-validation EVEN IF I ASK FOR NO SCHEMA VALIDATION. kafka-logger's
-include_req_body reads the body in the ACCESS phase, but mocking is also access
-phase at a higher priority and short-circuits the request first, so that read
-never happens. request-validation runs in the REWRITE phase, which is before
-access, so it is what actually reads the body. Without it every Kafka message
-has an empty event field and nothing reports an error.
+For log_format use $apisix_request_id, NOT $request_id. $request_id is nginx's
+own id and never equals the X-Request-Id the request-id plugin returns to the
+caller, so a message logged with it cannot be correlated to a request.
 
 Do NOT add hmac-auth or any auth plugin in this step — I know the route is open;
 I am adding signing separately and it conflicts with request-validation.
@@ -90,8 +87,7 @@ proposes the spec, and stops for your confirmation. See
 |---|---|
 | **"This is a fresh org — create one"** | On a new org there is no API to "find". The agent must create it, or it stalls. |
 | **"Bind any upstream — the route never reaches it"** | A model that understands `mocking` short-circuits will conclude no upstream is needed and skip the binding, and the deploy then fails on a missing binding with an error that looks unrelated. |
-| **"KEEP request-validation EVEN IF I ASK FOR NO SCHEMA VALIDATION"** | The single most damaging wrong turn. Asked to simplify, a model deletes the plugin whose stated purpose you said you did not need — and silently empties every Kafka message. The rule is in the prompt with its reason, because a rule without a reason gets optimised away. |
-| **"mocking is also access phase at a higher priority"** | The mechanism, stated so the agent can reason about it if you later change the chain, rather than following an unexplained rule. |
+| **"use $apisix_request_id, NOT $request_id"** | The bug this package shipped in its first version. `$request_id` is nginx's own id; the `request-id` plugin overwrites `$apisix_request_id` with the UUID it returns to the caller and never touches `$request_id`. A model writing "the obvious" variable produces a correlation field that correlates with nothing. |
 | **"with_mock_header FALSE"** | Defaults to true and stamps every response with a header naming the mocking plugin and the gateway version. |
 | **"_meta.filter [[\"status\",\"==\",202]]"** | Without it, `kafka-logger`'s log phase runs for the 400 as well, and rejected events reach the topic by the back door — defeating the validation you just configured. |
 | **"producer_type sync, required_acks -1, max_retry_count 3"** | Three defaults chosen for logging, not producing: async fire-and-forget, leader-only acks, and **zero** retries. All three need overriding, and none of them is obviously wrong until an event goes missing. |
@@ -109,8 +105,8 @@ allowed_algorithms ["hmac-sha256","hmac-sha512"], hide_credentials true.
 
 REMOVE request-validation from the route at the same time. Both run in the
 rewrite phase and request-validation (2800) re-encodes the body before hmac-auth
-(2530) hashes it, so every digest comparison fails with a bare 401.
-validate_request_body reads the body, so the Kafka payload stays populated.
+(2530) hashes it, so every digest comparison fails with a bare 401. The published
+Kafka payload stays complete either way.
 
 Then create a product with authMethods ["hmac-auth"], a developer, and an app
 with plugins {"hmac-auth": {}} so I get a key_id and secret_key.
@@ -118,9 +114,9 @@ with plugins {"hmac-auth": {}} so I get a key_id and secret_key.
 
 **Identity without touching the body** — keeps `request-validation`
 ```text
-Instead of hmac-auth, add helix-auth in validate mode with validate_auth_type
-key-auth, so callers are identified by their app key. It does not read the
-request body, so request-validation can stay on the route.
+Instead of hmac-auth, add helix-auth in validate mode, so callers are identified
+by their app credential. It does not touch the request body, so
+request-validation can stay on the route.
 ```
 
 **A real acknowledgement instead of at-most-once**

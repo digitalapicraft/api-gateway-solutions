@@ -8,7 +8,7 @@ reasoned about as a list of features.
 
 | Plugin | Phase | Priority | Does |
 |---|---|---|---|
-| `request-validation` | **rewrite** | 2800 | Validates against a JSON Schema — **and reads the request body** |
+| `request-validation` | **rewrite** | 2800 | Validates against a JSON Schema, and re-encodes the body |
 | `mocking` | **access** | 1999 | Returns `202 {"accepted":true}` and short-circuits |
 | `kafka-logger` | **access** (skipped) + **log** | 403 | Publishes the body that was read |
 | `request-id` | service-scoped | — | Correlation id, on the response and in the message |
@@ -41,42 +41,45 @@ sequenceDiagram
     end
 ```
 
-## The load-bearing accident
+## What the phase model does and does not decide
 
-`kafka-logger`'s `include_req_body` is implemented in its **access** handler —
-that is where it calls `read_body()`.
+`mocking` short-circuits the access phase, so `kafka-logger`'s access handler —
+where `include_req_body` calls `read_body()` — never runs. That much is real, and
+readable in the plugin sources.
 
-`mocking` is also an access-phase plugin, at priority 1999 against
-`kafka-logger`'s 403, so it runs **first**. And it does not merely respond: it
-**short-circuits the request**. The access phase ends there.
+**It does not follow that the body goes unpublished, and it doesn't.**
+`$request_body` in `log_format` resolves correctly anyway. Tested against a
+deployed route, twice over: the `event` field is complete with
+`request-validation` removed, and complete again with `include_req_body: false`.
 
-So `kafka-logger`'s access handler never executes, and never reads the body. By
-the time its log-phase handler asks for `$request_body`, the body was either read
-earlier or it is empty.
+An earlier version of this document argued the opposite and called
+`request-validation` "load-bearing" for the body read. The argument was
+mechanically plausible and empirically false. It is recorded here rather than
+quietly deleted, because the shape of the mistake is instructive: every step was
+read from source, and the conclusion still did not survive one request.
 
-**`request-validation` is what read it**, because the rewrite phase completes
-before the access phase begins. Nothing in either plugin's documentation connects
-them; the dependency exists only through the phase model.
+What `request-validation` actually contributes:
 
-### The failure this creates
+- **Rejection at the edge.** With `kafka-logger`'s `_meta.filter` on
+  `status == 202`, a malformed event is neither acknowledged nor published.
+- **A re-encoded body**, as a side effect. `set_body_data` re-serialises the
+  parsed JSON as a defence against parser-differential attacks, and you can see it
+  — the key order of the published `event` is the re-encoding's, not the caller's.
+  Harmless here, and the reason this plugin cannot share a route with `hmac-auth`.
 
-Remove `request-validation`, or swap it for something that is not a rewrite-phase
-body reader, and:
+## Correlation: `$apisix_request_id`, not `$request_id`
 
-- the caller still gets `202`
-- a message still appears on the topic
-- `request_id` and `received_at` are still populated
-- **`event` is empty**
-- no error is logged anywhere
+| Variable | What it is | Matches the caller's `X-Request-Id`? |
+|---|---|---|
+| `$request_id` | nginx's own request id, 32 hex chars | **No** |
+| `$apisix_request_id` | seeded from `$request_id`, then overwritten by the `request-id` plugin with the UUID it returns | **Yes** |
+| `$http_x_request_id` | the request header the plugin set | Yes, but tied to `header_name` |
 
-Every signal says success. Only the message content says otherwise, which is why
-[the test plan](tests/test-plan.yaml) makes "the `event` field is non-empty" an
-explicit manual assertion rather than assuming it.
-
-Any rewrite-phase plugin that reads the body satisfies the dependency.
-`request-validation` is chosen because it does a second useful job at the same
-time, and `hmac-auth` with `validate_request_body` is the other one you are
-likely to reach for — see below.
+The `request-id` plugin sets the request header *and* overwrites
+`$apisix_request_id`; it never touches `$request_id`. A `log_format` built on
+`$request_id` therefore produces a correlation id that correlates with nothing,
+which is what the first version of this package shipped. Confirmed by logging all
+three and comparing against the returned header.
 
 ## Delivery semantics
 
@@ -137,16 +140,16 @@ parser-differential attacks — so `hmac-auth` then hashes the *re-encoded* byte
 while the client hashed what it sent. Key order and whitespace differ; the
 digests agree only by coincidence.
 
-**They cannot share a route.** The resolution is clean, because both plugins
-satisfy the body-read dependency:
+**They cannot share a route.** Pick one:
 
-| You want | Route carries | Body read by |
+| You want | Route carries | You give up |
 |---|---|---|
-| Signed, integrity-checked ingest | `hmac-auth` (`validate_request_body: true`) | `hmac-auth` |
-| Edge schema validation | `request-validation` | `request-validation` |
-| Identity only, plus schema validation | `helix-auth` validate + `request-validation` | `request-validation` |
+| Signed, integrity-checked ingest | `hmac-auth` (`validate_request_body: true`) | Edge schema validation — do it in the consumer |
+| Edge schema validation | `request-validation` | Body integrity |
+| Identity only, plus schema validation | `helix-auth` validate + `request-validation` | Proof the body was not modified |
 
-The third row works because `helix-auth` does not touch the body.
+The third row works because `helix-auth` does not touch the body. In all three the
+published `event` is complete.
 
 ## Native vs custom
 
@@ -183,7 +186,7 @@ No custom code, and no deployable. What was deliberately not built:
 | Topic does not exist, auto-create on | **202** | This message lost; the topic now exists for the next one |
 | Producer buffer overflows | **202** | Dropped |
 | Body larger than `max_req_body_bytes` (512 KB) | 202 | Published **truncated**, not rejected |
-| `request-validation` removed | 202 | Published with an **empty** `event` field |
+| `request-validation` removed | 202 | Published **in full** — and malformed events are published too |
 
 Every row where the caller sees 202 and the reality is loss is a row where no
 retry, alert or dashboard on the caller's side can help. That is the cost of the

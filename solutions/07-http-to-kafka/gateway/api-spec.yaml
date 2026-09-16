@@ -12,19 +12,17 @@
 #
 # THE THREE PLUGINS ARE A CHAIN, AND THE ORDER IS PHASE-DRIVEN, NOT DOCUMENT-DRIVEN
 #
-#   request-validation  rewrite phase, priority 2800   validates AND reads the body
+#   request-validation  rewrite phase, priority 2800   rejects malformed events
 #   mocking             access  phase, priority 1999   answers 202, short-circuits
-#   kafka-logger        access (skipped) + log phase   publishes what was read
+#   kafka-logger        access (skipped) + log phase   publishes in the log phase
 #
-#   READ THAT TABLE BEFORE CHANGING ANYTHING. kafka-logger's include_req_body is
-#   implemented in its ACCESS handler. mocking is also an access-phase plugin and
-#   runs FIRST (priority 1999 beats 403), and it short-circuits the request — so
-#   kafka-logger's access handler NEVER RUNS and never reads the body.
-#
-#   request-validation saves it. The rewrite phase precedes access entirely, so it
-#   reads the body before mocking can end the request. That is why it is here even
-#   if you do not care about schema validation: REMOVE IT AND EVERY MESSAGE ON YOUR
-#   TOPIC HAS AN EMPTY event FIELD, with no error anywhere to tell you.
+#   mocking DOES short-circuit the access phase, so kafka-logger's access handler —
+#   the one include_req_body uses to call read_body() — never runs. Despite that,
+#   $request_body in log_format resolves correctly and the published event is
+#   complete. Tested against a deployed route: the body is published with
+#   request-validation removed, AND with include_req_body set to false. Do not
+#   reason about this chain as though the body read depends on plugin ordering; it
+#   was verified not to.
 #
 # THIS ROUTE IS NOT AUTHENTICATED. That is a deliberate shipping default, not an
 # oversight — an open ingest endpoint is the simplest thing that demonstrates the
@@ -32,8 +30,8 @@
 # (hmac-auth). NOTE THE COST: hmac-auth's validate_request_body and
 # request-validation cannot share a route, because request-validation re-encodes
 # the body and the digest comparison then fails. If you add signing, DROP
-# request-validation and let validate_request_body be the rewrite-phase body read
-# instead — it does that job too. See README § Adding authentication.
+# request-validation and validate the event shape in your consumer instead. The
+# published event stays complete either way. See README § Adding authentication.
 #
 # A 202 MEANS THE GATEWAY ACCEPTED THE EVENT. IT DOES NOT MEAN KAFKA HAS IT.
 #   kafka-logger publishes from the LOG phase — after the response has already
@@ -92,15 +90,18 @@ paths:
         '400': { description: The event failed schema validation. Nothing is published. }
       x-helix-gateway:
         plugins:
-          # 1. REWRITE PHASE, priority 2800 — runs first, before access.
+          # 1. REWRITE PHASE, priority 2800 — runs before access.
           #
-          # Two jobs, and the second one is the one people delete by accident:
-          #   (a) reject malformed events at the edge, so the topic stays clean
-          #   (b) READ THE REQUEST BODY, in the only phase that happens before
-          #       mocking short-circuits the request
+          # ONE job: reject malformed events at the edge so the topic stays clean.
+          # Paired with kafka-logger's _meta.filter below, a rejected event is
+          # neither acknowledged nor published.
           #
-          # Drop this plugin and every Kafka message gets an empty event field,
-          # silently. See the header comment.
+          # It also RE-ENCODES the body (set_body_data, against parser-differential
+          # attacks), which is observable — key order in the published event is the
+          # re-encoded order, not the caller's. That is exactly why this plugin
+          # cannot share a route with hmac-auth's validate_request_body: the client
+          # hashes what it sent, the gateway hashes the re-encoding. See the
+          # authentication note in the header.
           #
           # body_schema is a JSON Schema. Keep it in step with the requestBody
           # schema above — nothing enforces that they agree.
@@ -130,10 +131,6 @@ paths:
             with_mock_header: false
 
           # 3. LOG PHASE, priority 403 — publishes after the response is flushed.
-          #
-          # Its access handler (which is what include_req_body uses to read the
-          # body) never runs, because mocking short-circuited the access phase
-          # first. The body it logs is the one request-validation read.
           kafka-logger:
             brokers:
               - host: "<YOUR_KAFKA_BROKER>"
@@ -145,12 +142,26 @@ paths:
             _meta:
               filter:
                 - ["status", "==", 202]
+            # Verified NOT to be required when log_format uses $request_body — the
+            # event is published in full with this set to false. Left on because it
+            # is what the plugin's own default (meta_format) path uses, and because
+            # turning it off buys nothing.
             include_req_body: true
-            # $request_body is the body request-validation read. The other two are
-            # nginx variables and need nothing to have read anything.
             log_format:
-              event:       "$request_body"
-              request_id:  "$request_id"
+              event: "$request_body"
+              # USE $apisix_request_id, NOT $request_id. They are different values
+              # and only one of them correlates with what the caller was given:
+              #   $request_id        nginx's own id, 32 hex chars, no dashes.
+              #                      NEVER matches the X-Request-Id header.
+              #   $apisix_request_id seeded from $request_id, then OVERWRITTEN by
+              #                      the request-id plugin with the UUID it put in
+              #                      the response header. This is the one you want.
+              #   $http_x_request_id also correct, but it hard-codes the header
+              #                      name — change request-id's header_name and this
+              #                      silently becomes empty.
+              # Confirmed by posting one event and comparing all three against the
+              # returned X-Request-Id.
+              request_id:  "$apisix_request_id"
               received_at: "$time_iso8601"
             # A real broker round trip per event rather than a fire-and-forget
             # ring buffer. This does NOT make delivery guaranteed — the caller

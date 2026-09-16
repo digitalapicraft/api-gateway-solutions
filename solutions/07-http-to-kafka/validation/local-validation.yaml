@@ -12,7 +12,7 @@ local_validation:
     syntax:                  PASS   # api-spec.yaml parses as valid OpenAPI 3.0.3; verify.sh parses under bash -n
     schema:                  PASS   # every field used on request-validation, mocking, kafka-logger and request-id is read from the live plugin schemas — none invented
     required_fields:         PASS   # kafka-logger's oneOf is satisfied (brokers + kafka_topic); mocking carries response_status and response_example; request-validation carries body_schema
-    references:              PASS   # log_format uses $request_body, $request_id and $time_iso8601 — nginx variables, not invented names; $request_id pairs with the request-id plugin's header
+    references:              PASS   # log_format uses $request_body, $apisix_request_id and $time_iso8601. $apisix_request_id is the one the request-id plugin overwrites with the UUID it returns to the caller; $request_id is nginx's own and would NOT match
     plugin_ordering:         PASS   # the chain is phase-correct — request-validation (rewrite 2800) reads the body before mocking (access 1999) short-circuits, and kafka-logger publishes in the log phase
     plugin_scoping:          PASS   # the three-plugin chain is route-scoped because it describes one endpoint's behaviour; request-id is API-wide because correlation is
     plugin_compatibility:    PASS   # hmac-auth is deliberately absent — it cannot share a route with request-validation, and the README documents the swap rather than shipping the conflict
@@ -34,11 +34,12 @@ local_validation:
       this route changes it. Anyone reviewing this solution must decide whether
       that suits the data before anything else.
     - >-
-      request-validation is load-bearing beyond validation: it is the only
-      rewrite-phase plugin reading the request body, and kafka-logger cannot read
-      it itself because mocking short-circuits the access phase first. Removing it
-      empties the event field of every published message, while the caller still
-      gets 202, a message still appears on the topic, and nothing logs an error.
+      request-validation re-encodes the request body with set_body_data, so the key
+      order of the published event is the re-encoding's rather than the caller's.
+      Harmless on its own, and the reason this plugin cannot share a route with
+      hmac-auth's validate_request_body. It is NOT required for the body to be
+      published — an earlier version of this package claimed it was, and testing
+      disproved that.
     - >-
       The route is unauthenticated as shipped. Deliberate, but it means anyone who
       learns the URL can put anything on the topic. Closing it with hmac-auth
@@ -83,9 +84,8 @@ local_validation:
   not_established_here:
     - Whether a gateway accepts this configuration (that is a dry-run).
     - Whether any event is ever published, or arrives with a populated event field.
-    - That the phase-ordering argument holds in practice. It is derived from the
-      plugins' own source — kafka-logger reads the body in its access handler,
-      mocking short-circuits the access phase at a higher priority, and rewrite
-      precedes access — but it has not been observed as an empty message on a
-      topic. Test case 5 exists to confirm it.
+    - Anything about how the body actually reaches the published message. A
+      structural read suggested the body read depended on plugin phase ordering;
+      it does not, and only running it established that. See
+      validation/gateway-validation.yaml.
     - Any request/response behaviour whatsoever.

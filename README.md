@@ -8,12 +8,10 @@ Each solution is a self-contained package: one real problem, one importable
 gateway configuration, the agent prompt that produces it, the tests that prove
 it, and an honest record of what was and wasn't validated.
 
-> **Every solution here has been generated and validated against our gateway**,
-> and each package says exactly how far that went. Solutions 01–06 were imported,
-> dry-run, deployed and exercised with their `verify.sh`. Solution 07 was imported
-> and dry-run, but not deployed — its `verify.sh` is written and has not been
-> executed, and it says so in its own validation table. Each package's
-> `validation/` records the outcome.
+> **Every solution here has been implemented and validated against our
+> gateway** — imported, dry-run, deployed, and exercised with its `verify.sh`.
+> Each package's `validation/` records the outcome, including the cases that are
+> deliberately left manual because no response code can establish them.
 
 ---
 
@@ -27,7 +25,7 @@ it, and an honest record of what was and wasn't validated.
 | **04** | [Analytics](solutions/04-analytics/) | *"We can't tell which of our 400 integrations caused the 3am pager."* Analytics is already capturing every call — this is how you query it, through the metrics API, for the answers that matter. | [prompt](solutions/04-analytics/helix-agent-prompt.md) · [charts](solutions/04-analytics/charts.md) · [script](solutions/04-analytics/scripts/query-analytics.sh) |
 | **05** | [OAuth with Okta](solutions/05-okta-jwt/) | *"We already run Okta, but our APIs still check a static key from 2021."* Verify the IdP's own tokens at the edge — the mirror of 01, for when someone else is the issuer. | [prompt](solutions/05-okta-jwt/helix-agent-prompt.md) |
 | **06** | [Signed requests](solutions/06-hmac-auth/) | *"We gave a partner an API key in 2021. It's in their runbook, their CI, and a Jira ticket — and it tells us nothing about the payload it arrived with."* Prove the caller holds a secret without ever sending it, and bind the proof to the request body. | [prompt](solutions/06-hmac-auth/helix-agent-prompt.md) |
-| **07** | [HTTP to Kafka](solutions/07-http-to-kafka/) | *"Partners want to POST us events. The service in between is three lines long and has been on the roadmap for three quarters."* Validate, acknowledge and publish at the edge — no ingest service. Ships with an honest at-most-once caveat. | [prompt](solutions/07-http-to-kafka/helix-agent-prompt.md) |
+| **07** | [HTTP to Kafka](solutions/07-http-to-kafka/) | *"Partners want to POST us events. The service in between is three lines long and has been on the roadmap for three quarters."* Validate, acknowledge and publish at the edge — no ingest service. At-most-once, and the package proves it by breaking the broker. | [prompt](solutions/07-http-to-kafka/helix-agent-prompt.md) |
 
 They compose. 01 gives you identity, 02 gives you the protocol bridge, 03 turns
 the result into something sellable, and 04 tells you what happened. Running all

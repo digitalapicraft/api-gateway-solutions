@@ -30,20 +30,25 @@ business_need:
 
 implementation:
   gateway_capabilities:
-    - request-validation   # rewrite 2800 — validates the event AND reads the body
+    - request-validation   # rewrite 2800 — rejects malformed events; also re-encodes the body
     - mocking              # access 1999 — returns 202 and short-circuits; no upstream is contacted
     - kafka-logger         # log 403 — publishes {event, request_id, received_at}
     - request-id           # the correlation id that makes the Kafka leg verifiable
   custom_code_required: false
   notes: >-
-    The design is about phases, not features. kafka-logger's include_req_body is
-    implemented in its ACCESS handler, but mocking is also access-phase and at a
-    higher priority (1999 vs 403), and it short-circuits the request — so
-    kafka-logger's access handler never runs and never reads the body.
-    request-validation runs in the REWRITE phase, which completes before access
-    begins, so it is what actually reads the body. REMOVING IT EMPTIES EVERY
-    PUBLISHED MESSAGE while the caller still gets 202, a message still appears on
-    the topic, and nothing logs an error.
+    mocking does short-circuit the access phase, so kafka-logger's access handler —
+    where include_req_body calls read_body() — never runs. It does not matter:
+    $request_body in log_format resolves correctly regardless, verified against a
+    deployed route with request-validation removed AND with include_req_body false.
+    An earlier version of this package claimed removing request-validation would
+    silently empty every message; that was mechanically plausible and false, and is
+    corrected throughout. request-validation is here to reject malformed events,
+    which with _meta.filter also keeps them off the topic.
+    log_format MUST use $apisix_request_id, not $request_id. $request_id is nginx's
+    own id and never equals the X-Request-Id the caller receives; the request-id
+    plugin overwrites $apisix_request_id with the UUID it returns. The first
+    version of this spec used $request_id, so its correlation field correlated with
+    nothing.
     The route is deliberately unauthenticated — the smallest configuration that
     demonstrates the mechanism. Closing it with solution 06 requires REMOVING
     request-validation, because it re-encodes the body ahead of hmac-auth's digest
@@ -59,8 +64,8 @@ validation:
   # dates and who ran it are in the machinery verification record.
   local: PASS
   gateway_dry_run: PASS
-  deployment: NOT_RUN
-  functional_test: NOT_EXECUTED
+  deployment: DEPLOYED
+  functional_test: PASS
   record: validation/
 
 artifacts:
@@ -92,6 +97,6 @@ limitations:
   - max_req_body_bytes defaults to 512 KB; a larger body is published TRUNCATED, not rejected.
   - kafka-logger is a logger being used as a producer. That works and is deliberate, but its defaults are chosen for logs and three of them are overridden here for exactly that reason.
   - request-validation cannot share a route with hmac-auth's validate_request_body.
-  - The phase-ordering argument that makes request-validation load-bearing is derived from the plugins' source, not from an observed empty message. It is well-founded rather than demonstrated, and test case 5 exists to confirm it in your environment.
+  - Topic auto-creation dropping the first message is the one case still unverified here — it needs a broker with auto.create.topics.enable and a topic that does not yet exist. Create topics explicitly and the question does not arise.
 
-status: READY WITH WARNINGS   # imported and dry-run on a gateway; not deployed, and no broker was involved
+status: READY   # deployed and exercised against a real Kafka cluster: verify.sh 4/4 plus three manual cases

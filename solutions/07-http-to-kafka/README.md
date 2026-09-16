@@ -99,7 +99,7 @@ sequenceDiagram
     alt fails the schema
         RV--xC: 400 — mocking never runs, nothing is published
     else passes
-        RV->>RV: READ THE BODY (the load-bearing side effect)
+        RV->>RV: re-encode the body (set_body_data)
         RV->>M: continue
         M-->>C: 202 {"accepted":true} + X-Request-Id
         Note over M,KL: the response is now flushed.<br/>The caller is gone.
@@ -109,30 +109,51 @@ sequenceDiagram
     end
 ```
 
-### Why `request-validation` is not optional
+### What each plugin is actually for
 
-This is the non-obvious part of the design, and the thing to preserve if you
-change anything else.
+| Plugin | Phase | Priority | Job |
+|---|---|---|---|
+| `request-validation` | **rewrite** | 2800 | Reject malformed events before anything else runs |
+| `mocking` | **access** | 1999 | Return the 202 and short-circuit — no upstream is contacted |
+| `kafka-logger` | **access** (skipped) + **log** | 403 | Publish, after the response has been flushed |
 
-| Plugin | Phase | Priority |
+`mocking` genuinely does short-circuit the access phase, so `kafka-logger`'s
+access handler — the one `include_req_body` uses to read the body — never runs.
+
+**It does not matter.** `$request_body` in `log_format` resolves correctly
+regardless. This was tested directly against a deployed route: the event is
+published in full with `request-validation` **removed**, and again with
+`include_req_body` set to **false**. Neither is load-bearing for the body.
+
+> An earlier version of this package claimed the opposite — that removing
+> `request-validation` would silently empty every message. The reasoning was
+> plausible and wrong, and running it disproved it. If you have seen that claim
+> repeated elsewhere, this is the correction.
+
+So `request-validation` earns its place for the ordinary reason: it rejects
+malformed events at the edge. Paired with `kafka-logger`'s `_meta.filter` on
+`status == 202`, a rejected event is neither acknowledged nor published.
+
+One side effect is worth knowing, because it bites later: `request-validation`
+**re-encodes** the body with `set_body_data` as a defence against
+parser-differential attacks. You can see it — key order in the published `event`
+is the re-encoded order, not the order your client sent. That is precisely why it
+cannot share a route with `hmac-auth`. See *Adding authentication*.
+
+### Correlating a request with its message — use the right variable
+
+`log_format` must use **`$apisix_request_id`**, not `$request_id`. They are
+different values and only one matches what the caller was given:
+
+| Variable | Value | Matches `X-Request-Id`? |
 |---|---|---|
-| `request-validation` | **rewrite** | 2800 |
-| `mocking` | **access** | 1999 |
-| `kafka-logger` | **access** (body read) + **log** (publish) | 403 |
+| `$request_id` | nginx's own id — 32 hex chars, no dashes | **No. Never.** |
+| `$apisix_request_id` | seeded from `$request_id`, then overwritten by the `request-id` plugin with the UUID it returns to the caller | **Yes** |
+| `$http_x_request_id` | reads the request header the plugin set | Yes — but hard-codes the header name |
 
-`kafka-logger`'s `include_req_body` is implemented in its **access** handler.
-`mocking` is also an access-phase plugin, and it runs **first** — priority 1999
-beats 403 — and it *short-circuits the request*. So `kafka-logger`'s access
-handler never executes, and never reads the body.
-
-`request-validation` rescues it by accident of phase: rewrite runs before access
-in its entirety, so the body is already read by the time `mocking` ends the
-request.
-
-**Remove `request-validation` and every message on your topic has an empty
-`event` field** — with a 202 to the caller, a message on the topic, and no error
-anywhere. Any rewrite-phase plugin that reads the body would do; this one earns
-its place twice by validating as well.
+Confirmed by posting one event and comparing all three against the returned
+header. The first version of this spec used `$request_id`, which meant the
+correlation field did not correlate — the whole point of having it.
 
 ## Adding authentication
 
@@ -148,11 +169,10 @@ Close it with **[solution 06](../06-hmac-auth/)**, and note what it costs:
 > it, so the client's `Digest` and the gateway's disagree on key order and
 > whitespace. Symptom: a bare 401 with `Invalid digest` in the log.
 
-So when you add signing, **drop `request-validation`** — `hmac-auth`'s
-`validate_request_body` becomes the rewrite-phase body read instead, and the
-Kafka payload stays populated. You trade edge schema validation for body
-integrity. Validate the schema in your consumer, where an invalid event is a
-poison-message problem you have to handle anyway.
+So when you add signing, **drop `request-validation`**. You trade edge schema
+validation for body integrity; validate the shape in your consumer, where an
+invalid event is a poison-message problem you have to handle anyway. The
+published event stays complete either way — that was tested.
 
 If you only need to know *who* is calling and do not need the signature to cover
 the body, `helix-auth` in `validate` mode is the lighter option and does not
@@ -233,11 +253,12 @@ events posted in the same second, and `received_at` is the gateway's clock.
 | 3 | Event missing required fields | 400, nothing published |
 | 4 | Response headers | No `x-mock-by` |
 
-Four further cases are **manual**, because no response can establish them: the
-message is on the topic with a non-empty body; a rejected event is *not* on the
-topic; the broker being down still returns 202; and a topic that does not exist
-yet loses the message that creates it. All four in
-[tests/test-plan.yaml](tests/test-plan.yaml).
+Four further cases are **manual**, because no response can establish them. Three
+were run against a real broker and passed: the message is on the topic with its
+body complete; a rejected event is *not* on the topic; and with the broker
+unreachable the caller still gets 202 while the event is lost. The fourth — a
+topic that does not exist yet losing the message that creates it — was not run.
+All four in [tests/test-plan.yaml](tests/test-plan.yaml).
 
 **Run the broker-down case once**, in front of whoever is deciding whether this
 shape suits the data. It is the fastest way to make the limitation concrete.
@@ -270,8 +291,10 @@ the publish moved into a phase that can still answer the caller.
 
 - **A `202` is not a delivery guarantee.** The headline. Everything else here is
   a detail by comparison.
-- **Removing `request-validation` silently empties every message.** It is the
-  only rewrite-phase plugin reading the body. See above.
+- **`request-validation` re-encodes the body.** Key order in the published
+  `event` is the re-encoded order, not your client's. Harmless here; fatal if you
+  add `hmac-auth`. (It is *not* required for the body to be published — that was
+  tested, in both directions.)
 - **`request-validation` and `hmac-auth`'s `validate_request_body` are mutually
   exclusive** on a route. See *Adding authentication*.
 - **Create topics explicitly.** With `auto.create.topics.enable`, the message that
@@ -313,25 +336,25 @@ the publish moved into a phase that can still answer the caller.
 
 ## Validation status
 
-**Imported and dry-run against a gateway. Not deployed, and no broker was
-involved at any point.**
+**Validated against a gateway and a real Kafka cluster — imported, dry-run,
+deployed, `verify.sh` 4/4, and the Kafka leg confirmed on a topic.**
 
 | Stage | Status | Provenance |
 |---|---|---|
 | Configuration generated | **YES** | [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
 | Local validation | **PASS** | [`validation/local-validation.yaml`](validation/local-validation.yaml) |
-| Gateway dry-run | **PASS** | `{"success":true,"message":"Dry-run validation successful"}` after a clean import |
-| Gateway deployed | **NOT RUN** | — |
-| Functional tests | **NOT EXECUTED** | Needs a deployed route and a broker |
+| Gateway dry-run | **PASS** | `{"success":true,"message":"Dry-run validation successful"}` |
+| Gateway deployed | **DEPLOYED** | Revision ACTIVE on a temporary test API, since torn down |
+| Functional tests | **PASS (4/4 + 3 manual)** | `verify.sh` exit 0; message-on-topic, rejected-event-not-published and broker-down all confirmed against a real broker |
 
-Overall: **READY WITH WARNINGS.** The configuration is accepted by a gateway and
-every plugin field is confirmed against the live schema, including the nested
-`_meta.filter` and `body_schema`, which survive import intact. **No event has been
-published by this configuration.** The phase-ordering argument that makes
-`request-validation` load-bearing is derived from the plugins' own source, not
-from an observed empty message — treat it as well-founded and verify case 5 in
-your own environment. [`validation/gateway-validation.yaml`](validation/gateway-validation.yaml)
-has the detail.
+Overall: **READY.** A valid event publishes with a complete `event` field, a
+malformed one is rejected and not published, and with the broker unreachable the
+caller still gets `202` while the event is lost — the headline limitation,
+demonstrated. The run also corrected two things in this package, both fixed
+above: the correlation field used `$request_id` (which never matches the caller's
+`X-Request-Id`), and the claim that removing `request-validation` empties every
+message is false. Topic auto-creation is the one case not run. Detail in
+[`validation/gateway-validation.yaml`](validation/gateway-validation.yaml).
 
 ## Related solutions
 

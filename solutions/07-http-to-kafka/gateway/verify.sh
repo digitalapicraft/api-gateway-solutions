@@ -91,9 +91,9 @@ status="$(curl -s -o "$BODY_FILE" -w '%{http_code}' -X POST "$EVENTS_URL" \
 [[ "$status" == "$EXP_REJECTED" ]] \
   && pass "event missing required fields → 400 (rejected before anything is published)" \
   || fail "malformed event → ${status} (expected 400). request-validation is missing or its
-     body_schema is too permissive. Note that removing request-validation does NOT
-     merely stop validation: it is the only rewrite-phase plugin reading the body, so
-     every Kafka message would silently carry an empty event field."
+     body_schema is too permissive. Without it, malformed events are acknowledged with
+     202 AND published to your topic — the _meta.filter only screens on status, and
+     with nothing rejecting them there is no non-202 to screen."
 
 # --- 4: the mock does not advertise itself ------------------------------------
 echo

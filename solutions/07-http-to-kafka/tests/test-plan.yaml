@@ -19,10 +19,11 @@ meta:
     Cases 1-4 are automated. Cases 5-8 need a running broker and a topic browser,
     and three of them need the broker deliberately broken, so all four are manual.
   status: >-
-    NOT EXECUTED for this package. The solution was imported and dry-run against a
-    gateway, but not deployed, and no Kafka broker was involved at any point. These
-    are the assertions verify.sh makes and the checks a reader performs, not
-    results that have been obtained.
+    EXECUTED. Cases 1-4 were run by verify.sh against a deployed route (exit 0),
+    and cases 5, 6 and 7 were confirmed against a real Kafka cluster using a
+    dedicated test topic that was deleted afterwards. Case 8 (topic auto-creation)
+    was NOT run — it needs a broker with auto.create.topics.enable and a topic that
+    does not yet exist.
 
 cases:
   - id: valid-event
@@ -112,14 +113,15 @@ cases:
       id the 202 returned>","received_at":"<gateway timestamp>"}. The event field
       must contain your payload.
     notes: >-
-      AN EMPTY event FIELD IS THE FAILURE TO WATCH FOR, and it looks like success
-      everywhere else — 202 to the caller, a message on the topic, no error in any
-      log. It means nothing read the request body in the rewrite phase.
-      kafka-logger's include_req_body is implemented in its ACCESS handler, and
-      mocking (also access, higher priority) short-circuits the request before that
-      handler runs. request-validation is what reads the body in time. If you
-      removed it — or replaced it with something that is not a rewrite-phase body
-      reader — this is the symptom.
+      CONFIRMED against a real broker: the event field carries the posted body in
+      full. Note the key ORDER will be the re-encoding's rather than yours, because
+      request-validation re-serialises the body — that is expected and is the same
+      behaviour that makes it incompatible with hmac-auth.
+      An earlier version of this plan warned that an empty event field was the
+      likely failure if request-validation were removed. That was tested and is
+      false: the body is published with request-validation removed, and with
+      include_req_body set to false. Correlate on request_id, which must come from
+      $apisix_request_id — $request_id never matches the header the caller got.
 
   - id: rejected-event-not-published
     type: negative
