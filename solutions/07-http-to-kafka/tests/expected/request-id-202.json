@@ -1,0 +1,9 @@
+{
+  "status": 202,
+  "headers": {
+    "X-Request-Id": "<a uuid, generated per request — the value is not predictable, which is the point>"
+  },
+  "body": {
+    "accepted": true
+  }
+}

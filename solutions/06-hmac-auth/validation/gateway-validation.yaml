@@ -1,0 +1,69 @@
+# Gateway validation — what a real gateway did with this configuration.
+# Re-run gateway/verify.sh against your own environment before you rely on it.
+
+gateway_validation:
+  solution: 06-hmac-auth
+  version: 1.0.0
+
+  plugin_availability:
+    status: PASS
+    detail: >-
+      GET /api/orgs/{orgId}/plugin-schemas?page=1&size=300 returned 96 plugins
+      including hmac-auth (category Authentication, priority 2530). The
+      Authentication category on this build is authz-casbin, authz-casdoor,
+      authz-keycloak, basic-auth, cas-auth, forward-auth, helix-auth, hmac-auth,
+      ldap-auth, multi-auth, opa, openid-connect. key-auth and jwt-auth are
+      absent, as the platform model says — hmac-auth is not in that category of
+      hidden plugin.
+
+  schema_confirmation:
+    status: PASS
+    detail: >-
+      The live schema for hmac-auth confirms exactly the fields this spec uses:
+      allowed_algorithms (enum hmac-sha1/sha256/sha512, default all three),
+      clock_skew (default 300), signed_headers (array, NO default), 
+      validate_request_body (default false), hide_credentials (default false),
+      anonymous_consumer, realm (default "hmac"). consumer_schema requires key_id
+      and secret_key with secret_key in encrypt_fields. There is no secret field
+      on the route schema, which is why no placeholder appears in the spec.
+
+  import:
+    status: PASS
+    detail: >-
+      HTTP 200 — the OpenAPI document and both hmac-auth blocks were accepted.
+      Read back from the created revision, the mapping is: the document-root
+      x-helix-gateway.plugins became serviceSpec.plugins (request-id), and each
+      per-method block became that route's plugins with signed_headers intact.
+      The OpenAPI path parameter /posts/{postId} was rewritten to /posts/:postId
+      in the route spec.
+
+  dry_run:
+    status: PASS
+    detail: '{"success": true, "message": "Dry-run validation successful"} with an upstream bound.'
+
+  deployment:
+    status: NOT_RUN
+    detail: >-
+      VALIDATE mode. No revision was deployed, so no route exists to send a
+      request to.
+
+  functional_tests:
+    executor: gateway/verify.sh
+    status: NOT_EXECUTED
+    detail: >-
+      verify.sh is written and its eight cases are defined, but running it needs a
+      deployed route and an app credential, neither of which exists. No request has
+      been sent through this configuration.
+    client_cross_check:
+      status: PASS
+      detail: >-
+        The signing function in verify.sh was compared against an independent
+        reimplementation of the plugin's generate_signature. Both signed sets
+        (with and without digest) produced identical signatures, and each of the
+        three draft-cavage deviations — omitting the keyId line, dropping the
+        trailing newline, and using cavage's lowercase "(request-target)" form —
+        was shown to produce a different signature. This establishes that the
+        CLIENT is correct. It does not establish that a deployed route behaves as
+        described.
+
+  overall: READY WITH WARNINGS

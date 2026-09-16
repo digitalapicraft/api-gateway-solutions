@@ -1,0 +1,17 @@
+# Case 8 — a signed read on the other route.
+#
+# No body, so no Digest and no "digest" in headers=. The read route's
+# signed_headers is ["@request-target","date"], which is what makes that legal
+# here and illegal on POST /posts.
+#
+# Signing base:
+#   {{KEY_ID}}\n
+#   GET /posts/1\n
+#   date: {{DATE}}\n
+#
+# @request-target covers METHOD AND PATH INCLUDING QUERY STRING, so this
+# signature does not verify against /posts/2.
+
+GET {{GATEWAY}}/posts/1
+Date: {{DATE}}
+Authorization: Signature keyId="{{KEY_ID}}",algorithm="hmac-sha256",headers="@request-target date",signature="{{SIGNATURE}}"

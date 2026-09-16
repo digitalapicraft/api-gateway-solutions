@@ -1,0 +1,18 @@
+# Case 6 — the caller signs less than the route requires.
+#
+# headers= omits "digest", so the signature covers only the keyId, the request
+# target and the Date. A Digest header is still SENT, and it still matches the
+# body — but it is outside the signature, so the caller controls both sides of
+# that comparison and it proves nothing.
+#
+# The route's signed_headers is ["@request-target","date","digest"], so this is
+# rejected BEFORE the signature is checked. Remove signed_headers from the route
+# and this request succeeds — which is the whole argument for setting it.
+
+POST {{GATEWAY}}/posts
+Content-Type: application/json
+Date: {{DATE}}
+Digest: {{DIGEST}}
+Authorization: Signature keyId="{{KEY_ID}}",algorithm="hmac-sha256",headers="@request-target date",signature="{{SIGNATURE_WITHOUT_DIGEST}}"
+
+{"title":"order-created","body":"sku-1","userId":1}

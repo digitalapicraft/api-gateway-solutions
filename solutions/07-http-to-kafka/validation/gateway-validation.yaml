@@ -1,0 +1,76 @@
+# Gateway validation — what a real gateway did with this configuration.
+# Re-run gateway/verify.sh, and the manual Kafka cases, against your own
+# environment before you rely on it.
+
+gateway_validation:
+  solution: 07-http-to-kafka
+  version: 1.0.0
+
+  plugin_availability:
+    status: PASS
+    detail: >-
+      GET /api/orgs/{orgId}/plugin-schemas?page=1&size=300 returned 96 plugins
+      including kafka-logger (Observability, priority 403), mocking
+      (Transformation, priority 1999), request-validation (Traffic, priority 2800)
+      and request-id. The priorities are the ones the design depends on and were
+      read from the org rather than assumed.
+
+  schema_confirmation:
+    status: PASS
+    detail: >-
+      kafka-logger's schema carries a oneOf requiring either broker_list or
+      brokers, plus kafka_topic — this spec uses brokers. Confirmed defaults that
+      are overridden here: producer_type "async", required_acks 1, max_retry_count
+      0, batch_max_size 1000, max_req_body_bytes 524288. mocking's
+      with_mock_header defaults to true, which is why the spec sets it false.
+
+  import:
+    status: PASS
+    detail: >-
+      HTTP 200 — the OpenAPI document and all three route plugins were accepted.
+      Read back from the created revision, the mapping is: the document-root
+      x-helix-gateway.plugins became serviceSpec.plugins (request-id), and the
+      per-method block became the route's plugins. The nested structures survive
+      import intact — kafka-logger's _meta.filter [["status","==",202]], its
+      log_format object, and request-validation's full body_schema including
+      required and per-property minLength.
+
+  dry_run:
+    status: PASS
+    detail: '{"success": true, "message": "Dry-run validation successful"} with an upstream bound.'
+
+  deployment:
+    status: NOT_RUN
+    detail: >-
+      VALIDATE mode. No revision was deployed, so no route exists to send an event
+      to.
+
+  functional_tests:
+    executor: gateway/verify.sh
+    status: NOT_EXECUTED
+    detail: >-
+      verify.sh is written and its four edge-contract cases are defined, but
+      running it needs a deployed route. NO KAFKA BROKER WAS INVOLVED AT ANY POINT
+      in producing this package, and no event has been published by this
+      configuration.
+    kafka_leg:
+      status: NOT_EXECUTED
+      detail: >-
+        The four manual cases — message on the topic with a non-empty event field,
+        a rejected event absent from the topic, broker-down still returning 202,
+        and topic auto-creation dropping the first message — all require a running
+        broker and a topic browser. None was run.
+    phase_ordering_claim:
+      status: DERIVED_NOT_OBSERVED
+      detail: >-
+        The claim that request-validation is required for a non-empty event field
+        is derived from three facts read out of the plugins' source and the live
+        schemas: kafka-logger implements include_req_body in its access handler;
+        mocking is an access-phase plugin at priority 1999 against kafka-logger's
+        403, and it short-circuits the request; and the rewrite phase completes
+        before the access phase begins. The conclusion follows, and it matches the
+        behaviour reported by an earlier proof-of-concept on a local stack, but it
+        was NOT observed as an empty message on a topic while producing this
+        package. Treat it as well-founded and confirm it with test case 5.
+
+  overall: READY WITH WARNINGS

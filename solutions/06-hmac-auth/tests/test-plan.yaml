@@ -1,0 +1,214 @@
+# Test plan — HMAC request signing at the edge.
+#
+# Cases 1-8 are executed in order by ../gateway/verify.sh, which exits 0 only if
+# all of them hold. The fixtures under requests/ and expected/ document each case
+# independently so you can run one by hand.
+#
+# Substitute your own values:
+#   {{GATEWAY}}      gateway base URL, e.g. https://<YOUR_GATEWAY_HOST>
+#   {{KEY_ID}}       the app credential's key_id
+#   {{SECRET_KEY}}   the app credential's secret_key
+#   {{DATE}}         RFC 1123 in GMT, e.g. Wed, 16 Sep 2026 11:12:37 GMT
+#   {{DIGEST}}       SHA-256=base64(sha256(raw request body))
+#   {{SIGNATURE}}    base64(HMAC-SHA256(secret_key, signing base)) — see README
+
+meta:
+  solution: 06-hmac-auth
+  version: 1.0.0
+  executor: gateway/verify.sh
+  note: >-
+    Cases 1-8 are automated. Case 9 (a cavage client library) needs a second
+    language runtime and case 10 (removing signed_headers) mutates the route
+    configuration, so both are manual and deliberately outside verify.sh.
+  status: >-
+    NOT EXECUTED for this package. The solution was imported and dry-run against a
+    gateway, but not deployed, so no request has been sent through this
+    configuration and no app credential exists to sign with. These are the
+    assertions verify.sh makes, not results that have been obtained. The signing
+    implementation in verify.sh was cross-checked against an independent
+    reimplementation of the plugin's signature construction — that establishes the
+    client is correct, not that the route behaves as described.
+
+cases:
+  - id: unauthenticated
+    type: negative
+    intent: >-
+      hmac-auth rejects a request carrying no Authorization header, in the rewrite
+      phase, before the upstream is contacted.
+    request: requests/unauthenticated.http
+    expected: expected/unauthenticated.json
+    response_notes: >-
+      This is one of the few hmac-auth rejections that tells the caller WHY. Errors
+      raised while parsing the Authorization header — absent, wrong scheme keyword,
+      malformed fields — are returned in the body. Errors raised while VALIDATING
+      (bad signature, bad digest, clock skew, unknown key_id) are collapsed to a
+      bare "client request can't be validated" and the detail goes only to the
+      gateway log. Assert the status; treat the message as a diagnostic nicety that
+      exists for exactly this one class of failure.
+    expected_status: 401
+    notes: >-
+      A 2xx here means the route is not authenticating at all. A 403 means something
+      else sits ahead of the response — check for an authorization or metering plugin.
+
+  - id: signed-post
+    type: positive
+    intent: >-
+      A correctly signed write is accepted and forwarded, proving the signing base
+      this package documents is the one the gateway independently rebuilds.
+    request: requests/signed-post.http
+    expected: expected/signed-post-201.json
+    response_notes: >-
+      The upstream's own response, passed through untouched — this solution adds
+      authentication, not transformation. The body below is jsonplaceholder's echo;
+      against your own upstream, assert the status and your backend's normal payload.
+    expected_status: 201
+    assertions:
+      - the request reaches the upstream (nothing is rewritten except the stripped Authorization header)
+      - hide_credentials is true, so the upstream sees NO Authorization header
+    notes: >-
+      A 401 here, with a signature generated seconds earlier, is almost always one of
+      four things, in order of likelihood: the trailing newline was dropped from the
+      signing base; the keyId line is missing; the Date is outside clock_skew because
+      the client's clock has drifted; or the credential is from a different app.
+
+  - id: tampered-body
+    type: negative
+    intent: >-
+      A genuine signature and Digest, applied to a body that was modified in transit,
+      is rejected. This is what "the signature protects the payload" actually means.
+    request: requests/tampered-body.http
+    expected: expected/tampered-body-401.json
+    response_notes: >-
+      Rejected in the rewrite phase. Indistinguishable from the other validation 401s
+      by design — assert the status only.
+    expected_status: 401
+    notes: >-
+      A 2xx here means either validate_request_body is off, or "digest" is missing
+      from the route's signed_headers. In the second case the signature covers the
+      path and nothing else, and the body is entirely unprotected while appearing to
+      be signed.
+
+  - id: stale-date
+    type: boundary
+    intent: >-
+      A perfectly valid signature is rejected once its Date falls outside clock_skew,
+      proving the replay window is enforced and not merely configured.
+    request: requests/stale-date.http
+    expected: expected/stale-date-401.json
+    expected_status: 401
+    notes: >-
+      Sign with the OLD date. Signing with one date and sending another fails on the
+      signature comparison instead, which tests something else and passes for the
+      wrong reason. clock_skew is the ONLY bound on how long a captured request stays
+      replayable — see the replay case.
+
+  - id: wrong-secret
+    type: negative
+    intent: >-
+      A correct key_id signed with an incorrect secret does not authenticate. This is
+      what distinguishes a real shared-secret scheme from a well-formed header.
+    request: requests/wrong-secret.http
+    expected: expected/wrong-secret-401.json
+    expected_status: 401
+    notes: >-
+      Do not skip this case. If a wrong secret is accepted, the signature is
+      decorative and the security model of the whole solution is void.
+
+  - id: weak-signed-set
+    type: negative
+    intent: >-
+      A caller that signs LESS than the route requires is rejected before its
+      signature is even checked. Proves signed_headers is doing its job.
+    request: requests/weak-signed-set.http
+    expected: expected/weak-signed-set-401.json
+    response_notes: >-
+      The request carries a correct Digest and a signature that is valid over the
+      base it claims. It is rejected because "digest" is absent from headers=, so
+      the signature does not cover the body — and the route demands that it does.
+    expected_status: 401
+    notes: >-
+      THE MOST IMPORTANT CASE IN THIS PLAN. Delete signed_headers from the route and
+      this request succeeds. At that point a caller can sign a base consisting of
+      nothing but its keyId, and that single signature replays against any body and
+      any path for as long as the credential lives. Everything else here tests the
+      plugin; this tests the configuration.
+
+  - id: replay
+    type: failure
+    intent: >-
+      Establish, by execution rather than assertion, that a captured request can be
+      replayed inside the clock_skew window. This is a limitation of the scheme, and
+      publishing it is the point.
+    request: requests/replay.http
+    expected: expected/replay-201.json
+    response_notes: >-
+      Accepted again, and again, for as long as the Date stays inside clock_skew.
+      hmac-auth authenticates a request; it does not de-duplicate one. There is no
+      nonce field in the plugin schema and no replay cache behind it.
+    expected_status: 201
+    notes: >-
+      If this ever returns 401, replay protection has appeared on your build that
+      this package does not describe. That is worth investigating rather than
+      celebrating — verify.sh fails the case deliberately so the change is noticed.
+      To actually close replay: make the operation idempotent upstream (an event id
+      the backend deduplicates on is the usual answer), and shrink clock_skew to the
+      smallest value your callers' clock accuracy tolerates.
+
+  - id: signed-get
+    type: positive
+    intent: >-
+      The read route's no-digest signing set works, and @request-target binds the
+      path so a signature for one resource does not verify against another.
+    request: requests/signed-get.http
+    expected: expected/signed-get-200.json
+    expected_status: 200
+    notes: >-
+      Sending a Digest this route does not require is harmless — it is simply not in
+      the signed set. Omitting one that a route DOES require is the weak-signed-set
+      case. To confirm the path binding, replay this signature against /posts/2: it
+      returns 401, because @request-target expanded to "GET /posts/1" inside the base.
+
+  - id: cavage-client
+    type: failure
+    intent: >-
+      Establish that an off-the-shelf HTTP Signatures (draft-cavage) client does NOT
+      interoperate, so the failure is recognised as a scheme mismatch rather than
+      debugged as a credential problem.
+    type_of_execution: manual
+    procedure: >-
+      Sign the same request with any draft-cavage library (most language ecosystems
+      have one) using the same key_id and secret, and send it.
+    expected_outcome: >-
+      401. cavage omits the keyId from the signing base, adds no trailing newline,
+      and writes "(request-target): post /posts" in lowercase. Each of those three
+      differences alone changes the signature; together they guarantee a mismatch.
+    notes: >-
+      Worth running once per integration, because the symptom — a bare 401 against a
+      library everyone trusts — sends people to check the credential, the clock and
+      the network before they question the scheme.
+
+  - id: signed-headers-removed
+    type: failure
+    intent: >-
+      Make the cost of omitting signed_headers concrete, so the field is never
+      treated as optional tuning.
+    type_of_execution: manual
+    procedure: >-
+      In a THROWAWAY environment only, remove signed_headers from the write route.
+      Sign a base consisting of the keyId alone (headers="" — send no Date, no
+      Digest). Send that one Authorization header against several different bodies
+      and several different paths.
+    expected_outcome: >-
+      Every one of them is accepted. One signature, captured once, authenticates
+      arbitrary requests indefinitely — clock_skew does not even apply, because with
+      no "date" in the signed set there is no Date header for it to check.
+    notes: >-
+      Controlled environment only. The point is that the default configuration of
+      this plugin is not a safe one, and the field that makes it safe is the one
+      most likely to be dropped for brevity.
+
+coverage:
+  positive: [signed-post, signed-get]
+  negative: [unauthenticated, tampered-body, wrong-secret, weak-signed-set]
+  boundary: [stale-date]
+  failure:  [replay, cavage-client, signed-headers-removed]

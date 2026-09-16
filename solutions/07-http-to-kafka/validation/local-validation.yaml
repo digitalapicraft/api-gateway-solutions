@@ -1,0 +1,91 @@
+# Local (pre-gateway) validation — a structural review of the importable
+# artifacts. It does not, and cannot, establish gateway behaviour. Nothing here
+# implies a gateway accepted this configuration, and nothing implies an event was
+# ever published.
+
+local_validation:
+  solution: 07-http-to-kafka
+  version: 1.0.0
+  status: PASS
+
+  checks:
+    syntax:                  PASS   # api-spec.yaml parses as valid OpenAPI 3.0.3; verify.sh parses under bash -n
+    schema:                  PASS   # every field used on request-validation, mocking, kafka-logger and request-id is read from the live plugin schemas — none invented
+    required_fields:         PASS   # kafka-logger's oneOf is satisfied (brokers + kafka_topic); mocking carries response_status and response_example; request-validation carries body_schema
+    references:              PASS   # log_format uses $request_body, $request_id and $time_iso8601 — nginx variables, not invented names; $request_id pairs with the request-id plugin's header
+    plugin_ordering:         PASS   # the chain is phase-correct — request-validation (rewrite 2800) reads the body before mocking (access 1999) short-circuits, and kafka-logger publishes in the log phase
+    plugin_scoping:          PASS   # the three-plugin chain is route-scoped because it describes one endpoint's behaviour; request-id is API-wide because correlation is
+    plugin_compatibility:    PASS   # hmac-auth is deliberately absent — it cannot share a route with request-validation, and the README documents the swap rather than shipping the conflict
+    publish_filter:          PASS   # kafka-logger's _meta.filter requires status == 202, so a 400 from request-validation is not published
+    defaults_overridden:     PASS   # producer_type, required_acks and max_retry_count are set explicitly rather than inherited — kafka-logger's defaults are chosen for logging, not producing
+    auth_authz_dependencies: PASS   # no auth plugin is present; the route is open by design and that is stated in the README, solution.yaml and the spec header
+    request_response:        PASS   # documented 202/400 responses match the design
+    security:                PASS   # no secrets anywhere; the broker host is a placeholder and is not a secret; if SASL is needed it belongs in brokers[].sasl_config and must not be committed
+    no_commentary_keys:      PASS   # plugin blocks contain schema fields plus _meta only; all explanation is in YAML comments
+    tests_match_impl:        PASS   # all four verify.sh cases map to plugin fields that exist in the spec; the four manual cases are flagged as such in tests/test-plan.yaml
+    placeholders:            PASS   # <YOUR_GATEWAY_HOST>, <YOUR_KAFKA_BROKER> — no real hosts, brokers or topics
+
+  warnings:
+    - >-
+      A 202 means the gateway accepted the event. It does NOT mean Kafka has it.
+      kafka-logger publishes from the log phase, after the response has been
+      flushed, so no publish outcome can reach the caller — a broker outage
+      returns an identical 202. This is at-most-once delivery and no setting on
+      this route changes it. Anyone reviewing this solution must decide whether
+      that suits the data before anything else.
+    - >-
+      request-validation is load-bearing beyond validation: it is the only
+      rewrite-phase plugin reading the request body, and kafka-logger cannot read
+      it itself because mocking short-circuits the access phase first. Removing it
+      empties the event field of every published message, while the caller still
+      gets 202, a message still appears on the topic, and nothing logs an error.
+    - >-
+      The route is unauthenticated as shipped. Deliberate, but it means anyone who
+      learns the URL can put anything on the topic. Closing it with hmac-auth
+      requires REMOVING request-validation, because it re-encodes the body ahead
+      of the digest check.
+    - >-
+      Ordering is not preserved. batch_max_size 1 makes each event its own
+      zero-delay timer and those timers race, so Kafka offsets carry no ordering
+      meaning — order downstream on a timestamp inside the event.
+    - >-
+      kafka-logger's key is a static string with no variable resolution, so
+      partitioning by a field in the event body is impossible. Without a key,
+      records round-robin.
+    - >-
+      Topic auto-creation drops the message that triggers it. Create topics
+      explicitly at deploy time; otherwise every new topic silently costs exactly
+      one event, and in production that is a real one.
+    - >-
+      Three kafka-logger defaults are wrong for this use and are overridden:
+      producer_type async, required_acks 1 (leader only) and max_retry_count 0
+      (a failed batch is dropped). Reviewers adapting this spec should not let
+      them revert to defaults.
+    - >-
+      mocking's with_mock_header defaults to true, stamping every response with a
+      header naming the plugin and the gateway version. It is set false here.
+    - >-
+      body_schema and the OpenAPI requestBody schema are two separate documents.
+      Nothing keeps them in step — the first enforces, the second documents.
+    - >-
+      max_req_body_bytes defaults to 512 KB. A larger body is published TRUNCATED
+      rather than rejected.
+    - >-
+      The broker must be reachable from the GATEWAY, not from the operator's
+      machine. Nothing in this document can confirm that.
+
+  assumptions:
+    - API "Event Ingest API" with ingest path POST /events and topic "events". All illustrative.
+    - Losing an occasional event is acceptable for this data.
+    - A topic browser is available; the Kafka leg is not observable from the caller's side.
+    - An upstream is bound to the service even though this route never reaches it.
+
+  not_established_here:
+    - Whether a gateway accepts this configuration (that is a dry-run).
+    - Whether any event is ever published, or arrives with a populated event field.
+    - That the phase-ordering argument holds in practice. It is derived from the
+      plugins' own source — kafka-logger reads the body in its access handler,
+      mocking short-circuits the access phase at a higher priority, and rewrite
+      precedes access — but it has not been observed as an empty message on a
+      topic. Test case 5 exists to confirm it.
+    - Any request/response behaviour whatsoever.

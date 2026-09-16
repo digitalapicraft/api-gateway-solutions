@@ -1,0 +1,12 @@
+# Case 3 — the headers from case 2, verbatim, with a different body.
+# This is the man-in-the-middle case: the signature and Digest are genuine, the
+# payload is not. validate_request_body rehashes what arrived and finds it
+# disagrees with the Digest that was signed.
+
+POST {{GATEWAY}}/posts
+Content-Type: application/json
+Date: {{DATE}}
+Digest: {{DIGEST}}
+Authorization: Signature keyId="{{KEY_ID}}",algorithm="hmac-sha256",headers="@request-target date digest",signature="{{SIGNATURE}}"
+
+{"title":"TAMPERED","body":"x","userId":1}

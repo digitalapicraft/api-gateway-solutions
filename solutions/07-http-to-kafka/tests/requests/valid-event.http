@@ -1,0 +1,12 @@
+# Case 1 — a well-formed event.
+#
+# No credential of any kind: this route is unauthenticated as shipped. See
+# ../../README.md § Adding authentication before putting it anywhere real.
+#
+# The 202 comes from the mocking plugin, not from an upstream. No backend is
+# contacted for this route at all.
+
+POST {{GATEWAY}}/events
+Content-Type: application/json
+
+{"event_id":"evt-2026-09-16-000117","event_type":"order.created","occurred_at":"2026-09-16T11:12:37Z","payload":{"sku":"sku-1","qty":2}}

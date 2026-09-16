@@ -1,0 +1,13 @@
+# Case 7 — case 2 sent a second time, byte for byte.
+#
+# EXPECTED TO SUCCEED. hmac-auth has no nonce and no replay cache. Until the Date
+# falls outside clock_skew, this request is as valid the tenth time as the first.
+# The case exists so that fact is demonstrated rather than asserted in prose.
+
+POST {{GATEWAY}}/posts
+Content-Type: application/json
+Date: {{DATE}}
+Digest: {{DIGEST}}
+Authorization: Signature keyId="{{KEY_ID}}",algorithm="hmac-sha256",headers="@request-target date digest",signature="{{SIGNATURE}}"
+
+{"title":"order-created","body":"sku-1","userId":1}

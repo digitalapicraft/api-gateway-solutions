@@ -1,0 +1,14 @@
+# Case 3 — event_id and occurred_at are missing, both required by body_schema.
+#
+# Rejected in the rewrite phase with the configured rejected_code. mocking never
+# runs, so there is no 202; kafka-logger's _meta.filter requires status == 202,
+# so nothing is published either.
+#
+# Take the second part seriously: WITHOUT that filter a rejected event still
+# reaches your topic, because kafka-logger's log phase runs for a 400 just as it
+# does for a 202.
+
+POST {{GATEWAY}}/events
+Content-Type: application/json
+
+{"event_type":"order.created"}

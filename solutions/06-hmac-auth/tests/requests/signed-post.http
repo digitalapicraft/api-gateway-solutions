@@ -1,0 +1,20 @@
+# Case 2 — a correctly signed write.
+#
+# Signing base (note the trailing newline — it is part of the string):
+#   {{KEY_ID}}\n
+#   POST /posts\n
+#   date: {{DATE}}\n
+#   digest: {{DIGEST}}\n
+#
+# signature = base64(HMAC-SHA256({{SECRET_KEY}}, <that base>))
+# DIGEST    = SHA-256=base64(sha256(<the exact bytes of the body below>))
+#
+# Generate both with ../../gateway/verify.sh, or the worked example in ../../README.md.
+
+POST {{GATEWAY}}/posts
+Content-Type: application/json
+Date: {{DATE}}
+Digest: {{DIGEST}}
+Authorization: Signature keyId="{{KEY_ID}}",algorithm="hmac-sha256",headers="@request-target date digest",signature="{{SIGNATURE}}"
+
+{"title":"order-created","body":"sku-1","userId":1}

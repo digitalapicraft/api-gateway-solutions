@@ -1,0 +1,4 @@
+{
+  "status": 400,
+  "body": "the event failed schema validation"
+}

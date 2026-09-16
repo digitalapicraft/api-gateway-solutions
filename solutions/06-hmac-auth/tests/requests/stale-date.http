@@ -1,0 +1,13 @@
+# Case 4 — correctly signed, but the Date is 20 minutes old.
+# The signature is valid over this exact base; clock_skew (300s) rejects it anyway.
+# This is what bounds how long a captured request stays replayable.
+# Sign with the OLD date, not the current one — signing with one date and sending
+# another fails on the signature instead, which tests something else.
+
+POST {{GATEWAY}}/posts
+Content-Type: application/json
+Date: {{DATE_20_MINUTES_AGO}}
+Digest: {{DIGEST}}
+Authorization: Signature keyId="{{KEY_ID}}",algorithm="hmac-sha256",headers="@request-target date digest",signature="{{SIGNATURE_OVER_OLD_DATE}}"
+
+{"title":"order-created","body":"sku-1","userId":1}

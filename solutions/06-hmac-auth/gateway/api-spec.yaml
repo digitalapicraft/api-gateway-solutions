@@ -1,0 +1,149 @@
+# Solution 06 — HMAC request signing at the edge.
+#
+# This is the importable artifact: an OpenAPI 3.0.3 document carrying
+# x-helix-gateway.plugins. Two ways to use it: paste the agent prompt into Agent
+# Mode, or import this file, bind the upstream, and deploy the revision.
+#
+# RUNNABLE ON A FRESH FREE-TRIAL ORG. The upstream is the public
+# https://jsonplaceholder.typicode.com, so a signed POST /posts returns a real
+# 201 with no backend of your own. Swap in your real upstream when you have one
+# — nothing else in this file changes.
+#
+# WHAT THIS DOES
+#   Every request must carry an HMAC signature over a canonical string built
+#   from the request itself. The gateway recomputes that signature with the
+#   secret it holds for the caller's key_id and rejects anything that does not
+#   match — in the REWRITE phase, before the upstream is contacted.
+#
+#   The caller proves it holds a shared secret WITHOUT EVER TRANSMITTING IT.
+#   That is the whole point, and it is what a bearer token cannot do: anything
+#   that captures a bearer token can replay it, while capturing a signature
+#   yields only that one request's signature.
+#
+# NO SECRET APPEARS IN THIS FILE, and none can. hmac-auth's route schema has no
+# secret field at all — key_id and secret_key live on the APP CREDENTIAL, which
+# the control plane provisions and returns exactly once. Contrast solution 01,
+# whose signing_secret is a literal in the spec. There is nothing here to leak.
+#
+# EXECUTION IS PHASE- AND PRIORITY-ORDERED, NOT DOCUMENT-ORDERED. hmac-auth runs
+# in the REWRITE phase at priority 2530 — earlier than access-phase plugins, and
+# earlier than anything that reads the body downstream.
+#
+# WHY hmac-auth IS PER ROUTE HERE, NOT AT THE DOCUMENT ROOT
+#   The two routes need different signed sets. POST has a body to bind, so its
+#   signature must cover the digest; GET has none, and requiring a digest of the
+#   empty string is ceremony, not security. A single root-level block cannot say
+#   both.
+#   THE COST: per-route means a route added later with no x-helix-gateway block
+#   is UNAUTHENTICATED. If you would rather fail safe, hoist the POST block to
+#   the root and have bodyless callers send the digest of the empty string —
+#   it is the constant SHA-256=47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=.
+#
+# signed_headers IS THE FIELD THAT MAKES THIS SECURE. Omit it and the CLIENT
+# decides what its own signature covers — a signature over nothing but the
+# keyId validates, and replays against any body and any path forever.
+# validate_request_body does NOT save you: with digest outside the signed set, a
+# caller supplies their own body AND a matching Digest, and both checks pass.
+# Treat signed_headers as mandatory. See README § How a signature is built.
+
+openapi: 3.0.3
+
+info:
+  title: Partner Events API
+  version: 1.0.0
+  description: >-
+    A sample API where every request is HMAC-signed by the caller and verified at
+    the gateway. It proxies the public jsonplaceholder service, so it returns real
+    data on a fresh org; point it at your own upstream when ready.
+
+paths:
+  /posts:
+    post:
+      summary: Submit a signed event
+      description: >-
+        Requires an HMAC signature over the method, path, Date and body digest.
+        The body is bound to the signature by the Digest header, so a payload
+        modified anywhere in transit is rejected. Proxies the upstream's POST /posts.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, body, userId]
+              properties:
+                title:  { type: string }
+                body:   { type: string }
+                userId: { type: integer }
+      responses:
+        '201': { description: Accepted and forwarded to the upstream }
+        '401':
+          description: >-
+            Missing, malformed, stale or invalid signature; unknown key_id; or a
+            body that disagrees with its Digest. All of these are the same 401.
+      x-helix-gateway:
+        plugins:
+          # Identity by signature, rewrite phase. Rejected requests never reach
+          # the upstream.
+          hmac-auth:
+            # MANDATORY IN PRACTICE. Every name listed here must appear in the
+            # caller's headers="..." list, or the request is rejected before the
+            # signature is even checked. This is what stops a caller from
+            # choosing a weaker signing set than you require.
+            signed_headers: ["@request-target", "date", "digest"]
+            # Binds the BODY: the gateway hashes what it received and compares it
+            # to the Digest header. Only meaningful because "digest" is in
+            # signed_headers above — otherwise the caller controls both sides.
+            validate_request_body: true
+            # Replay window. A captured request can be replayed until its Date
+            # falls outside this many seconds. 300 is the default; it is a
+            # window, not a lock — see README § What this does not do.
+            clock_skew: 300
+            # hmac-sha1 is in the plugin's default list and is excluded here.
+            allowed_algorithms: ["hmac-sha256", "hmac-sha512"]
+            # Strip the Authorization header before proxying. The upstream has no
+            # use for it and no business seeing the key_id.
+            hide_credentials: true
+            # Sent as WWW-Authenticate: hmac realm="partner-events" on a 401.
+            realm: partner-events
+
+  /posts/{postId}:
+    get:
+      summary: Read an event, signed
+      description: >-
+        Requires an HMAC signature over the method, path and Date. No body, so no
+        digest — see the route's signed_headers. Proxies the upstream's
+        /posts/{postId}.
+      parameters:
+        - { name: postId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: The event }
+        '401': { description: Missing, malformed, stale or invalid signature, or unknown key_id }
+        '404': { description: Not found }
+      x-helix-gateway:
+        plugins:
+          hmac-auth:
+            # No body on a GET, so digest is dropped from the signed set and body
+            # validation is off. @request-target still covers METHOD AND PATH
+            # INCLUDING QUERY STRING, so a signature for /posts/1 will not verify
+            # against /posts/2.
+            signed_headers: ["@request-target", "date"]
+            validate_request_body: false
+            clock_skew: 300
+            allowed_algorithms: ["hmac-sha256", "hmac-sha512"]
+            hide_credentials: true
+            realm: partner-events
+
+# API-WIDE POLICY.
+#
+# Note what is NOT here: hmac-auth. See the header comment — the two routes need
+# different signed sets, and a root-level block cannot express both.
+x-helix-gateway:
+  plugins:
+    # Correlation id on every call. This matters more here than on a token-based
+    # API: every hmac-auth rejection is an identical 401 with an empty body and
+    # the real reason only in the gateway log. A request id is the one thing a
+    # caller can quote back to you to have that log line found.
+    request-id:
+      algorithm: uuid
+      header_name: X-Request-Id

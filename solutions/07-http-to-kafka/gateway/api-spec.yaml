@@ -1,0 +1,178 @@
+# Solution 07 — accept events over HTTP and publish them to Kafka, with no
+# ingest service behind the gateway.
+#
+# This is the importable artifact: an OpenAPI 3.0.3 document carrying
+# x-helix-gateway.plugins. Two ways to use it: paste the agent prompt into Agent
+# Mode, or import this file, bind an upstream, set your broker, and deploy.
+#
+# WHAT THIS DOES
+#   POST /events  — validate the event against a JSON Schema, answer 202 from the
+#                   gateway itself, and publish the body to a Kafka topic.
+#   There is no ingest service. The gateway IS the producer.
+#
+# THE THREE PLUGINS ARE A CHAIN, AND THE ORDER IS PHASE-DRIVEN, NOT DOCUMENT-DRIVEN
+#
+#   request-validation  rewrite phase, priority 2800   validates AND reads the body
+#   mocking             access  phase, priority 1999   answers 202, short-circuits
+#   kafka-logger        access (skipped) + log phase   publishes what was read
+#
+#   READ THAT TABLE BEFORE CHANGING ANYTHING. kafka-logger's include_req_body is
+#   implemented in its ACCESS handler. mocking is also an access-phase plugin and
+#   runs FIRST (priority 1999 beats 403), and it short-circuits the request — so
+#   kafka-logger's access handler NEVER RUNS and never reads the body.
+#
+#   request-validation saves it. The rewrite phase precedes access entirely, so it
+#   reads the body before mocking can end the request. That is why it is here even
+#   if you do not care about schema validation: REMOVE IT AND EVERY MESSAGE ON YOUR
+#   TOPIC HAS AN EMPTY event FIELD, with no error anywhere to tell you.
+#
+# THIS ROUTE IS NOT AUTHENTICATED. That is a deliberate shipping default, not an
+# oversight — an open ingest endpoint is the simplest thing that demonstrates the
+# mechanism, and it is not what you should run. Close it with solution 06
+# (hmac-auth). NOTE THE COST: hmac-auth's validate_request_body and
+# request-validation cannot share a route, because request-validation re-encodes
+# the body and the digest comparison then fails. If you add signing, DROP
+# request-validation and let validate_request_body be the rewrite-phase body read
+# instead — it does that job too. See README § Adding authentication.
+#
+# A 202 MEANS THE GATEWAY ACCEPTED THE EVENT. IT DOES NOT MEAN KAFKA HAS IT.
+#   kafka-logger publishes from the LOG phase — after the response has already
+#   been flushed to the caller. If the produce fails there is nobody left to tell.
+#   This is at-most-once delivery. If you cannot lose events, this solution is the
+#   wrong shape and the README says what to build instead.
+#
+# BEFORE DEPLOY: replace <YOUR_KAFKA_BROKER> with a reachable broker hostname, and
+# kafka_topic with your topic. Neither is a secret; if your broker needs SASL, the
+# brokers[] entry takes a sasl_config object — see the plugin schema in your org.
+
+openapi: 3.0.3
+
+info:
+  title: Event Ingest API
+  version: 1.0.0
+  description: >-
+    Accepts events over HTTP, validates them at the edge, acknowledges with 202,
+    and publishes each body to a Kafka topic. No ingest service is deployed —
+    the gateway does the producing.
+
+paths:
+  /events:
+    post:
+      summary: Submit an event
+      description: >-
+        Validated against the schema below, acknowledged with 202, and published
+        to the configured Kafka topic. The 202 is produced by the gateway; no
+        upstream is contacted for this route.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [event_id, event_type, occurred_at]
+              properties:
+                event_id:
+                  type: string
+                  description: >-
+                    Caller-generated unique id. Nothing here deduplicates on it —
+                    it exists so the CONSUMER can, which is the only place
+                    at-least-once semantics can be recovered.
+                event_type:  { type: string }
+                occurred_at: { type: string, format: date-time }
+                payload:     { type: object }
+      responses:
+        '202':
+          description: Accepted for publication. NOT a guarantee that Kafka has it.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accepted: { type: boolean }
+        '400': { description: The event failed schema validation. Nothing is published. }
+      x-helix-gateway:
+        plugins:
+          # 1. REWRITE PHASE, priority 2800 — runs first, before access.
+          #
+          # Two jobs, and the second one is the one people delete by accident:
+          #   (a) reject malformed events at the edge, so the topic stays clean
+          #   (b) READ THE REQUEST BODY, in the only phase that happens before
+          #       mocking short-circuits the request
+          #
+          # Drop this plugin and every Kafka message gets an empty event field,
+          # silently. See the header comment.
+          #
+          # body_schema is a JSON Schema. Keep it in step with the requestBody
+          # schema above — nothing enforces that they agree.
+          request-validation:
+            body_schema:
+              type: object
+              required: [event_id, event_type, occurred_at]
+              properties:
+                event_id:    { type: string, minLength: 1 }
+                event_type:  { type: string, minLength: 1 }
+                occurred_at: { type: string }
+                payload:     { type: object }
+            rejected_code: 400
+            rejected_msg: "the event failed schema validation"
+
+          # 2. ACCESS PHASE, priority 1999 — answers the caller and stops here.
+          #
+          # The gateway itself returns the 202. No upstream is contacted for this
+          # route, which is why an ingest service is not needed.
+          mocking:
+            response_status: 202
+            content_type: "application/json"
+            response_example: '{"accepted":true}'
+            # Defaults to TRUE, which adds an x-mock-by header advertising that
+            # this response is mocked. On a real ingest endpoint that is noise at
+            # best and a hint at worst.
+            with_mock_header: false
+
+          # 3. LOG PHASE, priority 403 — publishes after the response is flushed.
+          #
+          # Its access handler (which is what include_req_body uses to read the
+          # body) never runs, because mocking short-circuited the access phase
+          # first. The body it logs is the one request-validation read.
+          kafka-logger:
+            brokers:
+              - host: "<YOUR_KAFKA_BROKER>"
+                port: 9092
+            kafka_topic: events
+            # Only publish when the mock actually answered 202. Without this
+            # filter a 400 from request-validation is also logged, and malformed
+            # events reach the topic by the back door.
+            _meta:
+              filter:
+                - ["status", "==", 202]
+            include_req_body: true
+            # $request_body is the body request-validation read. The other two are
+            # nginx variables and need nothing to have read anything.
+            log_format:
+              event:       "$request_body"
+              request_id:  "$request_id"
+              received_at: "$time_iso8601"
+            # A real broker round trip per event rather than a fire-and-forget
+            # ring buffer. This does NOT make delivery guaranteed — the caller
+            # already has its 202 — but a broker rejection is at least logged
+            # rather than silently dropped. It also removes the async producer's
+            # 1-second linger from the publish path.
+            producer_type: sync
+            batch_max_size: 1
+            # Wait for all in-sync replicas. The plugin's default is 1 (leader
+            # only), which loses the event if the leader fails before replicating.
+            required_acks: -1
+            # The plugin default is 0: a failed batch is dropped, not retried.
+            max_retry_count: 3
+            retry_delay: 1
+
+# API-WIDE POLICY.
+x-helix-gateway:
+  plugins:
+    # The correlation id that makes verification possible. It is written into
+    # every Kafka message as request_id AND returned to the caller as
+    # X-Request-Id, so "the event I just posted" and "this message on the topic"
+    # can be matched without guessing from timestamps.
+    request-id:
+      algorithm: uuid
+      header_name: X-Request-Id

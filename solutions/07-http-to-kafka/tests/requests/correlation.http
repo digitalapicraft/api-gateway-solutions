@@ -1,0 +1,13 @@
+# Case 2 — the same request, read for its response headers.
+#
+# X-Request-Id on the 202 is the same value written into the Kafka message as
+# request_id. That pairing is the ONLY reliable way to match "the event I posted"
+# to "this message on the topic" — timestamps are not enough on a busy topic, and
+# the gateway's received_at is not the caller's clock.
+#
+# Keep the value. The manual Kafka UI case needs it.
+
+POST {{GATEWAY}}/events
+Content-Type: application/json
+
+{"event_id":"evt-2026-09-16-000117","event_type":"order.created","occurred_at":"2026-09-16T11:12:37Z","payload":{"sku":"sku-1","qty":2}}

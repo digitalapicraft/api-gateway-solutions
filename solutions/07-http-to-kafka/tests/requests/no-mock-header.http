@@ -1,0 +1,11 @@
+# Case 4 — the same valid event, inspecting response headers for x-mock-by.
+#
+# mocking's with_mock_header defaults to TRUE, which stamps every response with a
+# header naming the plugin and the gateway version. This spec sets it false. The
+# case exists because the default is the wrong one for a production endpoint and
+# is easy to leave in place.
+
+POST {{GATEWAY}}/events
+Content-Type: application/json
+
+{"event_id":"evt-2026-09-16-000117","event_type":"order.created","occurred_at":"2026-09-16T11:12:37Z","payload":{"sku":"sku-1","qty":2}}

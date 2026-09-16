@@ -1,0 +1,93 @@
+# Solution manifest — the traceability spine for this package.
+# Every artifact below corresponds to this one solution version. If the gateway
+# config changes, bump `version` and re-derive the docs and diagrams from it
+# — never the other way round.
+
+solution:
+  name: Signed requests — prove who is calling without sending a secret
+  slug: 06-hmac-auth
+  version: 1.0.0
+  category:
+    - Security & Access
+  tags: [hmac, request-signing, message-integrity, webhooks, partner-api, hmac-auth, replay]
+
+problem:
+  statement: >-
+    A partner, device fleet or webhook sender holds a credential that travels on
+    every request — so any copy of one request is a copy of the credential — and
+    that credential says nothing about the payload it arrived with, so a body
+    altered in transit is indistinguishable from a legitimate one.
+
+business_need:
+  summary: >-
+    Authenticate inbound traffic in a way that survives the credential being
+    observed, and detect a payload altered in transit, without a client-side
+    release to rotate anything and without the backend learning about
+    authentication. A captured request becomes worth one request for at most
+    clock_skew seconds, instead of granting indefinite impersonation.
+
+implementation:
+  gateway_capabilities:
+    - hmac-auth (POST route)   # signed_headers @request-target/date/digest, validate_request_body true
+    - hmac-auth (GET route)    # signed_headers @request-target/date, no body to bind
+    - request-id               # correlation across an intentionally opaque 401
+  custom_code_required: false
+  notes: >-
+    hmac-auth is applied PER ROUTE, not at the document root, because the two
+    routes need different signed sets: POST has a body the signature must cover,
+    GET does not, and requiring a digest of the empty string is ceremony rather
+    than security. The cost is that a route added later without an
+    x-helix-gateway block is unauthenticated; the fail-safe alternative is a
+    root-level block carrying the POST configuration.
+    signed_headers is the field that makes this configuration secure and it is
+    NOT in the plugin's defaults. Without it the client chooses what its own
+    signature covers, and a signature over nothing but the keyId replays against
+    any body and any path indefinitely. validate_request_body does not close that
+    gap, because with digest outside the signed set the caller supplies both the
+    body and the matching Digest.
+    NO SECRET APPEARS IN THE SPEC AND NONE CAN — hmac-auth's route schema has no
+    secret field. key_id and secret_key live on the app credential, which the
+    control plane generates and returns once. This is the structural difference
+    from solution 01, whose signing_secret is a literal in the spec.
+    request-validation CANNOT share a route with validate_request_body: it runs
+    earlier in the same phase (2800 vs 2530) and re-encodes the body, so the
+    digest comparison fails on key order and whitespace.
+
+validation:
+  # Stage statuses only. What was checked and what happened is in validation/;
+  # dates and who ran it are in the machinery verification record.
+  local: PASS
+  gateway_dry_run: PASS
+  deployment: NOT_RUN
+  functional_test: NOT_EXECUTED
+  record: validation/
+
+artifacts:
+  documentation: [README.md, architecture.md, business-need.md]
+  source_code: [gateway/api-spec.yaml, gateway/products.json, gateway/verify.sh]
+  agent_prompt: helix-agent-prompt.md
+  diagrams: [README.md, architecture.md]   # mermaid blocks, rendered inline by GitHub
+  tests: [tests/test-plan.yaml, tests/requests/, tests/expected/]
+  validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
+
+assumptions:
+  - API name is "Partner Events API" and the signed paths are POST /posts and GET /posts/{postId} (illustrative — replace with yours).
+  - The caller is a server, device or partner backend that can hold a long-lived secret and run signing code. A browser or mobile app cannot, and needs a token flow instead.
+  - Caller clocks are accurate to within clock_skew (300s here). A fleet without NTP produces 401s that look like credential failures.
+  - One app per integration, so a compromised secret is rotated for one partner rather than all of them.
+  - The upstream is bound on the service at import/bind time, not in the OpenAPI paths.
+  - No intermediary between the caller and the gateway normalises, reorders or appends query parameters — @request-target covers the query string, so any such rewrite invalidates every signature.
+
+limitations:
+  - Authentication and message integrity, not authorization. The signature proves who called and that the message is intact; it carries no scopes and no per-route permissions.
+  - No replay protection inside clock_skew. The plugin schema has no nonce field and there is no replay cache — a captured request is valid until its Date ages out. Closing it needs idempotency upstream plus the smallest clock_skew your callers tolerate. Demonstrated as test case 7 rather than asserted.
+  - Symmetric secrets, so no non-repudiation. The gateway can forge a caller's signature as easily as verify it; the signature proves the message came from someone holding the secret, not which end.
+  - No expiry on a credential. A secret_key is valid until somebody rotates it — nothing bounds it the way a token TTL does.
+  - Rotation is a cutover, not a rolling change. Rotating regenerates key_id and secret_key together and the old pair stops working immediately; there is no previous-secret grace period.
+  - The integration cost lands on the caller, who must get canonicalisation byte-exact. Off-the-shelf draft-cavage libraries do NOT interoperate — the keyId line, the trailing newline and the @request-target form each differ.
+  - Not usable from browser JavaScript. Date is a forbidden header for fetch and XHR, and a secret shipped to a user's device is not a secret.
+  - request-validation cannot be added to a signed route. It re-encodes the body ahead of the digest check.
+  - Whether api-product-enforcer resolves a quota from an hmac-auth consumer is UNTESTED. The mechanism suggests it should — hmac-auth attaches a consumer and the enforcer reads credential_id from it — but this package did not exercise the combination and does not claim it.
+  - hmac-auth's exact schema varies by build. Confirm with get_plugin_config in your org before deploying rather than trusting the field names in this spec.
+
+status: READY WITH WARNINGS   # imported and dry-run on a gateway; not deployed, so verify.sh has not been executed

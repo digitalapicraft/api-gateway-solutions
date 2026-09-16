@@ -1,0 +1,9 @@
+{
+  "status": 201,
+  "body": {
+    "title": "order-created",
+    "body": "sku-1",
+    "userId": 1,
+    "id": 101
+  }
+}

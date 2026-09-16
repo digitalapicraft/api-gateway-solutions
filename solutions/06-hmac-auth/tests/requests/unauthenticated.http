@@ -1,0 +1,8 @@
+# Case 1 — no signature at all.
+# The commonest way this route is hit in the wild: somebody has the URL but not a
+# credential. Rejected in the rewrite phase; the upstream is never contacted.
+
+POST {{GATEWAY}}/posts
+Content-Type: application/json
+
+{"title":"order-created","body":"sku-1","userId":1}

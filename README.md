@@ -8,13 +8,16 @@ Each solution is a self-contained package: one real problem, one importable
 gateway configuration, the agent prompt that produces it, the tests that prove
 it, and an honest record of what was and wasn't validated.
 
-> **Every solution here has been implemented and validated against our
-> gateway** — imported, dry-run, deployed, and exercised with its `verify.sh`.
-> Each package's `validation/` records the outcome.
+> **Every solution here has been generated and validated against our gateway**,
+> and each package says exactly how far that went. Solutions 01–05 were imported,
+> dry-run, deployed and exercised with their `verify.sh`. Solutions 06 and 07 were
+> imported and dry-run, but not deployed — their `verify.sh` is written and has
+> not been executed, and both say so in their own validation table. Each package's
+> `validation/` records the outcome.
 
 ---
 
-## The five solutions
+## The seven solutions
 
 | # | Solution | The problem it solves | Build it with the Agent |
 |---|---|---|---|
@@ -23,16 +26,27 @@ it, and an honest record of what was and wasn't validated.
 | **03** | [API Products](solutions/03-api-products/) | *"We sell an 'Enterprise tier' with no way to enforce it, and one partner's retry loop can take down everyone."* Bundle APIs into products with quotas, enforced per app. | [prompt](solutions/03-api-products/helix-agent-prompt.md) |
 | **04** | [Analytics](solutions/04-analytics/) | *"We can't tell which of our 400 integrations caused the 3am pager."* Analytics is already capturing every call — this is how you query it, through the metrics API, for the answers that matter. | [prompt](solutions/04-analytics/helix-agent-prompt.md) · [charts](solutions/04-analytics/charts.md) · [script](solutions/04-analytics/scripts/query-analytics.sh) |
 | **05** | [OAuth with Okta](solutions/05-okta-jwt/) | *"We already run Okta, but our APIs still check a static key from 2021."* Verify the IdP's own tokens at the edge — the mirror of 01, for when someone else is the issuer. | [prompt](solutions/05-okta-jwt/helix-agent-prompt.md) |
+| **06** | [Signed requests](solutions/06-hmac-auth/) | *"We gave a partner an API key in 2021. It's in their runbook, their CI, and a Jira ticket — and it tells us nothing about the payload it arrived with."* Prove the caller holds a secret without ever sending it, and bind the proof to the request body. | [prompt](solutions/06-hmac-auth/helix-agent-prompt.md) |
+| **07** | [HTTP to Kafka](solutions/07-http-to-kafka/) | *"Partners want to POST us events. The service in between is three lines long and has been on the roadmap for three quarters."* Validate, acknowledge and publish at the edge — no ingest service. Ships with an honest at-most-once caveat. | [prompt](solutions/07-http-to-kafka/helix-agent-prompt.md) |
 
 They compose. 01 gives you identity, 02 gives you the protocol bridge, 03 turns
 the result into something sellable, and 04 tells you what happened. Running all
 four against one API takes you from *internal SOAP endpoint* to *metered,
 observable, partner-facing product* without a backend change.
 
-**01 and 05 are alternatives, not layers.** They sit on opposite sides of the
-issuer boundary: in 01 the gateway mints the tokens, in 05 Okta does and the
-gateway only verifies. Pick by who owns identity today. You do not want both on
-the same route.
+**01, 05 and 06 are alternatives, not layers.** All three answer "who is
+calling", and you want exactly one of them on a route. Pick by what the caller
+can hold: in 01 the gateway mints a token, in 05 an external identity provider
+does and the gateway only verifies, and in 06 there is no token at all — the
+caller holds a secret it never transmits and signs each request with it. A
+browser can hold a token but not a secret; a partner's backend can hold either,
+and should sign when the payload's integrity is the point.
+
+**07 is the odd one out, deliberately.** Every other solution proxies to a
+backend; 07 has none — it answers the caller itself and publishes to Kafka. It
+also ships unauthenticated, which is what 06 is for. Its package is explicit
+about both that and its at-most-once delivery, because those are the two things
+that decide whether it suits your data.
 
 ## Agent-first, on purpose
 
@@ -165,6 +179,8 @@ repo. You will see:
 | `<YOUR_JWT_SIGNING_SECRET>` · `<YOUR_REDIS_HOST>` | a **literal** value you fill in — see the warning below |
 | `<OKTA_DISCOVERY_URL>` · `<OKTA_ISSUER_URL>` | your IdP's discovery document, and the `issuer` value that document reports |
 | `<OKTA_CLIENT_ID>` · `<OKTA_CLIENT_SECRET>` | the IdP application's credentials — also **literals**, see the warning below |
+| `<KEY_ID>` · `<SECRET_KEY>` | an app credential's HMAC key pair — the control plane generates these; they never appear in a spec |
+| `<YOUR_KAFKA_BROKER>` | a broker hostname the **gateway** can reach. Not a secret |
 
 App **keys and secrets** (the `client_id`/`client_secret` on an app) are
 provisioned on the credential by the control plane and never belong in a spec.
@@ -179,6 +195,10 @@ provisioned on the credential by the control plane and never belong in a spec.
 > anyone can forge tokens. The same applies to `<OKTA_CLIENT_SECRET>` in solution
 > 05 — it is a literal too, and the control plane stores it encrypted only after
 > you have supplied a real one.
+>
+> **Solution 06 has no such footgun, by construction.** `hmac-auth`'s route schema
+> has no secret field at all, so there is nothing to fill in and nothing to leak —
+> `key_id` and `secret_key` live only on the app credential.
 
 ## Prerequisites
 
