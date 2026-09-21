@@ -132,6 +132,15 @@ key is fetched per request from a partner id in the request.
 ```
 (That's [solution 12](../12-key-value-map/).)
 
+**Write the counterparty's side for me**
+```text
+My counterparty <<also runs this gateway / runs a cron job with gpg on it>>.
+Write the configuration THEY need, mirroring mine: they decrypt what I send with
+their own private key, and encrypt to my public key when they send to me. Be
+explicit about which of the four key halves each party holds, and do not assume my
+two placeholders are a pair — they are not.
+```
+
 **My partner insists on sending raw armor**
 ```text
 My counterparty cannot base64 the armored message. Tell me honestly whether the

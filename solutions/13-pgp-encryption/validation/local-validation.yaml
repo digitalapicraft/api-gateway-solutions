@@ -23,6 +23,12 @@ local_validation:
 
   warnings:
     - >-
+      The route's two key fields belong to different pairs held by different parties:
+      decrypt.private_key is yours, encrypt.public_key is the counterparty's. They are
+      not a pair. Filling both from one pair deploys and round-trips, which is a useful
+      single-party test and an inaccurate model of production — and it makes a key
+      mismatch unobservable, since the two fields can then never disagree.
+    - >-
       The key material is used LITERALLY. The gateway does not resolve <ENV:...> or
       ${...} in private_key or public_key, so the placeholders must be replaced with
       real armored blocks before deploy and the filled-in file must be kept out of

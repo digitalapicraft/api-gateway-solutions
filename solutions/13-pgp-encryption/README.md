@@ -109,6 +109,65 @@ encrypt:
 If your counterparty's integration guide reads like the mirror image of yours,
 you have it right.
 
+### What their side looks like
+
+This is the part most write-ups leave out, and it splits by whether your
+counterparty runs a gateway too.
+
+**If they do**, their spec is this one with the keys swapped and the directions
+reversed — their outbound is your inbound:
+
+```yaml
+# THEIR gateway, mirroring yours
+decrypt:                                 # they receive what you sent
+  target: request
+  private_key: "<THEIR_PRIVATE_KEY>"     # the pair whose public half you hold
+encrypt:                                 # they send to you
+  target: response
+  public_key: "<YOUR_PUBLIC_KEY>"        # the public half of your decrypt key
+```
+
+**If they don't** — which is the common case, and usually means a scheduled job
+with `gpg` on it — then "their config" is two commands and one file from you:
+
+```bash
+# once: import the public key YOU published to them
+gpg --import your-org-public.asc
+
+# sending you an instruction — encrypt to YOUR key, then base64 the armor
+gpg --armor --encrypt -r ops@your-org.example -o msg.asc instruction.json
+base64 -i msg.asc | tr -d '\n' > msg.b64        # the wire format, see below
+
+# reading a statement you sent them — decrypt with THEIR private key
+curl -s "$GW/statements/2024-Q1" | base64 -d | gpg --decrypt
+```
+
+Note the asymmetry that catches people: they encrypt with **your** public key and
+decrypt with **their** private key, in the same integration, minutes apart. The
+key they reach for depends on the direction, not on who they are.
+
+### The note to send them
+
+Copy this, fill in the two blanks, and it is a complete integration brief:
+
+> **Endpoint** `POST <your host>/statements/inbound`
+>
+> **Encrypt to:** the public key attached (`ops@your-org.example`). Send us your
+> own public key and we will encrypt statements to it.
+>
+> **Wire format:** base64 **of** the ASCII-armored message — not the armor. Armor
+> is already a text encoding; we need another layer on top. `gpg --armor --encrypt`
+> then `base64` the result. **A raw armored body is rejected with 400**, and the
+> error does not mention base64.
+>
+> **Key requirements:** your key must carry an **encryption subkey**. Check with
+> `gpg --list-keys --with-colons <uid> | awk -F: '/^(pub|sub)/{print $1, $12}'` —
+> you need a `sub` row containing `e`. `gpg --quick-generate-key` does **not**
+> produce one; use `gpg --quick-add-key <fpr> rsa3072 encr never` to add it.
+>
+> **On failure** you will get a 400 with a generic message — the reason is in our
+> logs, not your response. Quote the `X-Request-Id` header and we will look.
+
 ### What happens if you fill both from one pair
 
 You get a loop — and it is genuinely useful, as long as you know what it is not.
@@ -117,8 +176,12 @@ With one pair in both fields, the outbound route encrypts to a key the inbound
 route can decrypt, so the GET's own output feeds straight into the POST:
 
 ```bash
-curl -s "$GW/statements/2024-Q1" > out.b64                     # encrypt direction
-curl -s -X POST "$GW/statements/inbound"   -H 'content-type: text/plain' --data-binary @out.b64         # decrypt direction
+# encrypt direction — the gateway encrypts the backend's statement
+curl -s "$GW/statements/2024-Q1" > out.b64
+
+# decrypt direction — the gateway decrypts it again
+curl -s -X POST "$GW/statements/inbound" \
+  -H 'content-type: text/plain' --data-binary @out.b64
 ```
 
 Two calls, no `gpg`, nothing to import, and it exercises both plugin directions.

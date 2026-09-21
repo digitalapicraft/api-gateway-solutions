@@ -123,6 +123,28 @@ cases:
       This is the failure that reaches production, because it is invisible from the
       gateway's side.
 
+  - id: mismatched-pair
+    type: failure
+    intent: >-
+      Establish what a genuine two-party setup looks like when the keys do not
+      line up — and why a single-pair demo can never surface it.
+    type_of_execution: manual
+    procedure: >-
+      In a THROWAWAY environment, put a public key in the encrypt block whose
+      private half you do NOT hold, leaving decrypt.private_key as it was. Then
+      fetch a statement and feed that response straight into the inbound route.
+    expected_outcome: >-
+      The GET returns a well-formed 200 carrying base64 of an armored message —
+      nothing at the gateway indicates a problem. The POST then fails closed with
+      400, because the statement was encrypted to a key the inbound route cannot
+      decrypt with. That is exactly the shape of a correct two-party deployment,
+      and exactly what you cannot observe while both fields come from one pair.
+    notes: >-
+      Worth running once, because it is the only way to see the two directions
+      behave independently. While a single pair fills both fields the two can never
+      disagree, so the round trip passes by construction and proves less than it
+      appears to. See the README, "Which key goes where".
+
   - id: oversized-body
     type: boundary
     intent: >-
@@ -157,4 +179,4 @@ coverage:
   positive: [statement-encrypted, inbound-decrypted, statement-round-trip]
   negative: [no-plaintext-survives, armored-body, plaintext-body]
   boundary: [oversized-body, key-rotation]
-  failure:  [wrong-recipient]
+  failure:  [wrong-recipient, mismatched-pair]

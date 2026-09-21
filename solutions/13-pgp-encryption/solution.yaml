@@ -87,6 +87,13 @@ limitations:
   - One key pair per route. Two counterparties means two routes, and rotation is a
     hard cutover — old and new keys cannot both be live on one route.
   - >-
+    The route's two key fields belong to DIFFERENT pairs held by different parties:
+    decrypt.private_key is yours, encrypt.public_key is the counterparty's. They are
+    not a pair. Filling both from one pair deploys and round-trips, which makes it a
+    convenient single-party test and an inaccurate model of production — and it
+    removes any possibility of observing a key mismatch, since the two fields can
+    then never disagree.
+  - >-
     Encrypting to the WRONG public key is undetectable from the gateway — the
     response is well formed and the partner simply cannot read it. Only a
     round-trip test finds it.

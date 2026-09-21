@@ -24,6 +24,12 @@
 #     parties, two pairs, four halves. Filling both from one pair makes the two
 #     routes a loop, which is a handy single-party test and is not how it behaves
 #     in production. See the README, "Which key goes where".
+#
+#     If your counterparty also runs this gateway, their spec is this one mirrored:
+#       their decrypt.private_key  = the pair whose public half you put below
+#       their encrypt.public_key   = the public half of YOUR decrypt key
+#     If they do not — the common case — their side is gpg plus the public key you
+#     publish to them. The README carries a fill-in-the-blanks integration note.
 #   - The gateway does NOT resolve <ENV:...> or ${...} in these fields.
 #   - Keep the filled-in spec out of version control. Ship the placeholders.
 #   - The control plane stores these fields encrypted once supplied (they are in

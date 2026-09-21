@@ -70,12 +70,42 @@ configuration one — there is no setting that accepts bare armor — so the
 integration note is part of the deliverable, and one test asserts the rejection so
 that the requirement stays visible.
 
-## One key pair per route
+## Two parties, four halves
+
+Before the per-route limitation below, the more fundamental shape: a PGP
+integration is **two key pairs held by two parties**, and each party holds only
+half of the other's.
+
+```
+        YOU                                   THEM
+   ┌──────────────┐                     ┌──────────────┐
+   │ your private │◀──they encrypt──────│ your public  │
+   │ (decrypt in) │                     │ (they hold)  │
+   ├──────────────┤                     ├──────────────┤
+   │ their public │──you encrypt───────▶│ their private│
+   │ (encrypt out)│                     │ (they hold)  │
+   └──────────────┘                     └──────────────┘
+```
+
+Both of the fields on this route are therefore about *different* pairs:
+`decrypt.private_key` is yours, `encrypt.public_key` is theirs. They are not a
+pair and were never generated together. The most common misreading of this
+package is to treat the two placeholders as one key pair, which works — in the
+sense that it deploys and round-trips — and is not what a real integration looks
+like.
+
+The direction determines which key is used, not the identity of the party. Your
+counterparty encrypts with your public key and decrypts with their private key,
+in the same integration, minutes apart.
+
+## One key pair per route, per direction
 
 `private_key` and `public_key` are fields on the route's plugin configuration.
 That means:
 
-- Two counterparties with different keys need two routes.
+- Two counterparties with different keys need two routes — this is a *per-route*
+  limit, distinct from the two-party structure above. One route serves one
+  counterparty in both directions, using two different pairs to do it.
 - Rotating a key is a configuration change and a deploy, and the old and new keys
   cannot both be live on the same route — a hard cutover that has to be
   coordinated with the counterparty.
