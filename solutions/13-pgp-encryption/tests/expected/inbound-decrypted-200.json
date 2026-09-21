@@ -1,0 +1,9 @@
+{
+  "status": 200,
+  "body": {
+    "data": "{\"instructionId\":\"INS-4471\",\"amountCents\":125000}",
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  }
+}

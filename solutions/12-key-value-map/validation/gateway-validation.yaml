@@ -1,0 +1,103 @@
+# Gateway validation — this solution was imported, dry-run, deployed and exercised
+# against a gateway. The statuses below are the outcome. Re-run
+# gateway/verify.sh against your own environment before you rely on it.
+
+gateway_validation:
+  solution: 12-key-value-map
+  version: 1.0.0
+
+  dry_run:
+    status: PASS
+    detail: Non-destructive dry-run passed against a temporary import of the shipped spec.
+
+  deployment:
+    status: DEPLOYED
+    detail: >-
+      Imported cleanly and deployed ACTIVE to a test environment. The key-value-map
+      store was provisioned in the target environment; without that gateway-level
+      configuration the plugin is a no-op and this solution cannot work at all,
+      which is the first thing to confirm in a new environment.
+
+  functional_tests:
+    executor: gateway/verify.sh
+    status: PASS
+    detail: All seven cases pass against the deployed routes, as shipped and unmodified.
+    cases:
+      - { id: no-key-registered,   expected_status: 500, result: PASS, note: "the configured fail-close message; no document in any form" }
+      - { id: key-registered,      expected_status: 200, result: PASS, note: "the armored key was taken from the request body and stored under the resolved partner id" }
+      - { id: document-encrypted,  expected_status: 200, result: PASS, note: "base64 of an armored PGP message; no readable JSON survived" }
+      - { id: partner-isolation,   expected_status: 500, result: PASS, note: "a second, unregistered partner id still failed closed — entries are per partner" }
+      - { id: decrypts-with-partner-key, expected_status: 200, result: PASS, note: "decrypted with the private key matching what was registered" }
+      - { id: rotation-new-key,    expected_status: 200, result: PASS, note: "after re-registering with a DIFFERENT key, the document decrypted with the new key — no revision, no route change, no deploy" }
+      - { id: rotation-old-key,    expected_status: 200, result: PASS, note: "the OLD key could no longer decrypt it — the entry was replaced rather than appended" }
+
+  observations:
+    - >-
+      The store persists across requests AND across routes: a value written by the
+      registration route was read by the document route on a later request.
+    - >-
+      A key-value-map miss produced no error of its own. The failure came from
+      pgp-crypto's fail-close policy, which is what makes that policy the control
+      that matters for an unregistered partner.
+    - >-
+      The reference grammar is `headers` plural. An earlier probe using
+      $request.header.<name> resolved to nothing and the consuming plugin reported
+      "cannot resolve public_key reference", which is only visible in gateway
+      telemetry — not to the caller.
+
+  agent_prompt:
+    status: PARTIAL
+    detail: >-
+      Step 1 was run against the hosted agent on the default model and produced
+      exactly the right configuration: the API, the registration route with
+      proxy-rewrite, and key-value-map with fail_action close and an insert whose
+      key and value are the unresolved templates $request.headers.x-partner-id and
+      $request.body.public_key — the agent left the references intact rather than
+      substituting values, which was the specific risk. request-id landed on the
+      SERVICE spec, and the plugins were written as a flat top-level map.
+    not_completed: >-
+      Step 2 (adding the document route with fetch + pgp-crypto) failed twice on the
+      agent's tool-argument serialisation defect: update_route_spec received its
+      arguments as a string containing valid JSON with a stray bracket appended,
+      nothing was written, and the run ended with "stream closed with reason:
+      error". The route it would have produced is the one in gateway/api-spec.yaml,
+      which was deployed from the spec import and passed all seven functional cases
+      — this record does not claim the agent produced it.
+    guidance_shipped: >-
+      The package's prompt is split into two steps for this reason and tells the
+      reader to retry once, then import the spec for the remaining step.
+
+  observations_2026_09_21:
+    - >-
+      A registered-but-UNUSABLE key returns 200 carrying the fail-close error body.
+      Measured on three partner ids: never-registered gave 500 with
+      {"message":"no usable key is registered for this partner"}; a sign-only key
+      (no encryption subkey) gave 200 with the IDENTICAL body; a key with an
+      encryption subkey gave 200 with base64 PGP. fail_close_status applies only to
+      a store MISS, so a value the crypto cannot use is emitted as a success.
+      Reproduced three times, including once against a key registered by hand.
+      Consequence: assert on the BODY, never the status. The shipped verify.sh and
+      the Postman collection both do.
+    - >-
+      The registration route's status reflects the UPSTREAM ECHO, not the store
+      write. key-value-map inserts in the access phase, before proxying. Observed
+      once: the echo returned 502 and the key had still been stored — the next fetch
+      returned ciphertext encrypted to it. Neither a 2xx nor a 5xx on that route is
+      evidence about the value; read it back.
+    - >-
+      The consumer cannot be swapped on this plan. lua-callout is the ONLY
+      enterpriseOnly plugin of the 96 in this org's catalogue, and attaching it is
+      refused at import with 403 "available on Enterprise plans only". Since
+      key-value-map does not mirror values into ctx.var, and pgp-crypto plus
+      lua-callout are its only consumers, pgp-crypto is the only way to observe a
+      stored value on a free-trial org. This is why the package pairs them.
+
+  not_established_here:
+    - Whether the store is provisioned in any environment other than the one used
+      here. It is gateway-level infrastructure configuration, not route configuration.
+    - The behaviour of the registration route under concurrent writes to the same
+      partner id.
+    - Whether a stored key is the RIGHT key for a counterparty — only a round-trip
+      decrypt establishes that, and it is in the test plan for that reason.
+
+  overall: READY

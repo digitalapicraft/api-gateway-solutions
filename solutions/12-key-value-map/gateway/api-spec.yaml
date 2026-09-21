@@ -1,0 +1,175 @@
+# Solution 12 — one route, many partners: fetch the key material per request
+# instead of writing it into the configuration.
+#
+# This is the importable artifact: an OpenAPI 3.0.3 document carrying
+# x-helix-gateway.plugins. Two ways to use it: paste the agent prompt into Agent
+# Mode (it creates the API and binds the upstream for you), or import this file,
+# bind the upstream, and deploy the revision.
+#
+# READ SOLUTION 13 FIRST. It does the same crypto with the key written into the
+# route. This package exists because that shape does not survive a second
+# counterparty: N partners means N routes, N keys inside configuration documents,
+# and a deploy every time one of them rotates.
+#
+# RUNNABLE ON A FRESH FREE-TRIAL ORG, with NOTHING to fill in — which is the whole
+# point. No key material appears in this file. The upstream is the public
+# httpbin.org.
+#
+# ENVIRONMENT: a free-trial org gets a "test" environment by default — deploy here.
+#
+# HOW IT WORKS
+#   key-value-map (priority 3001) runs first and puts values into
+#   ctx.helix.<ctx_namespace>. pgp-crypto (priority 898) then resolves a DYNAMIC
+#   KEY REFERENCE against that namespace instead of reading a literal key.
+#
+#   The reference grammar belongs to key-value-map's resolver:
+#       $request.headers.<name>   $request.query.<name>   $request.body.<dotted.path>
+#       $response.headers.<name>  $response.body.<dotted.path>
+#       $consumer.<suffix>        resolves to "<consumer_name>.<suffix>"
+#       $ctx.<path>               walks the request context itself
+#   It is `headers` PLURAL. `$request.header.x-partner-id` silently resolves to
+#   nothing, and the only symptom is the consuming plugin failing.
+#
+#   The SAME reference is used twice on the read route — once by key-value-map to
+#   decide which entry to fetch, and once by pgp-crypto to decide which entry to
+#   read. They agree because they resolve the identical template.
+#
+# WHAT THIS BUYS
+#   Rotation stops being a deploy. A partner's new key is written once, through the
+#   registration route, and the next request uses it. No revision, no route change,
+#   and no key in any document.
+#
+# WHAT THIS DOES NOT FIX, AND YOU MUST READ IT
+#   1. There is NO control-plane API for these entries on this build. The only
+#      write path is this plugin's own `inserts`. That is why the registration
+#      route below exists at all.
+#   2. `inserts` values are resolved templates — so taking the value from the
+#      REQUEST BODY, as below, keeps key material out of the configuration. Writing
+#      a literal key into `inserts` instead would put it straight back into the
+#      document, which is the thing this package exists to avoid.
+#   3. THE REGISTRATION ROUTE IS AN ADMINISTRATIVE ENDPOINT. As shipped it is
+#      unauthenticated, because every package in this library ships with the
+#      behaviour under test and nothing else. An unauthenticated write path to your
+#      key store is an open door: put authentication in front of it (solution 08)
+#      and restrict it to an operator before it exists anywhere real.
+#
+# STORAGE. Entries are held encrypted at rest, with the data key itself wrapped by
+# a key-management service, and are scoped per environment. That is storage-side
+# protection; it says nothing about how the value reached the gateway.
+
+openapi: 3.0.3
+
+info:
+  title: Partner Documents API
+  version: 1.0.0
+  description: >-
+    One route serving many partners, each with their own PGP key. An operator
+    registers a partner's public key once; from then on every document that partner
+    fetches is encrypted to it, selected by the partner id on the request. No key
+    material appears in this configuration.
+
+paths:
+  /partners/keys:
+    post:
+      summary: Register or rotate a partner's public key
+      description: >-
+        ADMINISTRATIVE. Stores the armored public key in the body under the partner
+        id from `X-Partner-Id`. Writing the same id again replaces the value, which
+        is what makes rotation a data change rather than a deploy. Protect this
+        route before using it anywhere real.
+      parameters:
+        - { name: X-Partner-Id, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [public_key]
+              properties:
+                public_key:
+                  type: string
+                  description: The partner's ASCII-armored OpenPGP public key.
+      responses:
+        '200': { description: Stored }
+        '503': { description: The store could not be written; nothing was saved }
+      x-helix-gateway:
+        plugins:
+          # The value is taken from the REQUEST BODY, not from this document. That
+          # is the difference between a key store and a second place to keep keys.
+          key-value-map:
+            # close: if the write fails, fail the request. A registration that
+            # silently did nothing is worse than an error, because the next
+            # document fetch is the thing that discovers it.
+            fail_action: close
+            inserts:
+              - key: "$request.headers.x-partner-id"
+                value: "$request.body.public_key"
+
+          proxy-rewrite:
+            uri: /post
+
+  /partners/documents:
+    get:
+      summary: Fetch a document, encrypted to the calling partner's own key
+      description: >-
+        Resolves the partner id to that partner's stored public key, then encrypts
+        the backend's response to it. A partner whose key has not been registered
+        gets an error rather than a document — the request is not served in the
+        clear.
+      parameters:
+        - { name: X-Partner-Id, in: header, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: base64 of an armored PGP message, encrypted to this partner's key
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500': { description: No key for this partner, or the stored key is unusable }
+      x-helix-gateway:
+        plugins:
+          # Runs first (priority 3001) and populates ctx.helix.key_value_map.
+          # A MISS IS NOT AN ERROR HERE — the consuming plugin is what fails. That
+          # is deliberate: key-value-map does not know whether a missing value
+          # matters.
+          key-value-map:
+            fail_action: close
+            fetch:
+              keys:
+                - key: "$request.headers.x-partner-id"
+
+          # Resolves the SAME reference against the namespace key-value-map wrote.
+          # keys_ctx_namespace must match key-value-map's ctx_namespace; both are
+          # left at the default here so they agree by construction.
+          pgp-crypto:
+            keys_ctx_namespace: key_value_map
+            encrypt:
+              target: response
+              source: body
+              public_key: "$request.headers.x-partner-id"
+              # No key, no document. fail-open would return the backend's response
+              # in the clear to a caller who was supposed to receive ciphertext.
+              fail_policy: fail-close
+              fail_close_status: 500
+              fail_close_message: "no usable key is registered for this partner"
+            max_body_size: 1048576
+
+          proxy-rewrite:
+            uri: /json
+
+# API-WIDE POLICY.
+#
+# Note what is NOT here: authentication. The partner id is taken from a header the
+# caller controls, so as shipped any caller can ask for any partner's document —
+# they receive something encrypted to that partner's key and cannot read it, which
+# is a reason not to panic and NOT a reason to call it access control. Bind the
+# partner id to an authenticated identity before this carries anything real:
+# helix-auth resolves the calling app, and $consumer.<suffix> exists in the
+# reference grammar precisely so the key can be keyed on that instead of on a
+# header.
+x-helix-gateway:
+  plugins:
+    request-id:
+      algorithm: uuid
+      header_name: X-Request-Id

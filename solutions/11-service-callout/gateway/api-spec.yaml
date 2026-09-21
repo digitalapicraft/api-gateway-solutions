@@ -1,0 +1,174 @@
+# Solution 11 — do the shared lookup once, at the edge, and hand the answer to the
+# backend as headers.
+#
+# This is the importable artifact: an OpenAPI 3.0.3 document carrying
+# x-helix-gateway.plugins. Two ways to use it: paste the agent prompt into Agent
+# Mode (it creates the API and binds the upstream for you), or import this file,
+# bind the upstream, and deploy the revision.
+#
+# RUNNABLE ON A FRESH FREE-TRIAL ORG, with nothing to fill in. The upstream is the
+# public httpbin.org, whose /headers endpoint echoes the request headers back — so
+# you can SEE exactly what your backend would have received. The callout target is
+# the public jsonplaceholder service, standing in for your customer-profile
+# service. Replace both with your own; nothing else changes.
+#
+# ENVIRONMENT: a free-trial org gets a "test" environment by default — deploy here.
+#
+# WHAT THIS DOES
+#   service-callout makes ONE outbound HTTP call before the request is proxied,
+#   maps chosen fields of that response into the request context, and
+#   proxy-rewrite injects them as headers on the upstream call. The backend reads a
+#   header instead of making the lookup itself.
+#
+# THE TWO THINGS THAT MAKE THIS WORK, BOTH VERIFIED AGAINST A GATEWAY
+#
+#   1. phase: rewrite — NOT access.
+#      proxy-rewrite runs in the REWRITE phase. A callout configured for the access
+#      phase runs AFTER it, so the header values are not there yet and the backend
+#      receives empty headers. Within the rewrite phase, service-callout (priority
+#      2003) runs before proxy-rewrite (1008), which is the order this needs.
+#      Phase beats priority; priority only orders within a phase.
+#
+#   2. The bridge is a variable named after the namespace.
+#      Every field in map_response_to_ctx is mirrored into a gateway variable
+#      called ctx.helix.<ctx_namespace>.<field>. That is the literal variable name
+#      — dots and all — so proxy-rewrite reads it as
+#      ${ctx.helix.service_callout.tenant_plan}.
+#
+# FAILURE POLICY IS A REAL DECISION, MADE PER ROUTE
+#   fail-open  the callout failed, the request proceeds, the headers are absent.
+#              Right for a read path where a stale or missing answer is survivable.
+#   fail-close the callout failed, the gateway returns 503 and the backend is never
+#              called. Right for a write path where acting without the answer is
+#              worse than not acting.
+#   A backend reading these headers MUST handle them being absent under fail-open.
+#
+# WHAT THIS IS NOT: an authorization decision. service-callout stores a response;
+# it does not act on it. A route that must REJECT based on what the callout said
+# needs forward-auth or opa, which are built to return a verdict.
+
+openapi: 3.0.3
+
+info:
+  title: Storefront API
+  version: 1.0.0
+  description: >-
+    A storefront API whose backend needs to know the calling tenant's plan and
+    account status on every request. The gateway performs that lookup once and
+    passes the answer downstream as headers. Proxies the public httpbin service,
+    which echoes request headers, so you can see exactly what the backend receives.
+
+paths:
+  /storefront/orders:
+    get:
+      summary: List orders, enriched with the tenant's profile
+      description: >-
+        The gateway calls the customer-profile service, maps three fields out of the
+        response, and forwards them to the backend as X-Tenant-* headers. On this
+        read path the callout is fail-open: if the profile service is down the
+        request still reaches the backend, without the headers.
+      responses:
+        '200':
+          description: The backend's response. The echo shows the injected headers.
+          content:
+            application/json:
+              schema:
+                type: object
+        '502': { description: The backend was unreachable }
+      x-helix-gateway:
+        plugins:
+          # ONE outbound call, in the rewrite phase, before proxy-rewrite reads the
+          # values. Synchronous by default — the request waits for it, so `timeout`
+          # is added to this route's latency on every call.
+          service-callout:
+            uri: https://jsonplaceholder.typicode.com/users/1
+            method: GET
+            phase: rewrite
+            timeout: 3000
+            ssl_verify: true
+
+            # Dotted paths into the callout's response. `status` and `headers.<name>`
+            # are also available. A path that does not resolve simply yields no
+            # value — it is not an error.
+            map_response_to_ctx:
+              tenant_plan: body.company.name
+              tenant_contact: body.email
+              profile_status: status
+
+            # Read path: survive the profile service being down.
+            error_handling:
+              policy: fail-open
+
+            # Reuse connections. A callout without keepalive turns one upstream
+            # request into two TCP handshakes.
+            keepalive:
+              enabled: true
+              pool_size: 32
+              timeout: 60000
+
+          # The injection. These variable names are literal — the dots are part of
+          # the name, not a path expression. An unresolved variable is NOT an
+          # error: in the fail-open run the three headers simply did not arrive at
+          # the backend at all. Your backend must therefore treat the headers as
+          # optional and decide what to do when they are missing.
+          proxy-rewrite:
+            uri: /headers
+            headers:
+              set:
+                X-Tenant-Plan: "${ctx.helix.service_callout.tenant_plan}"
+                X-Tenant-Contact: "${ctx.helix.service_callout.tenant_contact}"
+                X-Profile-Status: "${ctx.helix.service_callout.profile_status}"
+
+  /storefront/checkout:
+    post:
+      summary: Place an order, refusing to proceed without the tenant's profile
+      description: >-
+        The same lookup on a write path, with the opposite failure policy. If the
+        profile service cannot be reached the gateway returns 503 and the backend
+        is never called — taking money without knowing the account's status is
+        worse than failing the request.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200': { description: Accepted by the backend }
+        '503': { description: The profile service could not be reached; the request was not forwarded }
+      x-helix-gateway:
+        plugins:
+          service-callout:
+            uri: https://jsonplaceholder.typicode.com/users/1
+            method: GET
+            phase: rewrite
+            timeout: 3000
+            ssl_verify: true
+            map_response_to_ctx:
+              tenant_plan: body.company.name
+              profile_status: status
+            # Write path: refuse rather than guess.
+            error_handling:
+              policy: fail-close
+              message: "tenant profile unavailable"
+            keepalive:
+              enabled: true
+              pool_size: 32
+              timeout: 60000
+
+          proxy-rewrite:
+            uri: /post
+            headers:
+              set:
+                X-Tenant-Plan: "${ctx.helix.service_callout.tenant_plan}"
+                X-Profile-Status: "${ctx.helix.service_callout.profile_status}"
+
+# API-WIDE POLICY.
+x-helix-gateway:
+  plugins:
+    # Correlation id. A callout doubles the number of places a request can be slow
+    # or fail, and the failure surfaces at the gateway rather than in either
+    # service's log. This is the field that ties the three together.
+    request-id:
+      algorithm: uuid
+      header_name: X-Request-Id

@@ -1,0 +1,75 @@
+# Gateway validation — this solution was imported, dry-run, deployed and exercised
+# against a gateway. The statuses below are the outcome. Re-run
+# gateway/verify.sh against your own environment before you rely on it.
+
+gateway_validation:
+  solution: 09-xml-to-json
+  version: 1.0.0
+
+  dry_run:
+    status: PASS
+    detail: Non-destructive dry-run passed against a temporary import of the shipped spec.
+
+  deployment:
+    status: DEPLOYED
+    detail: >-
+      Imported cleanly and deployed ACTIVE to a test environment, bound to a public
+      upstream that both serves an XML document and echoes requests.
+
+  functional_tests:
+    executor: gateway/verify.sh
+    status: PASS
+    detail: All five cases pass against the deployed routes, as shipped and unmodified.
+    cases:
+      - { id: response-converted,    expected_status: 200, result: PASS, note: "content-type application/json; no XML markup left in the body" }
+      - { id: response-not-converted, expected_status: 200, result: PASS, note: "Accept: application/xml returned the backend document untouched" }
+      - { id: request-converted,     expected_status: 200, result: PASS, note: "the echo shows <order xmlns=...> and the array rendered as repeated <lines> siblings; the gateway also set the upstream Content-Type to application/xml" }
+      - { id: request-passthrough,   expected_status: 200, result: PASS, note: "a text/plain body reached the upstream unchanged, with its original content type and no error" }
+      - { id: malformed-json,        expected_status: 400, result: PASS, note: "rejected at the gateway before the backend, naming the parse position" }
+
+  observations:
+    - >-
+      DEFECT on this build: pretty: true makes the route return 503 with the
+      connection terminated before headers. Isolated by ablation — property_naming
+      alone and root_name alone both return 200 and convert correctly; pretty alone
+      fails. The shipped spec does not set it and the package says so explicitly.
+    - >-
+      Conversion fidelity, observed on a real document rather than inferred:
+      root-element attributes became ordinary JSON keys; attributes on CHILD
+      elements were absent from the output; a repeated element became an array
+      while a single occurrence became an object; an empty element became null;
+      mixed content was reshaped into separate keys with the text rejoined.
+    - >-
+      JSON to XML: an array under a key becomes repeated sibling elements named
+      after the key, a top-level array is wrapped in request_root_name with
+      array_item_name children, and object key ORDER is not preserved.
+    - >-
+      The request transform also rewrites the upstream-bound Accept header to
+      application/xml, so a backend that content-negotiates keeps seeing what it
+      expects.
+
+  agent_prompt:
+    status: PASS
+    detail: >-
+      The README's Step 1 prompt was run against the hosted agent on the default
+      model. It read the live xml-to-json schema, created the API, wrote cors and
+      request-id into the SERVICE spec and xml-to-json + proxy-rewrite into each
+      route spec — response-only on the read route, both directions on the write
+      route — bound the upstream, and reached a successful dry_run_deploy without
+      deploying. The configuration it produced matches this package's spec.
+    finding: >-
+      The first two dry-runs FAILED because the agent volunteered empty optional
+      fields inside proxy-rewrite (regex_uri: [null, null], then headers: {}). It
+      removed them itself and the third dry-run passed. The shipped prompt now
+      tells it to set only the fields it needs, which removes both round trips.
+
+  not_established_here:
+    - >-
+      Fidelity for YOUR document. The observations above are from the document this
+      run converted; attribute and mixed-content handling must be checked against
+      your own.
+    - >-
+      Whether a backend validating a strict xs:sequence accepts the generated
+      element order. No such backend was involved in this run.
+
+  overall: READY

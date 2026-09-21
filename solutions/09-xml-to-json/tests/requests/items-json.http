@@ -1,0 +1,5 @@
+### Case: items-json — ask for JSON and get the backend's XML converted.
+### Expect 200, content-type application/json, and no XML markup in the body.
+### The Accept header is load-bearing: without it the conversion does not run.
+GET {{GATEWAY}}/catalog/items
+accept: application/json

@@ -1,0 +1,8 @@
+### Case: callout-down — the write route while the profile service is unreachable.
+### Expect 503 with the configured message, and NO call to the backend.
+### Reproduce by pointing the callout at an unresolvable host in a throwaway
+### environment; the request itself is an ordinary one.
+POST {{GATEWAY}}/storefront/checkout
+content-type: application/json
+
+{"sku":"BRK-2100","qty":1}

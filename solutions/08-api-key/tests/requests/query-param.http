@@ -1,0 +1,6 @@
+### Case: query-param — the right key in the query string.
+### Expect 401. The route declares source: header, so a query parameter must not
+### authenticate. This matters: a key in a URL is copied into every access log,
+### proxy log and browser history it passes through.
+GET {{GATEWAY}}/fleet/price-list?apikey={{DEVICE_API_KEY}}
+accept: application/json

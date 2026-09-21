@@ -1,0 +1,154 @@
+# Solution 08 — API-key identity for callers that cannot run a token exchange.
+#
+# This is the importable artifact: an OpenAPI 3.0.3 document carrying
+# x-helix-gateway.plugins. Two ways to use it: paste the agent prompt into Agent
+# Mode (it creates the API and binds the upstream for you), or import this file,
+# bind the upstream, and deploy the revision.
+#
+# RUNNABLE ON A FRESH FREE-TRIAL ORG. The upstream is the public
+# https://jsonplaceholder.typicode.com, so both routes return real data with no
+# backend of your own. Swap in your real upstream when you have one — only the
+# proxy-rewrite paths change.
+#
+# ENVIRONMENT: a free-trial org gets a "test" environment by default — deploy here.
+#
+# WHAT THIS DOES
+#   Every route requires an app's API key in the X-Device-Key header. The gateway
+#   resolves the key to an app (a credential) in the access phase and rejects
+#   everything else before the request reaches the upstream. Revoking one caller
+#   is a control-plane action on that app — no config change, no redeploy, and no
+#   firmware on the device.
+#
+# WHY key-auth AND NOT A TOKEN
+#   These callers cannot run an OAuth exchange (no clock discipline, no room for a
+#   refresh loop, a firmware release measured in quarters). A key in a header is
+#   the only credential shape they can hold. The trade is explicit and documented
+#   in the README: the credential travels on every request, so the control that
+#   matters is fast revocation, not a short lifetime.
+#
+# THE SPEC CONTAINS NO SECRET, BY CONSTRUCTION.
+#   helix-auth validate/key-auth has no key field on the route — it names the
+#   HEADER the key arrives in, never the key itself. The key and secret live only
+#   on the app credential, which the control plane provisions. There is nothing in
+#   this file to fill in and nothing to leak.
+#
+# TWO THINGS THE SCHEMA DOES NOT TELL YOU, BOTH VERIFIED AGAINST A GATEWAY
+#   1. `apikey` with `source` is MANDATORY here. The published JSON schema marks it
+#      optional, but the plugin's own check rejects the config at dry-run:
+#      'property "apikey" with "source" is required when mode is validate and
+#      validate_auth_type is key-auth'.
+#   2. `secret_validation: true` is NOT a second factor. It makes the credential's
+#      SECRET an ALTERNATIVE credential accepted when the key is absent — it widens
+#      what is accepted rather than requiring more. It is deliberately absent below.
+#
+# EXECUTION IS PRIORITY/PHASE-ORDERED, NOT DOCUMENT-ORDERED. helix-auth validate
+# (priority 2450) runs in the access phase, so a rejected request never reaches
+# the upstream. proxy-rewrite (1008) runs in the earlier rewrite phase; it only
+# retargets the upstream path and takes no part in the auth decision.
+#
+# NOTE: key-auth and jwt-auth are validate_auth_type VALUES of helix-auth, not
+# standalone plugins on this build.
+
+openapi: 3.0.3
+
+info:
+  title: Terminal API
+  version: 1.0.0
+  description: >-
+    The two endpoints a field terminal calls: it pulls its price list and pushes
+    its takings. Every call is identified by the terminal's own API key, resolved
+    at the gateway to the app that owns it. Proxies the public jsonplaceholder
+    service so it returns real data on a fresh org; point it at your own upstream
+    when ready.
+
+paths:
+  /fleet/price-list:
+    get:
+      summary: Fetch the current price list for this terminal
+      description: >-
+        Requires the terminal's API key in `X-Device-Key`. The gateway resolves the
+        key to an app before the request is forwarded. A missing key is rejected
+        with `Missing API key in request`; an unknown or revoked key with
+        `Invalid API key in request`.
+      responses:
+        '200':
+          description: The current price list
+          content:
+            application/json:
+              schema:
+                type: object
+        '401': { description: No API key, or a key that does not resolve to an app }
+      x-helix-gateway:
+        plugins:
+          # Identity, access phase. Rejects anything whose X-Device-Key does not
+          # resolve to an app credential, before the upstream is contacted.
+          # apikey.source is mandatory in practice — see the header comment.
+          helix-auth:
+            mode: validate
+            validate_auth_type: key-auth
+            apikey:
+              source: header
+              key: X-Device-Key
+
+          # The upstream's path differs from the published one. Route paths are
+          # the contract with 4,000 devices that cannot be redeployed; upstream
+          # paths are not. Rewrite here rather than renaming the route.
+          proxy-rewrite:
+            uri: /todos/1
+
+  /fleet/takings:
+    post:
+      summary: Submit this terminal's takings
+      description: >-
+        Requires the terminal's API key in `X-Device-Key`. The body is forwarded
+        unchanged; the backend acknowledges with a receipt id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [terminalId, periodEnd, grossCents]
+              properties:
+                terminalId: { type: string }
+                periodEnd:  { type: string, format: date-time }
+                grossCents: { type: integer }
+      responses:
+        '201':
+          description: Takings accepted
+          content:
+            application/json:
+              schema:
+                type: object
+        '401': { description: No API key, or a key that does not resolve to an app }
+      x-helix-gateway:
+        plugins:
+          helix-auth:
+            mode: validate
+            validate_auth_type: key-auth
+            apikey:
+              source: header
+              key: X-Device-Key
+
+          proxy-rewrite:
+            uri: /posts
+
+# API-WIDE POLICY.
+#
+# Note what is NOT here. There is no cors block: these callers are embedded
+# devices, not browsers, and a wildcard CORS policy on a fleet API grants browser
+# origins an access path the fleet itself never needs. Solution 01 carries cors
+# because its callers include browser clients; this one deliberately does not.
+#
+# helix-auth is applied per route rather than at the document root only because
+# both routes need it identically — hoisting it to the root would work here. It is
+# kept per route so that adding an unauthenticated health route later is a local
+# change rather than a re-think.
+x-helix-gateway:
+  plugins:
+    # Correlation id on every call. When a site reports "terminal 3312 has been
+    # failing since Tuesday", this is the field that ties the gateway's record of
+    # the rejection to the backend's record of the calls that did get through.
+    request-id:
+      algorithm: uuid
+      header_name: X-Request-Id

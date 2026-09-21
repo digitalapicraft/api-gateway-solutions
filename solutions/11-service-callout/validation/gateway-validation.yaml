@@ -1,0 +1,75 @@
+# Gateway validation — this solution was imported, dry-run, deployed and exercised
+# against a gateway. The statuses below are the outcome. Re-run
+# gateway/verify.sh against your own environment before you rely on it.
+
+gateway_validation:
+  solution: 11-service-callout
+  version: 1.0.0
+
+  dry_run:
+    status: PASS
+    detail: Non-destructive dry-run passed against a temporary import of the shipped spec.
+
+  deployment:
+    status: DEPLOYED
+    detail: >-
+      Imported cleanly and deployed ACTIVE to a test environment, bound to a public
+      upstream that echoes request headers.
+
+  functional_tests:
+    executor: gateway/verify.sh
+    status: PASS
+    detail: All five cases pass against the deployed routes, as shipped and unmodified.
+    cases:
+      - { id: enriched-read,        expected_status: 200, result: PASS, note: "backend received X-Tenant-Plan: Romaguera-Crona, mapped from body.company.name" }
+      - { id: mapped-second-field,  expected_status: 200, result: PASS, note: "X-Tenant-Contact also present, mapped from body.email" }
+      - { id: callout-status,       expected_status: 200, result: PASS, note: "X-Profile-Status carried the CALLOUT's 200, not the route's" }
+      - { id: spoofed-header,       expected_status: 200, result: PASS, note: "a client-sent X-Tenant-Plan: Enterprise-Unlimited was overwritten with the callout's value" }
+      - { id: enriched-write,       expected_status: 200, result: PASS, note: "body forwarded unchanged and the same enrichment applied" }
+
+  failure_cases_reproduced:
+    method: >-
+      A temporary lab API carried three variant routes — the same callout pointed at
+      an unresolvable host under each policy, and one configured for the access
+      phase — and was deleted after the run.
+    results:
+      - id: callout-down-fail-close
+        result: "503 with the configured message; the backend was never called"
+      - id: callout-down-fail-open
+        result: >-
+          200, and the enrichment headers were ABSENT from what the backend received
+          — not empty. This is the detail backend teams need: a missing header, not
+          a blank one.
+      - id: wrong-phase
+        result: >-
+          200, and NO enrichment headers at all. An access-phase callout runs after
+          proxy-rewrite has already injected, and nothing anywhere reports an error.
+          This is what "deploys cleanly and does nothing" looks like.
+
+  agent_prompt:
+    status: PASS
+    detail: >-
+      The README's Step 1 prompt was run against the hosted agent on the default
+      model. It read the live service-callout schema, created the API, wrote
+      request-id into the SERVICE spec and service-callout + proxy-rewrite into the
+      route spec with a flat plugins map, bound the upstream, and reached a
+      successful dry_run_deploy without deploying. The configuration it produced
+      matches this package's spec exactly: phase rewrite, all three
+      map_response_to_ctx paths, fail-open, and headers.set carrying the three
+      ${ctx.helix.service_callout.*} variables.
+    finding: >-
+      An earlier wording that said only "put the plugins in a flat plugins map, do
+      not nest them under x-helix-gateway" was IGNORED five writes out of five — the
+      agent nested them anyway, every write reported success, the dry-run passed,
+      and the deployed route carried no plugins at all. It also read the
+      spec-generator's document-shaped references immediately beforehand. The
+      wording that worked names the live route object explicitly, tells the agent
+      NOT to follow those examples, and shows the literal route-object shape. That
+      wording is what ships, here and in every other package in this set.
+
+  not_established_here:
+    - The latency the callout adds under representative load, and therefore whether
+      the shipped timeout of 3000ms is right for your route.
+    - Whether a real profile service can absorb one call per request at your volume.
+
+  overall: READY

@@ -1,0 +1,69 @@
+# Local (pre-gateway) validation — a structural review of the importable
+# artifacts. It does not, and cannot, establish gateway behaviour. Nothing here
+# implies a gateway accepted this configuration.
+
+local_validation:
+  solution: 09-xml-to-json
+  version: 1.0.0
+  status: PASS
+
+  checks:
+    syntax:                  PASS   # api-spec.yaml parses as valid OpenAPI 3.0.3; verify.sh parses under bash -n
+    schema:                  PASS   # xml-to-json (transform_request/transform_response/content_types/request_content_types/request_root_name/array_item_name/root_attributes/max_body_size), proxy-rewrite, request-id, cors — every field drawn from the live plugin schema in the target org
+    required_fields:         PASS   # the write route carries transform_request explicitly rather than relying on a default that is false
+    references:              PASS   # request_root_name and root_attributes are referenced by the test plan and by verify.sh through overridable variables, so the assertions cannot drift from the config
+    plugin_ordering:         PASS   # proxy-rewrite (1008) and xml-to-json (997) both run in the rewrite phase, in that order; proxy-rewrite sets only uri, never Content-Type
+    plugin_scoping:          PASS   # xml-to-json is per route because the two routes need different directions; request-id and cors are API-wide
+    auth_authz_dependencies: PASS   # none — this package ships unauthenticated on purpose
+    request_response:        PASS   # documented 200/400/502 responses match the design, including the 400 the request transform raises on an unparseable body
+    security:                PASS   # no secrets of any kind; the spec carries no credential fields
+    no_commentary_keys:      PASS   # plugin blocks contain schema fields only; all explanation is in YAML comments
+    tests_match_impl:        PASS   # all five verify.sh cases map to routes and plugins that exist in the spec; the three manual cases are flagged as such in tests/test-plan.yaml
+    placeholders:            PASS   # <YOUR_GATEWAY_HOST>, <ORG_ID> — no real hosts, org ids or personas
+
+  warnings:
+    - >-
+      The response transform is content-negotiated: it fires only when the client
+      sends Accept: application/json. A client that omits the header receives the
+      backend's XML and will report the gateway as misconfigured.
+    - >-
+      transform_request defaults to false. An xml-to-json block without it converts
+      responses only, and the request direction silently never happens.
+    - >-
+      A request body whose Content-Type is not in request_content_types is forwarded
+      UNCHANGED with no error, as is any body larger than max_body_size. Both gates
+      fail open, so a 200 from the gateway is not evidence that conversion occurred.
+      Alert on backend parse failures instead.
+    - >-
+      Setting pretty to true is not safe on this build — the route returns 503 with
+      the connection terminated before headers. root_name and property_naming work.
+    - >-
+      Setting Content-Type in proxy-rewrite breaks the request transform, because
+      proxy-rewrite runs first and the transform then stops matching
+      request_content_types. The spec sets only uri.
+    - >-
+      The conversion is lossy in three known places: attributes on child elements,
+      mixed content, and the ambiguity between a single occurrence and a one-item
+      array. Documents that carry meaning in any of them need a template-based
+      transform rather than this structural one.
+    - >-
+      JSON object key order is not preserved on the way to XML, so a backend
+      validating a strict xs:sequence can reject a document that contains every
+      field it asked for.
+    - >-
+      content_types defaults to application/xml and text/xml. A backend replying
+      text/html or application/soap+xml matches neither and nothing will happen.
+    - >-
+      This package ships with no authentication. It demonstrates mediation only;
+      put solution 08 or solution 01 in front before it carries anything real.
+
+  assumptions:
+    - API "Catalog API" with routes /catalog/items and /catalog/orders. All illustrative.
+    - The backend replies application/xml or text/xml.
+    - The sample upstream echoes requests, which is what makes the request direction observable.
+    - The generated root element is <order> in urn:example:catalog.
+
+  not_established_here:
+    - Whether a gateway accepts this configuration (that is a dry-run).
+    - What YOUR document converts to — fidelity depends on the document, not the config.
+    - Whether your backend's parser accepts the generated element order.

@@ -1,0 +1,181 @@
+# Solution 10 — mask sensitive values on the way out, and again on the way to the logs.
+#
+# This is the importable artifact: an OpenAPI 3.0.3 document carrying
+# x-helix-gateway.plugins. Two ways to use it: paste the agent prompt into Agent
+# Mode (it creates the API and binds the upstream for you), or import this file,
+# bind the upstream, and deploy the revision.
+#
+# RUNNABLE ON A FRESH FREE-TRIAL ORG. The upstream is the public
+# https://jsonplaceholder.typicode.com, whose /users documents carry exactly the
+# kind of fields this solution exists to hide: email, phone and precise
+# coordinates. Swap in your real upstream when you have one.
+#
+# ENVIRONMENT: a free-trial org gets a "test" environment by default — deploy here.
+#
+# TWO DIFFERENT MASKS, TWO DIFFERENT PURPOSES. Do not confuse them.
+#
+#   response-rewrite  changes what the CALLER receives. This is the one that stops
+#                     a support agent reading a customer's full phone number off
+#                     their screen. It rewrites the response body itself.
+#
+#   log-data-mask     changes what a LOGGER writes. It does NOT alter the response
+#                     and it does NOT affect analytics — it is read by the shared
+#                     log helper that the logger plugins use, so it only has an
+#                     effect on a route that also carries one of them
+#                     (http-logger, kafka-logger, file-logger, clickhouse-logger,
+#                     and the rest).
+#
+# Neither is a substitute for the other, and a route that carries only
+# log-data-mask still sends the caller everything.
+#
+# THE MASK IS A REGEX OVER THE RESPONSE BODY. That is its strength (no knowledge of
+# your schema required, works on any shape) and its weakness (it is text
+# matching, not parsing). Two consequences, both real:
+#   - a field that appears under a different name, or nested inside an encoded
+#     string, is NOT masked;
+#   - a pattern that is too broad will mask text you meant to keep.
+# Every pattern below is anchored on the field name for that reason.
+#
+# ORDERING. response-rewrite runs at priority 899 in the response path; the body
+# it sees is whatever the upstream sent. If you also convert formats on this route
+# (solution 09), the converter runs at 997 — higher, therefore first — so write
+# the patterns against the CONVERTED body, not the original.
+
+openapi: 3.0.3
+
+info:
+  title: Support Console API
+  version: 1.0.0
+  description: >-
+    The customer lookup a support agent calls fifty times a day. The backend
+    returns the whole customer record; the gateway removes the parts nobody in
+    support needs to read. Proxies the public jsonplaceholder service, whose user
+    documents carry email, phone and precise coordinates, so the masking is
+    visible on a fresh org with no backend of your own.
+
+paths:
+  /support/customers:
+    get:
+      summary: List customers, with sensitive fields masked
+      description: >-
+        Returns the backend's customer list with the local part of each email
+        address, the whole phone number and the precise coordinates replaced. The
+        domain of the email survives, because support needs to know which company
+        a person belongs to.
+      responses:
+        '200':
+          description: Customer list, masked
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        '502': { description: The backend was unreachable }
+      x-helix-gateway:
+        plugins:
+          # WHAT THE CALLER SEES. Each filter is anchored on its field name so it
+          # cannot match text elsewhere in the document. scope: global because a
+          # list response contains many records — the default, "once", would mask
+          # only the first one, which is the single most dangerous default in this
+          # whole package.
+          response-rewrite:
+            filters:
+              # name@example.com -> ***@example.com
+              # The domain is deliberately kept: it is the part support actually
+              # uses, and it is not the identifying half.
+              - regex: '("email"\s*:\s*")[^"@]+@'
+                replace: '$1***@'
+                scope: global
+              # The whole number goes. There is no partial phone number that is
+              # both useful to an agent and safe to leave.
+              - regex: '("phone"\s*:\s*")[^"]*"'
+                replace: '$1[redacted]"'
+                scope: global
+              # Precise coordinates identify a home address. Both halves.
+              - regex: '("lat"\s*:\s*")[^"]*"'
+                replace: '$1[redacted]"'
+                scope: global
+              - regex: '("lng"\s*:\s*")[^"]*"'
+                replace: '$1[redacted]"'
+                scope: global
+
+          # WHAT A LOGGER WRITES. No effect on the response, and no effect at all
+          # unless a logger plugin is on this route. It is here because the audit
+          # finding that starts this project is usually about the log aggregator,
+          # not the screen.
+          log-data-mask:
+            response:
+              - { type: body, name: email, action: replace, value: "[redacted]", body_format: json }
+              - { type: body, name: phone, action: replace, value: "[redacted]", body_format: json }
+            request:
+              # The credential must never reach a log line, whatever else does.
+              - { type: header, name: authorization, action: remove }
+              - { type: header, name: x-api-key, action: remove }
+
+          proxy-rewrite:
+            uri: /users
+
+  /support/customers/{customerId}:
+    get:
+      summary: Fetch one customer, with sensitive fields masked
+      description: >-
+        The same masking on a single record. The path segment is carried through
+        to the backend with a regex rewrite rather than a fixed path.
+      parameters:
+        - { name: customerId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: One customer, masked
+          content:
+            application/json:
+              schema:
+                type: object
+        '404': { description: No such customer }
+        '502': { description: The backend was unreachable }
+      x-helix-gateway:
+        plugins:
+          response-rewrite:
+            filters:
+              - regex: '("email"\s*:\s*")[^"@]+@'
+                replace: '$1***@'
+                scope: global
+              - regex: '("phone"\s*:\s*")[^"]*"'
+                replace: '$1[redacted]"'
+                scope: global
+              - regex: '("lat"\s*:\s*")[^"]*"'
+                replace: '$1[redacted]"'
+                scope: global
+              - regex: '("lng"\s*:\s*")[^"]*"'
+                replace: '$1[redacted]"'
+                scope: global
+
+          log-data-mask:
+            response:
+              - { type: body, name: email, action: replace, value: "[redacted]", body_format: json }
+              - { type: body, name: phone, action: replace, value: "[redacted]", body_format: json }
+            request:
+              - { type: header, name: authorization, action: remove }
+              - { type: header, name: x-api-key, action: remove }
+
+          # The customer id is carried into the upstream path. `uri` is a fixed
+          # string and would send every request to the same record.
+          proxy-rewrite:
+            regex_uri:
+              - "^/support/customers/(.*)$"
+              - "/users/$1"
+
+# API-WIDE POLICY.
+#
+# Note what is NOT here: no authentication. This package demonstrates masking, and
+# masking is not access control — a caller who should not see the record at all
+# must be stopped by identity, not by a redacted field. Put solution 08 or
+# solution 01 in front of this before it carries anything real.
+x-helix-gateway:
+  plugins:
+    # Correlation id. A masked response is, by design, harder to support: the
+    # agent cannot read back the value they are asking about. The request id is
+    # what they quote instead.
+    request-id:
+      algorithm: uuid
+      header_name: X-Request-Id

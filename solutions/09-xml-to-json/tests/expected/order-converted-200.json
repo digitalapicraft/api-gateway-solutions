@@ -1,0 +1,9 @@
+{
+  "status": 200,
+  "body": {
+    "data": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><order xmlns=\"urn:example:catalog\"><lines><qty>4</qty><sku>BRK-2100</sku></lines><lines><qty>1</qty><sku>FLT-0090</sku></lines><orderId>SO-88120</orderId></order>",
+    "headers": {
+      "Content-Type": "application/xml"
+    }
+  }
+}

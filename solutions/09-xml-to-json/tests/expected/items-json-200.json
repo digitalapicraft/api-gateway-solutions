@@ -1,0 +1,19 @@
+{
+  "status": 200,
+  "headers": {
+    "present": [
+      "X-Request-Id"
+    ],
+    "content-type": "application/json"
+  },
+  "body": {
+    "catalog": {
+      "item": [
+        {
+          "sku": "BRK-2100",
+          "description": "Brake pad set"
+        }
+      ]
+    }
+  }
+}

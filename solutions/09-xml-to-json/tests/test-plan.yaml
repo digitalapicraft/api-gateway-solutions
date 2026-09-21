@@ -1,0 +1,161 @@
+# Test plan — JSON in, JSON out, in front of an XML-only backend.
+#
+# Cases 1-5 are executed in order by ../gateway/verify.sh, which exits 0 only if
+# all of them hold. The fixtures under requests/ and expected/ document each case
+# independently so you can run one by hand.
+#
+# Substitute your own values:
+#   {{GATEWAY}}   gateway base URL, e.g. https://<YOUR_GATEWAY_HOST>
+
+meta:
+  solution: 09-xml-to-json
+  version: 1.0.0
+  executor: gateway/verify.sh
+  note: >-
+    Cases 3 and 4 assert what the BACKEND received, so they need an upstream that
+    echoes the request. The package's sample upstream does; against your own
+    backend run verify.sh with ECHOES_REQUEST=0 and read its log instead.
+  status: >-
+    EXECUTED against a deployed revision — 5/5. See
+    ../validation/gateway-validation.yaml for the recorded outcome.
+
+cases:
+  - id: response-converted
+    type: positive
+    intent: >-
+      An XML response is converted to JSON when the client asks for JSON, and no
+      XML markup survives in the body.
+    request: requests/items-json.http
+    expected: expected/items-json-200.json
+    response_notes: >-
+      The body below is illustrative — yours is your backend's document, converted.
+      Assert the status, the content type, and the absence of XML markup rather
+      than a specific shape. Conversion details that will surprise you are in the
+      README: attributes on child elements are dropped, a single occurrence of a
+      repeatable element becomes an object rather than a one-item array, an empty
+      element becomes null, and mixed content is mangled.
+    expected_status: 200
+    notes: >-
+      If XML comes back, the upstream's Content-Type is not in content_types.
+      application/xml and text/xml are the defaults; a backend replying
+      text/html or application/soap+xml will not match and nothing will happen.
+
+  - id: response-not-converted
+    type: boundary
+    intent: >-
+      The same route returns untouched XML when the client does not ask for JSON —
+      establishing that the transform is content-negotiated, not unconditional.
+    request: requests/items-xml.http
+    expected: expected/items-xml-200.json
+    response_notes: >-
+      The backend's own document, byte for byte. This is the property that lets an
+      existing XML client keep using the same route while a new JSON client is
+      onboarded — worth knowing you have it, because it is also the reason a
+      client that forgets the Accept header sees "the plugin doing nothing".
+    expected_status: 200
+
+  - id: request-converted
+    type: positive
+    intent: >-
+      A JSON request body is converted to XML before the backend sees it, with the
+      configured root element and namespace.
+    request: requests/order-json.http
+    expected: expected/order-converted-200.json
+    response_notes: >-
+      The sample upstream echoes what it received, so `data` is the XML the
+      gateway generated and `headers.Content-Type` shows the gateway also set the
+      content type for the backend. Note the array: `lines` became two sibling
+      <lines> elements, not one element containing a list.
+    expected_status: 200
+    notes: >-
+      Element ORDER is not preserved — JSON objects are unordered and the
+      generated XML reflects that. A backend whose schema uses xs:sequence can
+      reject a document that contains every field it asked for. Check this before
+      you promise the request direction to anyone.
+
+  - id: request-passthrough
+    type: failure
+    intent: >-
+      A body whose content type is not in request_content_types is forwarded
+      unchanged, with no error — the failure mode most likely to reach production.
+    request: requests/order-wrong-content-type.http
+    expected: expected/order-passthrough-200.json
+    response_notes: >-
+      The backend received the JSON verbatim, with the client's own content type.
+      Nothing in the gateway's response says the transform was skipped; the first
+      symptom is your backend rejecting a document it cannot parse. The same
+      silent passthrough happens to any body larger than max_body_size.
+    expected_status: 200
+    notes: >-
+      Alert on backend parse failures rather than on gateway status codes. A
+      gateway that returns 200 is not evidence that the conversion happened.
+
+  - id: malformed-json
+    type: negative
+    intent: >-
+      An unparseable JSON body is rejected at the gateway rather than forwarded,
+      because the request transform parses before it converts.
+    request: requests/order-malformed.http
+    expected: expected/malformed-json-400.json
+    expected_status: 400
+    notes: >-
+      The message names the parse position. Assert the status; the wording belongs
+      to the build.
+
+  - id: single-element-array
+    type: boundary
+    intent: >-
+      Establish, for your own document, what a repeatable element that occurs once
+      converts to — because XML has no array type and the converter has to guess.
+    type_of_execution: manual
+    procedure: >-
+      Fetch a document where a repeating element appears exactly once, then one
+      where it appears twice, and compare the JSON.
+    expected_outcome: >-
+      One occurrence produces an object; two or more produce an array. A client
+      written against the two-item response breaks on the one-item response. Fix
+      it in the client, or normalise in your own layer — the plugin has no
+      "always array" option.
+    notes: >-
+      This is the single most common cause of an intermittent client bug after an
+      XML-to-JSON migration, and it only appears when real data goes quiet.
+
+  - id: attribute-fidelity
+    type: boundary
+    intent: >-
+      Establish what happens to XML attributes in your own document before a
+      client depends on one.
+    type_of_execution: manual
+    procedure: >-
+      Convert a document whose ROOT element carries attributes and whose CHILD
+      elements also carry attributes, and compare.
+    expected_outcome: >-
+      Root-element attributes appear as ordinary JSON keys alongside the child
+      elements. Attributes on child elements were NOT present in the converted
+      output in this package's validation run. Treat attribute-carried data as at
+      risk and check your own document rather than assuming.
+    notes: >-
+      Mixed content (text interleaved with child elements) is also reshaped rather
+      than preserved. If your document carries meaning in attributes or mixed
+      content, mediate it with a template-based transform instead.
+
+  - id: pretty-option
+    type: failure
+    intent: >-
+      Record that one formatting option is not safe to enable on this build.
+    type_of_execution: manual
+    procedure: >-
+      In a THROWAWAY environment only, set pretty: true on the read route and call it.
+    expected_outcome: >-
+      503, with the connection terminated before headers. Verified during this
+      package's validation run and isolated to that one option — root_name and
+      property_naming both work. Do not enable pretty.
+    notes: >-
+      Kept as a case rather than a footnote because "the JSON is hard to read" is
+      exactly the itch that makes somebody turn it on.
+
+coverage:
+  positive: [response-converted, request-converted]
+  negative: [malformed-json]
+  boundary: [response-not-converted, single-element-array, attribute-fidelity]
+  failure:  [request-passthrough, pretty-option]

@@ -1,0 +1,6 @@
+{
+  "status": 500,
+  "body": {
+    "message": "no usable key is registered for this partner"
+  }
+}

@@ -1,0 +1,183 @@
+# Test plan — API-key identity for callers that cannot run a token exchange.
+#
+# Cases 1-7 are executed in order by ../gateway/verify.sh, which exits 0 only if
+# all of them hold. The fixtures under requests/ and expected/ document each case
+# independently so you can run one by hand.
+#
+# Substitute your own values:
+#   {{GATEWAY}}          gateway base URL, e.g. https://<YOUR_GATEWAY_HOST>
+#   {{DEVICE_API_KEY}}   the app's API key — the credential KEY, not its secret
+#   {{APP_SECRET}}       the app's secret, used only to prove it is NOT accepted
+
+meta:
+  solution: 08-api-key
+  version: 1.0.0
+  executor: gateway/verify.sh
+  note: >-
+    Cases 1-7 are automated. Case 6 is skipped unless APP_SECRET is set. The
+    revocation, rotation and secret_validation cases are manual: the first two
+    mutate control-plane state, and the third requires deploying a variant of the
+    configuration this package deliberately does not ship.
+  status: >-
+    EXECUTED against a deployed revision — 7/7. See
+    ../validation/gateway-validation.yaml for the recorded outcome.
+
+cases:
+  - id: no-key
+    type: negative
+    intent: >-
+      A call carrying no credential is rejected in the access phase, before the
+      upstream is contacted.
+    request: requests/no-key.http
+    expected: expected/no-key-401.json
+    response_notes: >-
+      The body distinguishes this from an unknown key — "Missing API key in
+      request" means nothing arrived in X-Device-Key, "Invalid API key in request"
+      means something arrived and resolved to no app. Assert the STATUS; treat the
+      message as a diagnostic aid rather than a contract.
+    expected_status: 401
+    notes: >-
+      If this returns 200 the route is not validating at all. If it returns 403,
+      something else sits ahead of the response — check for an authorization or
+      metering plugin on the route.
+
+  - id: valid-key
+    type: positive
+    intent: >-
+      A live app's key resolves to that app and the request reaches the upstream.
+    request: requests/valid-key.http
+    expected: expected/valid-200.json
+    response_notes: >-
+      The upstream's own payload, passed through untouched — this solution adds
+      identity, not transformation. The body below is what the sample upstream
+      returns; assert the status and that the body is your backend's normal one.
+    expected_status: 200
+    notes: >-
+      A 403 means authentication passed and authorization did not: the app's
+      product does not cover this API. Add the API to the product, or subscribe the
+      app to a product that has it.
+
+  - id: unknown-key
+    type: negative
+    intent: >-
+      A well-formed value that resolves to no app is rejected. This is also the
+      shape of a revoked terminal's traffic, which is what makes revocation
+      testable.
+    request: requests/unknown-key.http
+    expected: expected/unknown-key-401.json
+    response_notes: >-
+      "Invalid API key in request" — the key was read and did not resolve. A 200
+      here is the most serious possible failure of this solution: the route looks
+      configured and is passing everything through.
+    expected_status: 401
+
+  - id: wrong-header
+    type: boundary
+    intent: >-
+      The correct key in a different header is rejected, proving the header name
+      declared in apikey.key is the whole contract.
+    request: requests/wrong-header.http
+    expected: expected/no-key-401.json
+    expected_status: 401
+    notes: >-
+      Worth running after any config edit. If a second header also authenticates,
+      the deployed configuration is not the one in this package.
+
+  - id: query-param
+    type: boundary
+    intent: >-
+      The correct key in the query string is rejected, proving source:header means
+      header and nothing else.
+    request: requests/query-param.http
+    expected: expected/no-key-401.json
+    expected_status: 401
+    notes: >-
+      This is a security case, not a pedantic one. A key in a URL is copied into
+      every access log, proxy log, referrer header and browser history it passes
+      through. If your fleet genuinely cannot set headers you can set
+      apikey.source to query — but then read § Limitations first.
+
+  - id: secret-as-key
+    type: negative
+    intent: >-
+      The app's SECRET, sent where its KEY belongs, does not authenticate —
+      establishing what this package's configuration accepts, and by contrast what
+      secret_validation: true would widen it to.
+    request: requests/secret-as-key.http
+    expected: expected/unknown-key-401.json
+    expected_status: 401
+    notes: >-
+      Skipped by verify.sh unless APP_SECRET is set. The secret is a second value
+      on the same credential; it is not a second factor, and this configuration
+      does not accept it at all.
+
+  - id: takings-write
+    type: positive
+    intent: >-
+      The same credential authorises the write route, and the request body reaches
+      the upstream unchanged.
+    request: requests/takings.http
+    expected: expected/takings-201.json
+    expected_status: 201
+    notes: >-
+      The sample upstream echoes the submitted object and adds an id. Your backend
+      will return its own acknowledgement; assert the status.
+
+  - id: revocation
+    type: failure
+    intent: >-
+      Deleting the app stops the caller on its next request, with no configuration
+      change and no redeploy. This is the control that replaces a short credential
+      lifetime in this design, so it is the one worth proving once per environment.
+    type_of_execution: manual
+    procedure: >-
+      1) Confirm the key returns 200. 2) Delete the app in the control plane (or
+      rotate its credentials). 3) Replay the SAME request with the SAME key.
+    expected_outcome: >-
+      401 with "Invalid API key in request", within the gateway's credential cache
+      interval. Measure that interval in your own environment and publish it as
+      your revocation SLA rather than quoting a number from here.
+    notes: >-
+      Outside verify.sh because it destroys the credential every other case needs.
+
+  - id: rotation
+    type: boundary
+    intent: >-
+      Establish the rotation procedure and its failure mode before a real terminal
+      needs it, since a fleet cannot be updated atomically.
+    type_of_execution: manual
+    procedure: >-
+      Create a SECOND app for the same terminal, deploy the new key to the device,
+      confirm it returns 200, then delete the first app. Rotating a single app's
+      credential in place invalidates the old key the moment the new one is live.
+    expected_outcome: >-
+      Both keys return 200 during the overlap; the old key returns 401 once its app
+      is deleted.
+    notes: >-
+      Two apps is the only zero-downtime rotation available here. Budget for the
+      overlap window in fleets that take weeks to update.
+
+  - id: secret-validation-variant
+    type: failure
+    intent: >-
+      Establish what secret_validation: true actually does, so nobody enables it
+      expecting a second factor.
+    type_of_execution: manual
+    procedure: >-
+      In a THROWAWAY environment only, add secret_validation: true and an apisecret
+      block to the route, deploy, then send ONLY the app's secret in the apisecret
+      header with no X-Device-Key.
+    expected_outcome: >-
+      The request succeeds. Per the plugin's own schema in your org: "Key-auth
+      validate only. When true, the credential secret is accepted as an alternative
+      credential if the api key is absent." It widens what is accepted; it does not
+      require more.
+    notes: >-
+      Not shipped in this package's spec, and not executed in its validation run —
+      the claim above is the plugin schema's, quoted, not a result obtained here.
+
+coverage:
+  positive: [valid-key, takings-write]
+  negative: [no-key, unknown-key, secret-as-key]
+  boundary: [wrong-header, query-param, rotation]
+  failure:  [revocation, secret-validation-variant]

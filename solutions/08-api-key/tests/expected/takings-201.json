@@ -1,0 +1,9 @@
+{
+  "status": 201,
+  "body": {
+    "terminalId": "T-3312",
+    "periodEnd": "2026-01-01T00:00:00Z",
+    "grossCents": 184250,
+    "id": 101
+  }
+}

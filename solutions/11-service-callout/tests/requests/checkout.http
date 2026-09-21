@@ -1,0 +1,7 @@
+### Case: enriched-write — the write route.
+### Expect 200, the body forwarded unchanged, and the same enrichment. The plugin
+### is configured per route, so this case catches a route that was left behind.
+POST {{GATEWAY}}/storefront/checkout
+content-type: application/json
+
+{"sku":"BRK-2100","qty":1}

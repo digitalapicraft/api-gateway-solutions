@@ -1,0 +1,89 @@
+# Local (pre-gateway) validation — a structural review of the importable
+# artifacts. It does not, and cannot, establish gateway behaviour. Nothing here
+# implies a gateway accepted this configuration.
+
+local_validation:
+  solution: 12-key-value-map
+  version: 1.0.0
+  status: PASS
+
+  checks:
+    syntax:                  PASS   # api-spec.yaml parses as valid OpenAPI 3.0.3; verify.sh parses under bash -n
+    schema:                  PASS   # key-value-map (fail_action, inserts[key,value], fetch.keys[key]), pgp-crypto (keys_ctx_namespace, encrypt with target/source/public_key/fail_policy/fail_close_status/fail_close_message, max_body_size), proxy-rewrite, request-id — every field drawn from the live plugin schema in the target org
+    required_fields:         PASS   # each insert carries key and value; the fetch carries keys; the encrypt block carries target, source and public_key
+    references:              PASS   # the fetch reference and the encrypt reference are the identical template, and key-value-map's default ctx_namespace matches pgp-crypto's keys_ctx_namespace
+    plugin_ordering:         PASS   # key-value-map (3001) runs before pgp-crypto (898), which is the order the lookup depends on
+    plugin_scoping:          PASS   # the write path and the read path are separate routes with different plugin sets; request-id is API-wide
+    auth_authz_dependencies: PASS   # none, and the package states plainly that the registration route is administrative and unprotected as shipped
+    request_response:        PASS   # documented 200/500/503 responses match the design, including the fail-close status for an unregistered partner
+    security:                PASS   # NO key material anywhere in the document — the registration value is taken from the request body
+    no_commentary_keys:      PASS   # plugin blocks contain schema fields only; all explanation is in YAML comments
+    tests_match_impl:        PASS   # all six verify.sh cases map to routes and plugins that exist in the spec; the manual cases are flagged as such in tests/test-plan.yaml
+    placeholders:            PASS   # <YOUR_GATEWAY_HOST>, <ORG_ID> — no real hosts, org ids, partner names or key material
+
+  warnings:
+    - >-
+      The registration route is ADMINISTRATIVE and ships unauthenticated. Anybody who
+      can reach it can register their own key under any partner id, after which that
+      partner's documents are encrypted to them. Put identity in front of it and
+      restrict it to operators before this exists anywhere real.
+    - >-
+      The partner id comes from a caller-controlled header as shipped, so any caller
+      can request any partner's document. They receive ciphertext they cannot read,
+      which is not the same as being refused. Bind the id to an authenticated
+      identity; $consumer.<suffix> exists in the grammar for exactly that.
+    - >-
+      A key-value-map miss is NOT an error. The consuming plugin's fail_policy decides
+      what an unregistered partner receives, and fail-open there would return the
+      backend's document in the clear.
+    - >-
+      The reference grammar fails silently. It is $request.headers.<name> — plural.
+      The singular resolves to nothing and the symptom is indistinguishable from an
+      unregistered partner.
+    - >-
+      The fetch reference and the consuming plugin's reference must be the same
+      template, and key-value-map's ctx_namespace must match the consumer's
+      keys_ctx_namespace. Both are left at defaults here so they agree by construction.
+    - >-
+      Registration REPLACES the entry rather than appending. That is what makes
+      rotation a write, and it means a bad write destroys the previous value with no
+      history to recover from.
+    - >-
+      Storing the wrong key is undetectable from the gateway — the response is well
+      formed and only the counterparty discovers the problem. A round-trip decrypt is
+      the only automated defence.
+    - >-
+      Writing a literal key into `inserts` would put key material straight back into
+      the configuration document, defeating the purpose of the package. The value must
+      come from the request.
+    - >-
+      There is no control-plane API for these entries on this build, so the
+      registration route is the only write path and is not optional.
+    - >-
+      A registered but unusable key returns 200 carrying the fail-close error body.
+      The configured fail_close_status applies only to a store miss, so a key with no
+      encryption subkey is served as a success with the error message in the body.
+      Assert on the body, never the status.
+    - >-
+      The registration route's status reflects the upstream echo rather than the
+      store write, because the insert happens in the access phase before proxying.
+      Read the value back to confirm a write.
+    - >-
+      The consumer cannot be swapped on a free-trial org: lua-callout is the only
+      plan-gated plugin on this build and the only alternative reader of a stored
+      value, which leaves pgp-crypto as the only way to observe one.
+    - >-
+      Every limitation of solution 13 still applies to the crypto itself, including
+      the base64-of-armor wire format and whole-body buffering.
+
+  assumptions:
+    - API "Partner Documents API" with routes /partners/keys and /partners/documents. All illustrative.
+    - The partner id arrives in X-Partner-Id; any request-resolvable value works.
+    - The stored value is an armored OpenPGP public key; the store itself is generic.
+    - The upstream echoes requests, which is what makes the registration observable.
+
+  not_established_here:
+    - Whether a gateway accepts this configuration (that is a dry-run).
+    - Whether the store is provisioned in YOUR environment — key-value-map needs
+      gateway-level infrastructure configuration, and without it the plugin does nothing.
+    - Whether a stored key is the RIGHT key. Only a round-trip decrypt establishes that.

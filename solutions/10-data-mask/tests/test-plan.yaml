@@ -1,0 +1,156 @@
+# Test plan — masking what the caller sees, and what the logs keep.
+#
+# Cases 1-6 are executed by ../gateway/verify.sh against the response. The log
+# cases cannot be checked from the client side at all — they are procedures, and
+# the one this package ran is written out in full.
+#
+# Substitute your own values:
+#   {{GATEWAY}}   gateway base URL, e.g. https://<YOUR_GATEWAY_HOST>
+
+meta:
+  solution: 10-data-mask
+  version: 1.0.0
+  executor: gateway/verify.sh
+  note: >-
+    response-rewrite and log-data-mask are independent controls with independent
+    evidence. No client-side assertion can establish what a logger wrote, so the
+    log half has its own procedure below rather than a status borrowed from the
+    response half.
+  status: >-
+    EXECUTED against a deployed revision — 6/6 on the response side, and the log
+    side verified separately against a real logger. See
+    ../validation/gateway-validation.yaml.
+
+cases:
+  - id: list-masked
+    type: positive
+    intent: >-
+      Every record in a collection response is masked — not merely the first.
+    request: requests/customers-list.http
+    expected: expected/customers-masked-200.json
+    response_notes: >-
+      The fixture shows one record for brevity; the assertion is over all of them.
+      Email keeps its domain and loses its local part, phone and coordinates are
+      replaced wholesale, and name/username are untouched because the patterns are
+      anchored on their own field names.
+    expected_status: 200
+    notes: >-
+      If exactly ONE record is masked, the filter is missing scope: global. The
+      default is "once". This was reproduced deliberately during validation: with
+      the default scope, 1 of 10 records was masked and 9 were returned in the
+      clear — and the masked one is the first, which is the one that appears in
+      every screenshot.
+
+  - id: domain-survives
+    type: boundary
+    intent: >-
+      The mask is partial on purpose: the email domain remains readable.
+    request: requests/customers-list.http
+    expected: expected/customers-masked-200.json
+    expected_status: 200
+    notes: >-
+      Support uses the domain to tell which customer organisation a person belongs
+      to. Removing the whole address is easy and makes the console less useful,
+      which is how masking gets switched off again six weeks later.
+
+  - id: no-over-masking
+    type: boundary
+    intent: >-
+      Fields the filters do not name are returned untouched, proving each pattern
+      is anchored on its own key rather than matching loose text.
+    request: requests/customers-list.http
+    expected: expected/customers-masked-200.json
+    expected_status: 200
+    notes: >-
+      A broad pattern is the other failure mode of regex masking, and it is worse
+      than a narrow one because it corrupts data silently.
+
+  - id: single-record
+    type: positive
+    intent: >-
+      The single-record route masks identically, and the id survives the path
+      rewrite.
+    request: requests/customer-single.http
+    expected: expected/customer-masked-200.json
+    expected_status: 200
+    notes: >-
+      A 404 here is a routing failure, not a masking one — proxy-rewrite's
+      regex_uri carries the id to the upstream. Filters are per route, so it is
+      easy to update one route and forget the other; this case catches that.
+
+  - id: log-mask-applied
+    type: positive
+    intent: >-
+      Establish that log-data-mask actually changes what a logger writes, which no
+      response-side assertion can show.
+    type_of_execution: manual
+    procedure: >-
+      1) Add a logger plugin to the route (http-logger is easiest) pointing at a
+      sink whose received body you can read, with include_resp_body true and
+      batch_max_size 1 so it flushes immediately. 2) Call the route with an
+      Authorization header. 3) Read what arrived at the sink. 4) Repeat with
+      log-data-mask removed from the route and compare the two entries.
+    expected_outcome: >-
+      With log-data-mask present, every configured field is replaced in the logged
+      copy and the removed headers are absent. Without it, the same log entry
+      carries the real values and the Authorization header verbatim. This package's
+      validation run performed exactly this comparison and recorded both entries.
+    notes: >-
+      log-data-mask has no effect on a route with no logger on it. It is read by
+      the shared log helper that the logger plugins use — it is not a response
+      filter and not an analytics filter.
+
+  - id: log-mask-does-not-change-the-response
+    type: boundary
+    intent: >-
+      Establish that the two controls are independent, so that nobody ships
+      log-data-mask believing the caller is protected.
+    type_of_execution: manual
+    procedure: >-
+      Deploy a route carrying log-data-mask and NO response-rewrite. Call it.
+    expected_outcome: >-
+      The caller receives the sensitive fields in full. Verified during this
+      package's validation run.
+    notes: >-
+      This is the mistake the package exists to prevent. The audit finding is
+      usually about the log aggregator, so the log control gets configured first,
+      and the screen keeps showing everything.
+
+  - id: scope-once-trap
+    type: failure
+    intent: >-
+      Establish the symptom of the most dangerous misconfiguration in this
+      solution, so it is recognisable in review.
+    type_of_execution: manual
+    procedure: >-
+      In a THROWAWAY environment only, remove `scope: global` from one filter and
+      call a route that returns many records.
+    expected_outcome: >-
+      Only the first occurrence is masked. Verified during this package's
+      validation run: 1 of 10 records masked, 9 returned in the clear.
+    notes: >-
+      Reviewing a masked response by eye will not catch this, because the record
+      people look at first is the one that is masked.
+
+  - id: encoded-and-renamed-fields
+    type: failure
+    intent: >-
+      Establish the boundary of regex masking against your own payloads before
+      relying on it.
+    type_of_execution: manual
+    procedure: >-
+      Find a response where the same value appears under a different key, inside a
+      base64 or URL-encoded string, or in a free-text field, and call the route.
+    expected_outcome: >-
+      Those occurrences are NOT masked. The filter matches text, not meaning: it
+      cannot find a value it was not told the name of, and it cannot see inside an
+      encoded string.
+    notes: >-
+      Run this against real payloads, not synthetic ones. Error messages and
+      audit-trail fields are where copies of sensitive values usually hide.
+
+coverage:
+  positive: [list-masked, single-record, log-mask-applied]
+  negative: []
+  boundary: [domain-survives, no-over-masking, log-mask-does-not-change-the-response]
+  failure:  [scope-once-trap, encoded-and-renamed-fields]

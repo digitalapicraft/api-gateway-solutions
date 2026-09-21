@@ -1,0 +1,69 @@
+# Local (pre-gateway) validation — a structural review of the importable
+# artifacts. It does not, and cannot, establish gateway behaviour. Nothing here
+# implies a gateway accepted this configuration.
+
+local_validation:
+  solution: 10-data-mask
+  version: 1.0.0
+  status: PASS
+
+  checks:
+    syntax:                  PASS   # api-spec.yaml parses as valid OpenAPI 3.0.3; verify.sh parses under bash -n
+    schema:                  PASS   # response-rewrite (filters.regex/replace/scope), log-data-mask (request/response items with type/name/action/value/body_format), proxy-rewrite (uri, regex_uri), request-id — every field drawn from the live plugin schema in the target org
+    required_fields:         PASS   # every filter carries regex, replace AND scope; every log-data-mask item carries type, name and action, with value present wherever the action is replace
+    references:              PASS   # the mask string used by the filters is the one verify.sh asserts, through an overridable variable, so the assertions cannot drift from the config
+    plugin_ordering:         PASS   # proxy-rewrite acts on the request; response-rewrite acts on the response body; log-data-mask publishes rules read in the log phase. No plugin here reads a value another has not yet produced
+    plugin_scoping:          PASS   # both masks are per route because field sets differ per response shape; request-id is API-wide
+    auth_authz_dependencies: PASS   # none — this package ships unauthenticated on purpose, and says so
+    request_response:        PASS   # documented 200/404/502 responses match the design
+    security:                PASS   # no secrets; the log mask removes the authorization and x-api-key headers from logged entries
+    no_commentary_keys:      PASS   # plugin blocks contain schema fields only; all explanation is in YAML comments
+    tests_match_impl:        PASS   # all six verify.sh cases map to routes and plugins that exist in the spec; the four manual cases are flagged as such in tests/test-plan.yaml
+    placeholders:            PASS   # <YOUR_GATEWAY_HOST>, <ORG_ID> — no real hosts, org ids, customer names or personas
+
+  warnings:
+    - >-
+      response-rewrite's scope defaults to `once`, which masks the FIRST match in
+      the body and leaves the rest. On a collection that is one masked record and
+      the remainder in the clear — and the masked one is the first, so the
+      configuration looks correct in the view people check it in. Every filter here
+      sets scope: global; treat a filter without it as a review finding.
+    - >-
+      log-data-mask changes only what a LOGGER writes. It does not change the
+      response, it does not affect analytics, and it does nothing at all on a route
+      that carries no logger plugin. Shipping it alone leaves the caller's copy
+      untouched.
+    - >-
+      The filters are regex substitutions over the serialised body, not schema-aware
+      redaction. A copy of the same value under a different key, inside an encoded
+      string, or quoted in a free-text field is not masked. Test against real
+      payloads rather than synthetic ones.
+    - >-
+      An unanchored or over-broad pattern corrupts data silently. Every pattern here
+      is anchored on its own field name and one test asserts that fields outside the
+      filter list are returned untouched.
+    - >-
+      Masking is not access control. A caller who should not see the record at all
+      must be stopped by identity; this package ships with no authentication so the
+      masking is the only behaviour under test.
+    - >-
+      The masked value is not reversible and not format-preserving, so a downstream
+      system cannot correlate on it.
+    - >-
+      The upstream still returns the sensitive data and the gateway buffers the body
+      to rewrite it, which costs memory on large payloads and means the value does
+      leave the backend.
+    - >-
+      If a format converter runs on the same route it runs first, so these patterns
+      must match the converted body rather than the upstream's original.
+
+  assumptions:
+    - API "Support Console API" with routes /support/customers and /support/customers/{customerId}. All illustrative.
+    - The sensitive fields are named email, phone, lat and lng in the serialised body.
+    - Keeping the email domain while masking the local part is the right trade for a support console. Decide per field for your own data.
+    - A logger plugin is added separately where the log half is required.
+
+  not_established_here:
+    - Whether a gateway accepts this configuration (that is a dry-run).
+    - Whether these patterns match YOUR serialised body.
+    - What your loggers write — no client-side check can establish that.

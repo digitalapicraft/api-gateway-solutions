@@ -15,7 +15,7 @@ it, and an honest record of what was and wasn't validated.
 
 ---
 
-## The seven solutions
+## The thirteen solutions
 
 | # | Solution | The problem it solves | Build it with the Agent |
 |---|---|---|---|
@@ -26,19 +26,39 @@ it, and an honest record of what was and wasn't validated.
 | **05** | [OAuth with Okta](solutions/05-okta-jwt/) | *"We already run Okta, but our APIs still check a static key from 2021."* Verify the IdP's own tokens at the edge — the mirror of 01, for when someone else is the issuer. | [prompt](solutions/05-okta-jwt/helix-agent-prompt.md) |
 | **06** | [Signed requests](solutions/06-hmac-auth/) | *"We gave a partner an API key in 2021. It's in their runbook, their CI, and a Jira ticket — and it tells us nothing about the payload it arrived with."* Prove the caller holds a secret without ever sending it, and bind the proof to the request body. | [prompt](solutions/06-hmac-auth/helix-agent-prompt.md) |
 | **07** | [HTTP to Kafka](solutions/07-http-to-kafka/) | *"Partners want to POST us events. The service in between is three lines long and has been on the roadmap for three quarters."* Validate, acknowledge and publish at the edge — no ingest service. At-most-once, and the package proves it by breaking the broker. | [prompt](solutions/07-http-to-kafka/helix-agent-prompt.md) |
+| **08** | [API keys](solutions/08-api-key/) | *"Four thousand terminals in the field. They can't run a token exchange, and the only thing protecting the endpoint is that the URL isn't published."* Per-caller identity for clients that can set one header — and revocation you perform in seconds. | [prompt](solutions/08-api-key/helix-agent-prompt.md) |
+| **09** | [XML to JSON](solutions/09-xml-to-json/) | *"Our stock system is REST. It just answers in XML, so four client teams each wrote their own parser."* Mediate both directions at the edge — with no SOAP envelope in sight. | [prompt](solutions/09-xml-to-json/helix-agent-prompt.md) |
+| **10** | [Data masking](solutions/10-data-mask/) | *"Audit flagged PII in the logs. While we were reading the samples we noticed the support console shows agents all of it too."* Two different masks, for two different audiences — and the one most teams ship is the wrong one. | [prompt](solutions/10-data-mask/helix-agent-prompt.md) |
+| **11** | [Service callout](solutions/11-service-callout/) | *"Seven services each start by calling the customer-profile service. Seven caches, seven timeouts, seven opinions about what to do when it fails."* Do the lookup once and hand the answer to the backend as a header. | [prompt](solutions/11-service-callout/helix-agent-prompt.md) |
+| **12** | [Key-value map](solutions/12-key-value-map/) | *"Fourteen partners, fourteen keys in fourteen routes, and a deploy every time one of them rotates."* Fetch the key per request so rotation is a write, not a release. | [prompt](solutions/12-key-value-map/helix-agent-prompt.md) |
+| **13** | [PGP encryption](solutions/13-pgp-encryption/) | *"The bank only accepts PGP-encrypted payloads. Today that's a Python script with a keyring on a VM, and it's what pages us at 2am."* Decrypt inbound and encrypt outbound at the edge; the backend never handles ciphertext. | [prompt](solutions/13-pgp-encryption/helix-agent-prompt.md) |
 
 They compose. 01 gives you identity, 02 gives you the protocol bridge, 03 turns
 the result into something sellable, and 04 tells you what happened. Running all
 four against one API takes you from *internal SOAP endpoint* to *metered,
 observable, partner-facing product* without a backend change.
 
-**01, 05 and 06 are alternatives, not layers.** All three answer "who is
-calling", and you want exactly one of them on a route. Pick by what the caller
-can hold: in 01 the gateway mints a token, in 05 an external identity provider
-does and the gateway only verifies, and in 06 there is no token at all — the
-caller holds a secret it never transmits and signs each request with it. A
-browser can hold a token but not a secret; a partner's backend can hold either,
-and should sign when the payload's integrity is the point.
+**Four answer "who is calling" and you want exactly one of them on a route:**
+01 (the gateway mints the token), 05 (an external IdP does and the gateway only
+verifies), 06 (the caller signs, and the credential never travels) and 08 (the
+caller can set one header and nothing more). Pick by what the caller can hold.
+
+**Three pairs are deliberately two packages rather than one.** 02 and 09 both
+mediate XML, and the first table in 09 tells you which you have. 13 and 12 do the
+same crypto with the key in the route and in a store respectively — read 13 first
+and move to 12 at the second counterparty. 10's two masks are the third pair, and
+they live in one package because shipping one without the other is the standard
+way that project fails.
+
+A browser can hold a token but not a secret; a partner's backend can hold either,
+and should sign when the payload's integrity is the point; a forecourt terminal
+can hold neither and gets a key you can kill in seconds.
+
+**07 and 12 each ship a route you must protect before using.** 07 answers the
+caller itself and publishes to Kafka with no authentication; 12's key-registration
+route writes key material and is equally open. Both are deliberate — every package
+here ships with the behaviour under test and nothing else — and both packages say
+so in their own tests rather than in a footnote.
 
 **07 is the odd one out, deliberately.** Every other solution proxies to a
 backend; 07 has none — it answers the caller itself and publishes to Kafka. It
@@ -59,7 +79,7 @@ You:    Create a Posts API on jsonplaceholder that issues OAuth 2.0 access
 Agent:  [looks up the API] [fetches the real plugin schemas]
         [shows the spec it proposes] [waits]
 You:    Looks right — dry-run it.
-Agent:  [validate_route] [dry_run_deploy] [reports errors or a clean plan]
+Agent:  [dry_run_deploy] [reports errors or a clean plan]
 You:    Deploy it.
 ```
 
@@ -179,6 +199,8 @@ repo. You will see:
 | `<OKTA_CLIENT_ID>` · `<OKTA_CLIENT_SECRET>` | the IdP application's credentials — also **literals**, see the warning below |
 | `<KEY_ID>` · `<SECRET_KEY>` | an app credential's HMAC key pair — the control plane generates these; they never appear in a spec |
 | `<YOUR_KAFKA_BROKER>` | a broker hostname the **gateway** can reach. Not a secret |
+| `<DEVICE_API_KEY>` · `<APP_SECRET>` | an app credential's key and secret — the control plane issues these; they never appear in a spec |
+| `<PGP_PUBLIC_KEY>` · `<PGP_PRIVATE_KEY>` | armored OpenPGP key blocks. **Literals**, like the signing secret — see the warning below |
 
 App **keys and secrets** (the `client_id`/`client_secret` on an app) are
 provisioned on the credential by the control plane and never belong in a spec.
@@ -196,7 +218,15 @@ provisioned on the credential by the control plane and never belong in a spec.
 >
 > **Solution 06 has no such footgun, by construction.** `hmac-auth`'s route schema
 > has no secret field at all, so there is nothing to fill in and nothing to leak —
-> `key_id` and `secret_key` live only on the app credential.
+> `key_id` and `secret_key` live only on the app credential. **Solution 08 has the
+> same property** for the same structural reason: the route names the *header* an
+> API key arrives in, never the key.
+>
+> **Solution 13 has the worst version of it.** `private_key` and `public_key` are
+> literals too, and a private key outlives a signing secret and is usually shared
+> with a counterparty. That limitation is the entire reason
+> [solution 12](solutions/12-key-value-map/) exists: it fetches the key per request
+> so no key material is in the document at all.
 
 ## Prerequisites
 

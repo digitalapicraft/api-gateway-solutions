@@ -1,0 +1,6 @@
+### Case: items-xml — the same route, asking for XML.
+### Expect 200 and the backend's XML untouched. This is the assertion that the
+### response transform is content-negotiated rather than unconditional, and it is
+### what lets an existing XML client keep working through the same route.
+GET {{GATEWAY}}/catalog/items
+accept: application/xml

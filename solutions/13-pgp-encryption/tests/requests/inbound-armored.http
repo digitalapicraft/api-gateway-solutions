@@ -1,0 +1,11 @@
+### Case: armored-body — the wire format everybody gets wrong first.
+### A RAW armored message, exactly as every PGP tool emits it.
+### Expect 400. The gateway wants base64 OF the armor, not the armor.
+### This is the single most likely integration failure with a counterparty.
+POST {{GATEWAY}}/statements/inbound
+content-type: text/plain
+
+-----BEGIN PGP MESSAGE-----
+
+hQEMA0000000000000
+-----END PGP MESSAGE-----

@@ -1,0 +1,6 @@
+### Case: list-masked — the collection route.
+### Expect 200 with EVERY record masked, not just the first.
+### The first record looking right proves nothing: response-rewrite's scope
+### defaults to "once", which masks one match and leaves the rest.
+GET {{GATEWAY}}/support/customers
+accept: application/json

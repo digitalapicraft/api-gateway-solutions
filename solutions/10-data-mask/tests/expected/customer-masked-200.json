@@ -1,0 +1,15 @@
+{
+  "status": 200,
+  "body": {
+    "id": 3,
+    "name": "Clementine Bauch",
+    "email": "***@yesenia.net",
+    "phone": "[redacted]",
+    "address": {
+      "geo": {
+        "lat": "[redacted]",
+        "lng": "[redacted]"
+      }
+    }
+  }
+}

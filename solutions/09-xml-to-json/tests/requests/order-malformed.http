@@ -1,0 +1,7 @@
+### Case: malformed-json — a body that is not valid JSON.
+### Expect 400 from the gateway. The request transform parses before it converts,
+### so an unparseable body is rejected at the edge rather than forwarded.
+POST {{GATEWAY}}/catalog/orders
+content-type: application/json
+
+{"orderId":

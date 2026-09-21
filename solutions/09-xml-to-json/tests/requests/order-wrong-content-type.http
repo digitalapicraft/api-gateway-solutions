@@ -1,0 +1,9 @@
+### Case: order-passthrough — the same JSON body sent as text/plain.
+### Expect 200, and the body forwarded UNCHANGED. text/plain is not in
+### request_content_types, so the transform does not run and does not complain.
+### This silent passthrough is the failure mode to design alerting around.
+POST {{GATEWAY}}/catalog/orders
+content-type: text/plain
+accept: application/json
+
+{"orderId":"SO-1"}

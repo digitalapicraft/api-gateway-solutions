@@ -1,0 +1,169 @@
+# Solution 13 — OpenPGP at the edge: decrypt what the partner sends, encrypt what
+# you send back, and delete the keyring script in the middle.
+#
+# This is the importable artifact: an OpenAPI 3.0.3 document carrying
+# x-helix-gateway.plugins. Two ways to use it: paste the agent prompt into Agent
+# Mode (it creates the API and binds the upstream for you), or import this file,
+# bind the upstream, fill in the key material, and deploy the revision.
+#
+# RUNNABLE ON A FRESH FREE-TRIAL ORG once you supply a key pair. The upstream is
+# the public httpbin.org, whose /post echoes what it received — so you can SEE the
+# decrypted plaintext arriving at your backend, which is the only way to be sure
+# the request direction worked.
+#
+# ENVIRONMENT: a free-trial org gets a "test" environment by default — deploy here.
+#
+# ############################################################################
+# THE KEY MATERIAL IN THIS FILE IS USED LITERALLY. THIS IS THE SAME FOOTGUN AS
+# helix-auth's signing_secret, and it is worse, because a private key is longer
+# lived than a signing secret and is usually shared with a counterparty.
+#
+#   - Replace <PGP_PRIVATE_KEY> and <PGP_PUBLIC_KEY> with real ARMORED key blocks.
+#     THESE ARE NOT A PAIR. private_key is YOURS — the counterparty encrypts to its
+#     public half. public_key is THEIRS — you never hold its private half. Two
+#     parties, two pairs, four halves. Filling both from one pair makes the two
+#     routes a loop, which is a handy single-party test and is not how it behaves
+#     in production. See the README, "Which key goes where".
+#   - The gateway does NOT resolve <ENV:...> or ${...} in these fields.
+#   - Keep the filled-in spec out of version control. Ship the placeholders.
+#   - The control plane stores these fields encrypted once supplied (they are in
+#     the plugin's encrypt_fields list), but they still travel in the document you
+#     import, and they still sit in the revision you can read back.
+#
+# If you have more than one counterparty, do NOT copy this route N times with N
+# key pairs. Fetch the key per request instead — see solution 12, which keeps key
+# material out of the spec entirely.
+# ############################################################################
+#
+# WIRE FORMAT — THE THING THAT WILL COST YOU AN AFTERNOON
+#   Both directions use BASE64 OF THE ASCII-ARMORED MESSAGE, not the armor itself.
+#
+#     encrypt (response) : the body is replaced with base64("-----BEGIN PGP MESSAGE-----...")
+#                          and the content type becomes text/plain
+#     decrypt (request)  : the body must ARRIVE base64-encoded. A raw armored body
+#                          beginning "-----BEGIN PGP MESSAGE-----" is REJECTED.
+#
+#   Every PGP tool on earth emits armor. Your counterparty will send armor. Verified
+#   against a gateway: armor in -> fail-close fired; base64(armor) in -> decrypted
+#   cleanly and the plaintext reached the upstream with content-type application/json.
+#   Put the base64 step in the integration guide you give them, in bold.
+#
+# ERROR MESSAGES ARE DELIBERATELY GENERIC. A caller sees "failed to encrypt
+# response" or your fail_close_message and nothing else. The real reason —
+# unparseable key, wrong recipient, body too large — is in the gateway's own
+# telemetry. Do not design a support process that assumes the client can self-serve
+# a crypto failure.
+#
+# `field` ON AN ENCRYPT BLOCK SELECTS WHAT IS RETURNED, NOT JUST WHAT IS ENCRYPTED.
+# Verified: encrypt with field "slideshow.author" returned ONLY the ciphertext of
+# that value as the entire response body — not the document with one field replaced.
+# If you want the surrounding document intact, encrypt the whole body.
+
+openapi: 3.0.3
+
+info:
+  title: Statements API
+  version: 1.0.0
+  description: >-
+    The two directions of a PGP-mediated partner integration: the partner posts an
+    encrypted instruction file and the backend receives plaintext, and the backend
+    returns a statement that leaves the gateway encrypted to the partner's key.
+    Proxies the public httpbin service, which echoes requests, so the decrypted
+    plaintext is visible in the response.
+
+paths:
+  /statements/inbound:
+    post:
+      summary: Accept a PGP-encrypted instruction file
+      description: >-
+        The body must be BASE64 of an ASCII-armored PGP message encrypted to this
+        gateway's public key. The gateway decrypts it and forwards the plaintext to
+        the backend, which never handles ciphertext. A body that cannot be
+        decrypted is rejected with the configured status; the backend is not
+        called.
+      requestBody:
+        required: true
+        content:
+          text/plain:
+            schema:
+              type: string
+              description: base64 of an armored PGP message
+      responses:
+        '200': { description: The backend's response to the decrypted payload }
+        '400': { description: The body was not a PGP message this gateway can decrypt }
+      x-helix-gateway:
+        plugins:
+          pgp-crypto:
+            decrypt:
+              target: request
+              source: body            # `field` omitted = the whole body
+              private_key: "<PGP_PRIVATE_KEY>"
+              # An unprotected key is one less thing to get wrong; a passphrase is
+              # a second literal in this document if you use one.
+              passphrase: ""
+              # fail-close is the only defensible choice on an inbound financial
+              # message: forwarding ciphertext the backend cannot read, or silently
+              # skipping decryption, are both worse than refusing.
+              fail_policy: fail-close
+              fail_close_status: 400
+              fail_close_message: "request body is not a PGP message this gateway can decrypt"
+            # Bodies over this are rejected rather than processed. Raise it
+            # deliberately — decryption buffers the whole body in memory.
+            max_body_size: 1048576
+            gpg_timeout_ms: 5000
+
+          proxy-rewrite:
+            uri: /post
+
+  /statements/{statementId}:
+    get:
+      summary: Return a statement, encrypted to the partner's key
+      description: >-
+        The backend returns an ordinary JSON statement. The gateway replaces the
+        response body with BASE64 of an armored PGP message encrypted to the
+        partner's public key, and sets the content type to text/plain. The partner
+        base64-decodes and decrypts with their private key.
+      parameters:
+        - { name: statementId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: base64 of an armored PGP message
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500': { description: The response could not be encrypted }
+      x-helix-gateway:
+        plugins:
+          pgp-crypto:
+            encrypt:
+              target: response
+              source: body            # the WHOLE body. Naming a `field` here would
+                                      # return only that field's ciphertext and
+                                      # discard the rest of the document.
+              public_key: "<PGP_PUBLIC_KEY>"
+              # If the response cannot be encrypted, failing is right: returning the
+              # plaintext statement instead would be the incident this solution
+              # exists to prevent.
+              fail_policy: fail-close
+              fail_close_status: 500
+              fail_close_message: "statement could not be encrypted"
+            max_body_size: 1048576
+            gpg_timeout_ms: 5000
+
+          proxy-rewrite:
+            uri: /json
+
+# API-WIDE POLICY.
+#
+# Note what is NOT here: authentication. Encrypting a response to a partner's key
+# does not establish that the caller IS that partner — anyone who can reach the
+# route gets a document they cannot read, which is not the same as being refused.
+# Put solution 08 or solution 01 in front of this before it carries anything real.
+x-helix-gateway:
+  plugins:
+    # Correlation id. Crypto failures are deliberately opaque to the caller, so the
+    # only thing a partner can quote when they call you is this id.
+    request-id:
+      algorithm: uuid
+      header_name: X-Request-Id

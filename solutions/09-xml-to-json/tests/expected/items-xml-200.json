@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/xml"
+  },
+  "body": "<?xml version='1.0'?><catalog><item><sku>BRK-2100</sku></item></catalog>"
+}

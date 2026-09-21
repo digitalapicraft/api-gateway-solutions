@@ -1,0 +1,70 @@
+# Local (pre-gateway) validation — a structural review of the importable
+# artifacts. It does not, and cannot, establish gateway behaviour. Nothing here
+# implies a gateway accepted this configuration.
+
+local_validation:
+  solution: 11-service-callout
+  version: 1.0.0
+  status: PASS
+
+  checks:
+    syntax:                  PASS   # api-spec.yaml parses as valid OpenAPI 3.0.3; verify.sh parses under bash -n
+    schema:                  PASS   # service-callout (uri/method/phase/timeout/ssl_verify/map_response_to_ctx/error_handling/keepalive), proxy-rewrite (uri, headers.set), request-id — every field drawn from the live plugin schema in the target org
+    required_fields:         PASS   # both callouts carry uri and phase, which the plugin requires; every injected header names a variable that a mapped field produces
+    references:              PASS   # each ${ctx.helix.service_callout.<field>} matches a key in that route's map_response_to_ctx, and the namespace is the plugin default
+    plugin_ordering:         PASS   # both plugins are in the rewrite phase, service-callout (2003) ahead of proxy-rewrite (1008), which is the order the injection depends on
+    plugin_scoping:          PASS   # service-callout and proxy-rewrite are per route because the two routes need different failure policies; request-id is API-wide
+    auth_authz_dependencies: PASS   # none — the callout result is data, not a verdict, and nothing on the route acts on it
+    request_response:        PASS   # documented 200/502/503 responses match the design, including the 503 the fail-close policy produces
+    security:                PASS   # headers.set rather than headers.add, so a client-supplied header cannot survive; no secrets anywhere
+    no_commentary_keys:      PASS   # plugin blocks contain schema fields only; all explanation is in YAML comments
+    tests_match_impl:        PASS   # all five verify.sh cases map to routes and plugins that exist in the spec; the four manual cases are flagged as such in tests/test-plan.yaml
+    placeholders:            PASS   # <YOUR_GATEWAY_HOST>, <ORG_ID> — no real hosts, org ids or personas
+
+  warnings:
+    - >-
+      phase must be rewrite. proxy-rewrite runs in the rewrite phase, so a callout
+      configured for the access phase produces its values after the injection has
+      already happened: the route returns 200 with no enrichment headers and no
+      error anywhere.
+    - >-
+      The bridge between the two plugins is a gateway variable named literally
+      ctx.helix.<ctx_namespace>.<field>, dots included. Changing ctx_namespace
+      changes every reference, and a mismatch produces empty headers rather than a
+      failure.
+    - >-
+      headers.set is load-bearing. headers.add would leave a client-supplied value in
+      place, letting any caller assert its own tenant plan — enrichment becomes
+      privilege escalation.
+    - >-
+      Under fail-open the enrichment headers are ABSENT rather than empty. Backends
+      reading them must treat them as optional and decide explicitly what a missing
+      header means.
+    - >-
+      A dotted path in map_response_to_ctx that resolves to nothing yields no value
+      and no error, so a typo is invisible until a backend notices the header is
+      missing.
+    - >-
+      The callout is synchronous and its timeout is added to this route's worst-case
+      latency. Choose the number rather than inheriting it, and keep keepalive on or
+      every request pays a fresh TCP and TLS handshake.
+    - >-
+      This is not an authorization decision. The response is stored, never acted on.
+      A route that must reject a caller based on it needs forward-auth or opa.
+    - >-
+      Injected headers are visible to the backend and to anything between. Map only
+      the fields the backend needs.
+    - >-
+      Configured per route. A route added later gets no enrichment until someone
+      remembers.
+
+  assumptions:
+    - API "Storefront API" with routes /storefront/orders and /storefront/checkout. All illustrative.
+    - The callout target is a public sample service standing in for a customer-profile service.
+    - The upstream echoes request headers, which is what makes the enrichment observable.
+    - fail-open on the read path and fail-close on the write path is the right split for this API; it is a business decision.
+
+  not_established_here:
+    - Whether a gateway accepts this configuration (that is a dry-run).
+    - What the callout costs in latency under your load.
+    - Whether your profile service can absorb one call per request.

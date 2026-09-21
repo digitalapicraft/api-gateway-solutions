@@ -1,0 +1,10 @@
+### Case: key-registered — an operator stores a partner's armored public key.
+### Expect 200. The value comes from the request BODY, which is what keeps key
+### material out of the configuration document.
+### ADMINISTRATIVE ROUTE: as shipped it is unauthenticated, which is a deliberate
+### property of every package in this library and not a recommendation.
+POST {{GATEWAY}}/partners/keys
+X-Partner-Id: {{PARTNER_ID}}
+content-type: application/json
+
+{"public_key": "-----BEGIN PGP PUBLIC KEY BLOCK-----\n...\n-----END PGP PUBLIC KEY BLOCK-----\n"}

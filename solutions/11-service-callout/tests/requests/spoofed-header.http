@@ -1,0 +1,7 @@
+### Case: spoofed-header — the client sends the header the gateway is supposed to
+### set. Expect 200 and the GATEWAY's value at the backend, not the client's.
+### headers.set replaces; headers.add would have left the client's value in place
+### and turned this solution into a privilege-escalation path.
+GET {{GATEWAY}}/storefront/orders
+X-Tenant-Plan: Enterprise-Unlimited
+accept: application/json

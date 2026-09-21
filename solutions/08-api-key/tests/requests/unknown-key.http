@@ -1,0 +1,7 @@
+### Case: unknown-key — a well-formed value that resolves to no app.
+### Expect 401 with "Invalid API key in request".
+### This is also the shape of a REVOKED terminal's request once its app is deleted
+### or its credential rotated.
+GET {{GATEWAY}}/fleet/price-list
+X-Device-Key: 00000000-not-a-real-key
+accept: application/json

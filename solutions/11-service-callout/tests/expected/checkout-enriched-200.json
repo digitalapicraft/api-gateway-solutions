@@ -1,0 +1,10 @@
+{
+  "status": 200,
+  "body": {
+    "data": "{\"sku\":\"BRK-2100\",\"qty\":1}",
+    "headers": {
+      "X-Tenant-Plan": "Romaguera-Crona",
+      "X-Profile-Status": "200"
+    }
+  }
+}

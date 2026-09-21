@@ -1,0 +1,9 @@
+### Case: order-json — a JSON body that the gateway converts to XML.
+### Expect 200. The sample upstream echoes what it received, so the response shows
+### the generated XML: the configured root element, the namespace, and the array
+### rendered as repeated sibling elements.
+POST {{GATEWAY}}/catalog/orders
+content-type: application/json
+accept: application/json
+
+{"orderId":"SO-88120","lines":[{"sku":"BRK-2100","qty":4},{"sku":"FLT-0090","qty":1}]}

@@ -1,0 +1,4 @@
+### Case: statement-encrypted — the outbound direction.
+### Expect 200, content-type text/plain, and a body that is BASE64 of an
+### ASCII-armored PGP message. Decode the base64 first, then decrypt.
+GET {{GATEWAY}}/statements/2024-Q1

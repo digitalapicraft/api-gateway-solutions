@@ -1,0 +1,71 @@
+# Gateway validation — this solution was imported, dry-run, deployed and exercised
+# against a gateway. The statuses below are the outcome. Re-run
+# gateway/verify.sh against your own environment before you rely on it.
+
+gateway_validation:
+  solution: 08-api-key
+  version: 1.0.0
+
+  dry_run:
+    status: PASS
+    detail: >-
+      Non-destructive dry-run passed for the shipped configuration. An earlier
+      draft that omitted the apikey block was REJECTED here, before any deploy,
+      with: 'property "apikey" with "source" is required when mode is validate and
+      validate_auth_type is key-auth'. The published JSON schema marks apikey
+      optional; the plugin's own check does not.
+
+  deployment:
+    status: DEPLOYED
+    detail: >-
+      Imported cleanly (x-helix-gateway.plugins maps root -> service, per-method ->
+      route; service_id assigned automatically), then deployed ACTIVE to a test
+      environment. A product containing the API was created and deployed, and one
+      app subscribed to it; the control plane issued the app's key and secret.
+
+  functional_tests:
+    executor: gateway/verify.sh
+    status: PASS
+    detail: >-
+      All seven cases pass against the deployed routes, as shipped and unmodified.
+    cases:
+      - { id: no-key,         expected_status: 401, result: PASS, note: 'body: {"message":"Missing API key in request"}' }
+      - { id: valid-key,      expected_status: 200, result: PASS, note: "upstream payload returned; identity resolved to the app" }
+      - { id: unknown-key,    expected_status: 401, result: PASS, note: 'body: {"message":"Invalid API key in request"} — distinguishable from a missing key' }
+      - { id: wrong-header,   expected_status: 401, result: PASS, note: "the correct key in an apikey: header does not authenticate" }
+      - { id: query-param,    expected_status: 401, result: PASS, note: "source: header means header only — a query-string key is rejected" }
+      - { id: secret-as-key,  expected_status: 401, result: PASS, note: "the app's secret is not an accepted alternative credential with secret_validation off" }
+      - { id: takings-write,  expected_status: 201, result: PASS, note: "the submitted body reached the upstream unchanged" }
+
+  agent_prompt:
+    status: PASS
+    detail: >-
+      The README's Step 1 prompt was run against the hosted agent on the default
+      model. It read the live helix-auth schema, created the API, wrote request-id
+      into the SERVICE spec and helix-auth + proxy-rewrite into each route spec
+      with a flat plugins map, bound the upstream, ran dry_run_deploy successfully
+      and stopped before deploying — the configuration it produced matches this
+      package's spec.
+    finding: >-
+      An earlier wording that asked the agent to "run validate_route and
+      dry_run_deploy" FAILED twice. validate_route is broken against this control
+      plane: the tool posts {"route": {...}} and the endpoint requires
+      {"routeSpec": [ ... ]}, so it returns 400 regardless of content. The agent
+      retried, then emitted a malformed tool call and the run ended in an agent
+      error. The shipped prompt says to skip validate_route and use dry_run_deploy.
+    second_finding: >-
+      The agent initially nested route plugins under x-helix-gateway, which is the
+      OpenAPI document's shape rather than a live route object's. The shipped
+      prompt names the flat plugins map explicitly.
+
+  not_established_here:
+    - >-
+      The gateway's credential cache interval, and therefore the true revocation
+      latency. The revocation case in the test plan is manual because it destroys
+      the credential the other cases need.
+    - >-
+      The behaviour of secret_validation: true. It is not in the shipped spec and
+      was not deployed in this run; the description in the README and test plan is
+      quoted from the plugin's own schema, not obtained from a request.
+
+  overall: READY

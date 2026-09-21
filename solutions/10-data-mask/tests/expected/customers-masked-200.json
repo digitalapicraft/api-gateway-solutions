@@ -1,0 +1,24 @@
+{
+  "status": 200,
+  "headers": {
+    "present": [
+      "X-Request-Id"
+    ]
+  },
+  "body": [
+    {
+      "id": 1,
+      "name": "Leanne Graham",
+      "username": "Bret",
+      "email": "***@april.biz",
+      "phone": "[redacted]",
+      "address": {
+        "city": "Gwenborough",
+        "geo": {
+          "lat": "[redacted]",
+          "lng": "[redacted]"
+        }
+      }
+    }
+  ]
+}

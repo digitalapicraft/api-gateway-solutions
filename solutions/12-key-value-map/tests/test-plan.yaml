@@ -1,0 +1,187 @@
+# Test plan — per-partner key material, fetched at request time.
+#
+# Cases 1-4 are executed by ../gateway/verify.sh and need only bash, curl, base64
+# and an armored public key. Cases 5 and 6 need gpg and the matching private keys.
+#
+# Substitute your own values:
+#   {{GATEWAY}}                     gateway base URL
+#   {{PARTNER_ID}}                  a partner id you have registered a key for
+#   {{UNREGISTERED_PARTNER_ID}}     any id with no key stored
+
+meta:
+  solution: 12-key-value-map
+  version: 1.0.0
+  executor: gateway/verify.sh
+  note: >-
+    Read solution 13 first. This package differs from it in exactly one respect —
+    where the key comes from — and every crypto behaviour it relies on (the
+    base64-of-armor wire format, the generic error messages, whole-body buffering)
+    is established there.
+  status: >-
+    EXECUTED against a deployed revision — 7/7 including the rotation case. See
+    ../validation/gateway-validation.yaml.
+
+cases:
+  - id: no-key-registered
+    type: negative
+    intent: >-
+      A partner with no stored key receives an error, not the backend's document in
+      the clear.
+    request: requests/document-no-key.http
+    expected: expected/no-key-registered-500.json
+    response_notes: >-
+      The configured fail_close_message. Note where the failure comes from: a
+      key-value-map MISS is not itself an error — the plugin does not know whether a
+      missing value matters — so the failure is raised by the consuming plugin. That
+      is why fail_policy on pgp-crypto is the control that matters here, not
+      fail_action on key-value-map.
+      The status is the ONLY thing separating this case from unusable-key-registered
+      below, which returns the identical body with a 200.
+    expected_status: 500
+    notes: >-
+      A 200 here is the worst outcome this solution can produce: it means the
+      document was returned unencrypted to a caller who was supposed to receive
+      ciphertext.
+
+  - id: key-registered
+    type: positive
+    intent: >-
+      The registration route stores a key taken from the request body, so key
+      material never enters the configuration document.
+    request: requests/register-key.http
+    expected: expected/key-registered-200.json
+    response_notes: >-
+      The sample upstream echoes the request, so the body confirms what was posted.
+      What matters is the side effect, which the next case observes.
+    expected_status: 200
+    notes: >-
+      fail_action is `close` on this route: a registration that silently did nothing
+      would be discovered by the next document fetch, which is much later and much
+      worse.
+      DO NOT TREAT THIS STATUS AS EVIDENCE THE VALUE LANDED. key-value-map inserts
+      in the access phase, BEFORE proxying, so the status belongs to the upstream
+      echo. Observed during validation: a 502 from the echo with the key stored
+      anyway. Read the value back instead.
+
+  - id: document-encrypted
+    type: positive
+    intent: >-
+      After registration, the same partner receives a document encrypted to their
+      own key, selected by the id on the request.
+    request: requests/document-registered.http
+    expected: expected/document-encrypted-200.json
+    expected_status: 200
+    notes: >-
+      If this still errors, check that the fetch reference and the encrypt reference
+      are the SAME template, and that it reads $request.headers.<name> — `headers`
+      plural. `$request.header.<name>` silently resolves to nothing.
+
+  - id: partner-isolation
+    type: boundary
+    intent: >-
+      One partner's registration does not serve every caller — entries are keyed per
+      partner.
+    request: requests/document-no-key.http
+    expected: expected/no-key-registered-500.json
+    expected_status: 500
+    notes: >-
+      Catches the mistake of writing a fixed string where a reference belongs, which
+      would work perfectly for the first partner and silently for the rest.
+
+  - id: decrypts-with-partner-key
+    type: positive
+    intent: >-
+      The document decrypts with the private key matching what was registered —
+      the only check that the RIGHT key was stored and used.
+    request: requests/document-registered.http
+    expected: expected/document-encrypted-200.json
+    expected_status: 200
+    notes: >-
+      Executed by verify.sh when gpg and GNUPGHOME are available. Storing the wrong
+      key produces a response that passes every other case and that the partner
+      cannot read.
+
+  - id: rotation-without-deploy
+    type: positive
+    intent: >-
+      Re-registering the same partner changes which key is used, with no revision
+      and no configuration change — the reason this package exists.
+    type_of_execution: manual
+    procedure: >-
+      Register key A, fetch a document, decrypt it with A. Register key B under the
+      SAME partner id. Fetch again.
+    expected_outcome: >-
+      The second document decrypts with B and NOT with A. Verified during this
+      package's validation run. No deploy, no revision, no route change.
+    notes: >-
+      verify.sh automates this when SECOND_PUBLIC_KEY_FILE and SECOND_GNUPGHOME are
+      set. Run it once per environment: it is the claim the whole solution rests on.
+
+  - id: unusable-key-registered
+    type: failure
+    intent: >-
+      A key that IS stored but that the crypto cannot use returns 200 carrying the
+      fail-close error body — so neither the status nor the message distinguishes it
+      from an unregistered partner, and a status-only assertion passes while the
+      caller receives no document.
+    type_of_execution: manual
+    procedure: >-
+      1) Generate a key with NO encryption subkey — `gpg --quick-generate-key
+      "$UID" rsa3072` does exactly this, and adding `default never` does not change
+      it. 2) Register it under a fresh partner id. 3) Fetch a document for that id.
+      4) Confirm with
+      `gpg --list-keys --with-colons "$UID" | awk -F: '/^(pub|sub)/{print $1, $12}'`
+      that there is no `sub` row carrying `e`.
+    expected_outcome: >-
+      200, with body {"message":"no usable key is registered for this partner"} —
+      the same body an UNREGISTERED partner gets with a 500. Verified during this
+      package's validation run against freshly generated sign-only and usable keys,
+      and reproduced a third time against a key an operator had registered by hand.
+    notes: >-
+      This is the likely real-world trigger, not an edge case: gpg's quick-generate
+      path yields a signing key, so a partner following the obvious instructions
+      sends you one. Repair with
+      `gpg --quick-add-key <fpr> rsa3072 encr never` and RE-REGISTER — the stored
+      copy stays broken until overwritten.
+      Assert on the BODY in every test on this route. The automated fetch case above
+      does exactly that, which is why it catches this and a status check would not.
+
+  - id: reference-typo
+    type: failure
+    intent: >-
+      Establish the symptom of the most likely configuration mistake, because it
+      produces no error message anywhere.
+    type_of_execution: manual
+    procedure: >-
+      In a THROWAWAY environment, change one reference to
+      $request.header.x-partner-id (singular) and call the document route.
+    expected_outcome: >-
+      The reference resolves to nothing, key-value-map fetches nothing, and
+      pgp-crypto fails closed — which looks identical to "no key registered". The
+      lookup and the crypto must use the same template; a typo in either is invisible.
+    notes: >-
+      Reproduce it once so the symptom is familiar. It is the difference between ten
+      minutes and an afternoon.
+
+  - id: unauthenticated-registration
+    type: failure
+    intent: >-
+      Establish, deliberately, what the shipped package does NOT protect.
+    type_of_execution: manual
+    procedure: >-
+      Call the registration route with any partner id and your own public key.
+    expected_outcome: >-
+      It succeeds, and that partner's documents are now encrypted to YOUR key. The
+      registration route is administrative and ships unauthenticated because every
+      package in this library ships with the behaviour under test and nothing else.
+      Put identity in front of it (solution 08) and restrict it to operators before
+      it exists anywhere real.
+    notes: >-
+      Written as a test rather than a warning because it is the one thing about this
+      package that will hurt somebody, and a test gets read.
+
+coverage:
+  positive: [key-registered, document-encrypted, decrypts-with-partner-key, rotation-without-deploy]
+  negative: [no-key-registered]
+  boundary: [partner-isolation]
+  failure:  [unusable-key-registered, reference-typo, unauthenticated-registration]

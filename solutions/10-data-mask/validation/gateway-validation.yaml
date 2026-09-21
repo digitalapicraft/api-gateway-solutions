@@ -1,0 +1,92 @@
+# Gateway validation — this solution was imported, dry-run, deployed and exercised
+# against a gateway. The statuses below are the outcome. Re-run
+# gateway/verify.sh against your own environment before you rely on it.
+
+gateway_validation:
+  solution: 10-data-mask
+  version: 1.0.0
+
+  dry_run:
+    status: PASS
+    detail: Non-destructive dry-run passed against a temporary import of the shipped spec.
+
+  deployment:
+    status: DEPLOYED
+    detail: >-
+      Imported cleanly and deployed ACTIVE to a test environment against a public
+      upstream whose records carry email, phone and coordinates.
+
+  functional_tests:
+    executor: gateway/verify.sh
+    status: PASS
+    detail: All six response-side cases pass against the deployed routes, as shipped and unmodified.
+    cases:
+      - { id: list-masked,     expected_status: 200, result: PASS, note: "all 10 records masked, not only the first" }
+      - { id: domain-survives, expected_status: 200, result: PASS, note: "***@april.biz — the local part goes, the domain stays" }
+      - { id: phone-redacted,  expected_status: 200, result: PASS, note: "every phone replaced across the collection" }
+      - { id: geo-redacted,    expected_status: 200, result: PASS, note: "lat and lng replaced on every record" }
+      - { id: no-over-masking, expected_status: 200, result: PASS, note: "name and username returned untouched — the patterns are anchored" }
+      - { id: single-record,   expected_status: 200, result: PASS, note: "the id survived proxy-rewrite's regex_uri and the same mask applied" }
+
+  log_mask_verification:
+    status: PASS
+    method: >-
+      Not checkable from the client side, so it was verified with a temporary lab
+      API carrying three variants of the same route: one with log-data-mask, one
+      without, and a sink route whose received body could be read back. Each
+      variant carried http-logger with include_resp_body true and batch_max_size 1,
+      pointed at the sink; a trace session captured what arrived there.
+    result: >-
+      WITHOUT log-data-mask the log entry contained the real email addresses, the
+      real phone numbers, and the Authorization header value verbatim. WITH
+      log-data-mask on an otherwise identical route, every email and phone in the
+      logged body was replaced and the Authorization header was absent entirely.
+      The caller's response on that same route was UNMASKED, confirming the two
+      controls are independent.
+
+  scope_trap_reproduced:
+    status: CONFIRMED
+    detail: >-
+      A variant route with `scope` omitted from the email filter masked 1 of 10
+      records — the first — and returned the other 9 in the clear. This is why
+      every filter in the shipped spec sets scope: global and why verify.sh
+      asserts over every record rather than the first.
+
+  agent_prompt:
+    status: PARTIAL
+    detail: >-
+      The README's steps 1-3 were run against the hosted agent on the default
+      model and produced the right configuration: the API, both routes, a fixed
+      proxy-rewrite on the collection route and a regex_uri rewrite carrying the id
+      on the single-record route, request-id on the SERVICE spec, and the full
+      four-filter response-rewrite on BOTH routes with scope: global on every
+      filter. Each step was confirmed by reading the revision back.
+    finding_blocking: >-
+      Step 4 (adding log-data-mask on top) failed four times out of four. The agent
+      emits the tool arguments as a string containing valid JSON with a stray "]"
+      appended; the tool reports no error, nothing is written, and the run ends
+      with "stream closed with reason: error". It is a serialisation defect that
+      becomes reliable once the route spec passes roughly a kilobyte — and
+      update_route_spec is a full replace, so every incremental step resends
+      everything. Reordering the steps did not avoid it. The package ships the
+      importable spec as the documented fallback for that step.
+    finding_silent_drop: >-
+      On the first run the agent nested the plugins under x-helix-gateway inside
+      the live route objects. update_route_spec returned SUCCESS, the dry-run
+      PASSED, and the deployed routes carried no plugins at all — no masking, no
+      rewrite, nothing. The control-plane validate endpoint accepts the wrapper
+      too, so no tool in the chain catches it. Every step of the shipped prompt now
+      asks the agent to read the revision back and show the stored routeSpec, which
+      is the only check that finds it.
+    finding_invented_patterns: >-
+      Asked to describe the masking rather than given the patterns, the agent wrote
+      a replacement string containing a literal [^"]* — which would have written
+      that text into every response. The shipped prompt supplies the filters
+      verbatim.
+
+  not_established_here:
+    - Whether these patterns match YOUR serialised body. Field names and whitespace differ.
+    - What happens to copies of the same value under other keys or inside encoded
+      strings in your payloads. The test plan carries the procedure; it needs real data.
+
+  overall: READY

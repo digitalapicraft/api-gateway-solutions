@@ -1,0 +1,5 @@
+### Case: document-encrypted — the same partner, after registration.
+### Expect 200, content-type text/plain, and a body that is BASE64 of an armored
+### PGP message encrypted to THAT partner's key. Decode, then decrypt.
+GET {{GATEWAY}}/partners/documents
+X-Partner-Id: {{PARTNER_ID}}

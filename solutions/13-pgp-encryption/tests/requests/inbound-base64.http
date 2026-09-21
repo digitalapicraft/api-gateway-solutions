@@ -1,0 +1,8 @@
+### Case: inbound-decrypted — the inbound direction, correct wire format.
+### The body is base64 of an armored PGP message encrypted to the gateway's key.
+### Expect 200, and the backend to receive the PLAINTEXT with content-type
+### application/json — the plugin sets that on the upstream call.
+POST {{GATEWAY}}/statements/inbound
+content-type: text/plain
+
+{{BASE64_OF_ARMORED_PGP_MESSAGE}}

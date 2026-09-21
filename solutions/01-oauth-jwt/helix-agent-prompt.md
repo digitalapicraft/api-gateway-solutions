@@ -43,7 +43,8 @@ one real, high-entropy value in both places and don't commit it. jwt-auth is a
 validate_auth_type of helix-auth, not a standalone plugin.
 
 Check get_plugin_config for helix-auth before writing config. Show me the spec,
-run validate_route and dry_run_deploy, and wait before deploying.
+skip validate_route (it fails on this build whatever you put in it) and run
+dry_run_deploy, then wait before deploying.
 ```
 
 **Step 2 — create an app and test it** (same session, after Step 1 deploys)

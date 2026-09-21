@@ -1,0 +1,186 @@
+# Solution 09 — JSON in, JSON out, in front of a backend that only speaks XML.
+#
+# This is the importable artifact: an OpenAPI 3.0.3 document carrying
+# x-helix-gateway.plugins. Two ways to use it: paste the agent prompt into Agent
+# Mode (it creates the API and binds the upstream for you), or import this file,
+# bind the upstream, and deploy the revision.
+#
+# THIS IS NOT THE SOAP SOLUTION. Solution 02 mediates SOAP: it builds an envelope,
+# sets SOAPAction, and targets a single handler path. This one is for the far more
+# common case of a plain REST/HTTP backend that happens to speak XML — an
+# inventory system from 2009, a payments file API, an industry schema. No
+# envelope, no WSDL, no SOAPAction. If your backend has an envelope, use 02.
+#
+# RUNNABLE ON A FRESH FREE-TRIAL ORG. The upstream is the public httpbin.org,
+# whose /xml returns an XML document and whose /post echoes what it received —
+# so the response direction returns real converted JSON and the request direction
+# lets you SEE the XML your backend would have received. Swap in your own
+# upstream when you have one; only the proxy-rewrite paths change.
+#
+# ENVIRONMENT: a free-trial org gets a "test" environment by default — deploy here.
+#
+# WHAT THIS DOES
+#   response direction  upstream XML -> JSON for the client   (on by default)
+#   request  direction  client JSON  -> XML for the upstream  (transform_request: true)
+#
+# TWO SWITCHES DECIDE WHETHER ANYTHING HAPPENS AT ALL, AND BOTH ARE EASY TO MISS
+#   1. The RESPONSE transform is content-negotiated: it fires only when the client
+#      sends `Accept: application/json`. Without that header the upstream's XML is
+#      passed through untouched, as application/xml, and the plugin looks broken.
+#   2. The REQUEST transform is OFF by default (transform_request defaults to
+#      false) and only converts bodies whose Content-Type is in
+#      request_content_types. A body that does not match is forwarded UNCHANGED —
+#      silently, with no error. Your backend receives JSON and complains about it.
+#
+# DO NOT SET `pretty: true`. Verified against a live gateway on this build: a route
+# with pretty enabled returns 503 and the connection is terminated before headers.
+# The other formatting options (root_name, property_naming) work.
+#
+# PLUGIN ORDER MATTERS AND IS NOT DOCUMENT ORDER. proxy-rewrite (priority 1008)
+# runs before xml-to-json (997) in the rewrite phase. Retargeting the path here is
+# safe; setting Content-Type in proxy-rewrite is NOT — it rewrites the header
+# before xml-to-json inspects it, so the body stops matching
+# request_content_types and the request transform silently does nothing. That
+# exact mistake is recorded against solution 02.
+
+openapi: 3.0.3
+
+info:
+  title: Catalog API
+  version: 1.0.0
+  description: >-
+    A JSON front door for a stock system that only speaks XML. Clients send and
+    receive JSON; the backend keeps receiving and returning the XML it has always
+    used. Proxies the public httpbin service so both directions return real data
+    on a fresh org — /catalog/items converts a real XML document, and
+    /catalog/orders echoes back the XML that was generated from your JSON.
+
+paths:
+  /catalog/items:
+    get:
+      summary: List catalog items as JSON
+      description: >-
+        The backend returns `application/xml`. Send `Accept: application/json` and
+        the gateway converts the document for you. Send nothing, or send
+        `Accept: application/xml`, and you get the backend's XML unchanged — the
+        conversion is content-negotiated, not unconditional.
+      parameters:
+        - name: Accept
+          in: header
+          required: true
+          description: Must be application/json for the response to be converted.
+          schema:
+            type: string
+            default: application/json
+      responses:
+        '200':
+          description: The catalog document, converted to JSON
+          content:
+            application/json:
+              schema:
+                type: object
+        '502': { description: The backend was unreachable }
+      x-helix-gateway:
+        plugins:
+          # Response direction only. transform_response defaults to true, so this
+          # is the minimum useful configuration — but see content_types below:
+          # the upstream's Content-Type has to be on the list or nothing happens.
+          xml-to-json:
+            transform_response: true
+            content_types:
+              - application/xml
+              - text/xml
+            # Keys are emitted exactly as the XML names them, with hyphens turned
+            # into underscores. property_naming: camelCase would lower-case the
+            # first letter of every key — a change to your published contract, so
+            # it is left off rather than applied by reflex.
+
+          proxy-rewrite:
+            uri: /xml
+
+  /catalog/orders:
+    post:
+      summary: Place an order with a JSON body
+      description: >-
+        Send `application/json`. The gateway converts the body to XML and forwards
+        that to the backend, which never learns a JSON client exists. The response
+        is converted back when you send `Accept: application/json`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [orderId, lines]
+              properties:
+                orderId: { type: string }
+                lines:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      sku: { type: string }
+                      qty: { type: integer }
+      responses:
+        '200':
+          description: The backend's acknowledgement
+        '400': { description: The body was not valid JSON }
+        '502': { description: The backend was unreachable }
+      x-helix-gateway:
+        plugins:
+          # BOTH directions. transform_request is the switch people miss: it is
+          # false by default, so an "empty" xml-to-json block converts responses
+          # only and your JSON request body reaches the backend as JSON.
+          xml-to-json:
+            transform_request: true
+            transform_response: true
+            request_content_types:
+              - application/json
+            content_types:
+              - application/xml
+              - text/xml
+
+            # The root element wrapping the generated XML. Your backend's parser
+            # almost certainly cares what this is called.
+            request_root_name: order
+
+            # Element name used for the children of a root-level JSON array.
+            # Only applies when the whole body is an array; a nested array becomes
+            # repeated siblings named after its JSON key.
+            array_item_name: item
+
+            # Namespace declarations on the generated root element. Omit these and
+            # a namespace-aware backend rejects a document that otherwise looks
+            # right, usually with an unhelpful message.
+            root_attributes:
+              xmlns: "urn:example:catalog"
+
+            # Bodies larger than this are forwarded UNCHANGED rather than
+            # rejected. A silent passthrough is worse than an error, so set it
+            # deliberately and alert on backend parse failures.
+            max_body_size: 1048576
+
+          # Path only. Do NOT add a Content-Type override here: proxy-rewrite runs
+          # first and the request transform would stop matching. See the header.
+          proxy-rewrite:
+            uri: /post
+
+# API-WIDE POLICY.
+x-helix-gateway:
+  plugins:
+    # Correlation id on every call. Conversion failures are reported by the
+    # BACKEND ("unexpected element", "invalid request input"), not by the
+    # gateway, so the id is what ties the backend's complaint to the request that
+    # produced it.
+    request-id:
+      algorithm: uuid
+      header_name: X-Request-Id
+
+    # The whole point of this solution is browser and mobile clients that want
+    # JSON, so CORS is in scope here in a way it is not for a device fleet.
+    # accept must be allowed or a browser cannot ask for the conversion at all.
+    cors:
+      allow_origins: "*"
+      allow_methods: "GET,POST,OPTIONS"
+      allow_headers: "accept,content-type"
+      allow_credential: false

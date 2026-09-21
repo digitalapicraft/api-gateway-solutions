@@ -1,0 +1,102 @@
+# Solution manifest — the traceability spine for this package.
+# Every artifact below corresponds to this one solution version. If the gateway
+# config changes, bump `version` and re-derive the docs and diagrams from it
+# — never the other way round.
+
+solution:
+  name: JSON in, JSON out, in front of an XML-only backend
+  slug: 09-xml-to-json
+  version: 1.0.0
+  category:
+    - API Transformation
+  tags: [xml, json, mediation, content-negotiation, xml-to-json, legacy-backend]
+
+problem:
+  statement: >-
+    A backend serves ordinary REST over HTTP but answers in XML, and every client
+    team has written its own XML parser to cope. The conversion exists once per
+    consumer, in a different language each time, with a different answer to the
+    same ambiguities — so representation bugs are intermittent and land on teams
+    that did not cause them. The backend cannot be changed, and every SOAP-to-REST
+    guide starts by building an envelope this system does not have.
+
+business_need:
+  summary: >-
+    Move the conversion to the one place every client already passes through, so a
+    new consumer calls an endpoint instead of writing parser number five. Because
+    response conversion is content-negotiated, the existing XML consumers keep
+    working through the same route — the new front door opens without a migration
+    project, which is usually what decides whether the work happens at all.
+
+implementation:
+  gateway_capabilities:
+    - xml-to-json (transform_response)   # upstream XML -> JSON when the client sends Accept: application/json
+    - xml-to-json (transform_request)    # client JSON -> XML for the backend; OFF by default
+    - proxy-rewrite                      # published route paths differ from the backend's
+    - request-id                         # conversion failures are reported by the BACKEND, not the gateway
+    - cors                               # browser clients; accept must be allowed or they cannot ask for JSON
+  custom_code_required: false
+  notes: >-
+    This is NOT the SOAP solution. Solution 02 builds an envelope and targets one
+    handler path; this one mediates plain XML over ordinary REST paths. Using
+    either in the other's situation produces a document the backend rejects.
+    Two switches decide whether anything happens: the response transform fires only
+    when the client sends Accept: application/json, and the request transform is
+    off unless transform_request is true AND the body's Content-Type is in
+    request_content_types. Both gates fail OPEN — the body is forwarded unchanged
+    with no error.
+    proxy-rewrite (priority 1008) runs before xml-to-json (997) in the rewrite
+    phase. Setting Content-Type in proxy-rewrite breaks the request transform.
+    pretty: true is not safe on this build — a route carrying it returns 503 with
+    the connection terminated before headers. root_name and property_naming work.
+    body-transformer is the alternative when a template is genuinely needed;
+    json-to-xml solves the opposite problem despite its name.
+
+validation:
+  local: PASS
+  gateway_dry_run: PASS
+  deployment: DEPLOYED
+  functional_test: PASS
+  record: validation/
+
+artifacts:
+  documentation: [README.md, architecture.md, business-need.md]
+  source_code: [gateway/api-spec.yaml, gateway/verify.sh]
+  agent_prompt: helix-agent-prompt.md
+  diagrams: [README.md]   # mermaid blocks, rendered inline by GitHub
+  tests: [tests/test-plan.yaml, tests/requests/, tests/expected/]
+  validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
+
+assumptions:
+  - API name is "Catalog API" with routes /catalog/items and /catalog/orders (illustrative — replace with yours).
+  - The backend replies with application/xml or text/xml. Anything else must be added to content_types.
+  - The generated request root element is <order> in the namespace urn:example:catalog. Both are yours to set.
+  - The sample upstream echoes requests, which is what makes the request direction observable in a test.
+  - The package ships unauthenticated on purpose so the mediation is the only behaviour under test.
+
+limitations:
+  - Both conversion gates fail OPEN. A missing Accept header, a content type outside
+    request_content_types, or a body over max_body_size all result in a silent
+    passthrough rather than an error, so a 200 from the gateway is not evidence the
+    conversion happened.
+  - Attributes on CHILD elements were not present in the converted output in this
+    package's validation run; root-element attributes were. Data carried in child
+    attributes is at risk.
+  - XML has no array type, so a repeatable element that occurs exactly once converts
+    to an object rather than a one-item array. This is the classic intermittent
+    client bug after an XML-to-JSON migration.
+  - Empty elements become null, not an empty string and not an absent key.
+  - Mixed content is reshaped into separate keys with the text rejoined, not preserved.
+  - JSON object key order is NOT preserved on the way to XML. A backend validating a
+    strict xs:sequence can reject a document containing every field it required.
+  - >-
+    Setting pretty to true makes the route return 503 on this build, with the
+    connection terminated before headers. Verified and isolated to that one option.
+  - The JSON contract mirrors the XML element for element. There is no independent
+    versioning, so a backend refactor is a client-visible change.
+  - Conversion buffers the body, so large documents cost memory and anything over
+    max_body_size is forwarded unconverted.
+  - Conversion failures surface as BACKEND errors, not gateway errors. Correlation
+    depends on request-id being propagated into the backend's logs.
+
+status: READY   # validated on a gateway; verify.sh passes 5/5

@@ -1,0 +1,85 @@
+# Gateway validation — this solution was imported, dry-run, deployed and exercised
+# against a gateway. The statuses below are the outcome. Re-run
+# gateway/verify.sh against your own environment before you rely on it.
+
+gateway_validation:
+  solution: 13-pgp-encryption
+  version: 1.0.0
+
+  dry_run:
+    status: PASS
+    detail: >-
+      Non-destructive dry-run passed against a temporary import of the shipped spec
+      (placeholders in the key fields) and again against the filled-in copy used for
+      the functional run.
+
+  deployment:
+    status: DEPLOYED
+    detail: >-
+      Imported and deployed ACTIVE to a test environment with a THROWAWAY RSA-3072
+      key pair generated for the run, bound to a public upstream that echoes
+      requests. No key material from this run appears in the repository.
+
+  functional_tests:
+    executor: gateway/verify.sh
+    status: PASS
+    detail: All cases pass against the deployed routes, as shipped and unmodified.
+    cases:
+      - { id: statement-encrypted,  expected_status: 200, result: PASS, note: "content-type text/plain; body base64-decoded to an ASCII-armored PGP message" }
+      - { id: no-plaintext-survives, expected_status: 200, result: PASS, note: "no readable fragment of the backend document in the response" }
+      - { id: armored-body,         expected_status: 400, result: PASS, note: "a RAW armored body was rejected with the configured fail_close_message" }
+      - { id: plaintext-body,       expected_status: 400, result: PASS, note: "a non-PGP body rejected the same way; the backend was not called" }
+      - { id: inbound-decrypted,    expected_status: 200, result: PASS, note: "base64(armor) decrypted; the echo showed the plaintext instruction and content-type application/json set by the plugin" }
+      - { id: statement-round-trip, expected_status: 200, result: PASS, note: "the encrypted statement decrypted back to the backend's document with the matching private key" }
+
+  observations:
+    - >-
+      WIRE FORMAT established by running it, not by reading the schema: both
+      directions use base64 of the ASCII-armored message. A raw armored inbound body
+      fired fail-close; the same message base64-encoded decrypted cleanly.
+    - >-
+      `field` on an encrypt block returns ONLY that field's ciphertext as the entire
+      response body. Verified separately: encrypting with a field on a JSON document
+      returned a ciphertext that decrypted to just that field's value, with the rest
+      of the document discarded.
+    - >-
+      The plugin sets content-type on both sides: application/json on the decrypted
+      upstream call, text/plain on the encrypted response.
+    - >-
+      Caller-facing errors are generic. The specific reason for a crypto failure is
+      recoverable from gateway telemetry, not from the response.
+
+  agent_prompt:
+    status: PARTIAL
+    detail: >-
+      Step 1 was run against the hosted agent on the default model and produced
+      exactly the right configuration: the API, the inbound route with
+      proxy-rewrite, and pgp-crypto with the crypto nested under a `decrypt` key,
+      the placeholder preserved, fail-close at 400 with the configured message —
+      confirmed by reading the revision back. request-id landed on the SERVICE spec.
+    finding_flaky_tool_calls: >-
+      Four of the five attempts in this package ended in "stream closed with reason:
+      error". In each case update_route_spec received its arguments as a STRING
+      containing valid JSON with a stray bracket appended, nothing was written, and
+      the run died. Payload size was not the discriminator — one failure carried 570
+      bytes and one success carried more. The shipped prompt therefore tells the
+      reader to retry once and to import the spec if it repeats.
+    finding_flat_crypto_block: >-
+      Asked in prose, the agent wrote pgp-crypto as a FLAT block
+      ({target, source, public_key, ...}) with no encrypt/decrypt wrapper, which the
+      schema rejects. Shown the nested route object literally, it reproduced it
+      exactly. The shipped prompt supplies the JSON.
+    not_completed: >-
+      Step 2 (adding the outbound encrypt route) failed on the serialisation defect
+      and was not completed by the agent in this run. The route it would have
+      produced is the one in gateway/api-spec.yaml, which was deployed and passed
+      all seven functional cases — but that deployment came from the spec import,
+      not from the agent, and this record does not claim otherwise.
+
+  not_established_here:
+    - The CPU cost of crypto at a realistic request rate and payload size.
+    - Behaviour with key material this run did not use — passphrase-protected keys,
+      elliptic-curve keys, and keys in newer OpenPGP formats were all out of scope.
+      The run used an unprotected RSA-3072 v4 key pair.
+
+  overall: READY

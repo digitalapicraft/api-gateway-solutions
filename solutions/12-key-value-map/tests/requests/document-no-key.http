@@ -1,0 +1,6 @@
+### Case: no-key-registered — a partner whose key has never been stored.
+### Expect 500 with the configured message, and NO document.
+### This is the security case: with fail-open the backend's document would be
+### returned in the clear to a caller who was supposed to receive ciphertext.
+GET {{GATEWAY}}/partners/documents
+X-Partner-Id: {{UNREGISTERED_PARTNER_ID}}

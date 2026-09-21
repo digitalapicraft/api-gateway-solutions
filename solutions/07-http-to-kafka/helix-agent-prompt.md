@@ -55,8 +55,8 @@ Also add request-id at the API level with header_name X-Request-Id, so the
 response and the Kafka message share a correlation id.
 
 Check get_plugin_config for kafka-logger, mocking and request-validation before
-writing config. Show me the spec, run validate_route and dry_run_deploy, and
-wait before deploying.
+writing config. Show me the spec, skip validate_route (it fails on this build
+whatever you put in it) and run dry_run_deploy, then wait before deploying.
 ```
 
 **Step 2 — prove the edge contract** (same session, after Step 1 deploys)

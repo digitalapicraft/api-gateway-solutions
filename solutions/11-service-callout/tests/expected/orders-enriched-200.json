@@ -1,0 +1,15 @@
+{
+  "status": 200,
+  "headers": {
+    "present": [
+      "X-Request-Id"
+    ]
+  },
+  "body": {
+    "headers": {
+      "X-Tenant-Plan": "Romaguera-Crona",
+      "X-Tenant-Contact": "Sincere@april.biz",
+      "X-Profile-Status": "200"
+    }
+  }
+}

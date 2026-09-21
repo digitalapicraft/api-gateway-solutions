@@ -1,0 +1,73 @@
+# Local (pre-gateway) validation — a structural review of the importable
+# artifacts. It does not, and cannot, establish gateway behaviour. Nothing here
+# implies a gateway accepted this configuration.
+
+local_validation:
+  solution: 13-pgp-encryption
+  version: 1.0.0
+  status: PASS
+
+  checks:
+    syntax:                  PASS   # api-spec.yaml parses as valid OpenAPI 3.0.3; verify.sh parses under bash -n
+    schema:                  PASS   # pgp-crypto (decrypt/encrypt with target, source, key material, fail_policy, fail_close_status, fail_close_message; max_body_size; gpg_timeout_ms), proxy-rewrite, request-id — every field drawn from the live plugin schema in the target org
+    required_fields:         PASS   # each crypto block carries target, source and its key field, which the plugin requires
+    references:              PASS   # the fail_close_message on the inbound route is the string the test fixtures assert, so the assertions cannot drift from the config
+    plugin_ordering:         PASS   # pgp-crypto acts on the request body before proxying and on the response body after; proxy-rewrite changes only the path
+    plugin_scoping:          PASS   # each route carries exactly one direction; request-id is API-wide
+    auth_authz_dependencies: PASS   # none — and the package states that encryption is not authentication rather than implying otherwise
+    request_response:        PASS   # documented 200/400/500 responses match the design, including the two distinct fail-close statuses
+    security:                PASS   # both key fields carry placeholders, never real material, and the package is explicit that they are literals
+    no_commentary_keys:      PASS   # plugin blocks contain schema fields only; all explanation is in YAML comments
+    tests_match_impl:        PASS   # all six verify.sh cases map to routes and plugins that exist in the spec; the three manual cases are flagged as such in tests/test-plan.yaml
+    placeholders:            PASS   # <PGP_PRIVATE_KEY>, <PGP_PUBLIC_KEY>, <YOUR_GATEWAY_HOST>, <ORG_ID> — no real key material, hosts or org ids
+
+  warnings:
+    - >-
+      The key material is used LITERALLY. The gateway does not resolve <ENV:...> or
+      ${...} in private_key or public_key, so the placeholders must be replaced with
+      real armored blocks before deploy and the filled-in file must be kept out of
+      version control. This is the same class of footgun as helix-auth's
+      signing_secret and is longer lived.
+    - >-
+      Both directions use base64 of the ASCII-armored message rather than the armor
+      itself. No standard PGP tool produces that by default, so a counterparty
+      following the standard correctly will be rejected, with a message that does not
+      mention base64.
+    - >-
+      Setting `field` on an encrypt block returns only that field's ciphertext as the
+      entire response body and discards the rest of the document. It is not
+      field-level encryption of a document you keep.
+    - >-
+      fail_policy must stay fail-close on the response direction. fail-open there
+      returns the backend's statement in the clear, which is the incident the
+      solution exists to prevent — and fail-open is what somebody reaches for when
+      the route starts erroring.
+    - >-
+      Encrypting to the wrong public key is undetectable at the gateway. The response
+      is well formed and only the counterparty discovers the problem. A round-trip
+      test is the only automated defence.
+    - >-
+      Errors are generic to the caller by design, so a partner cannot self-diagnose a
+      crypto failure. Give them the request id and a support path.
+    - >-
+      One key pair per route. Two counterparties means two routes, and rotating a key
+      is a hard cutover because old and new cannot both be live. With more than one
+      counterparty, fetch the key per request instead (solution 12).
+    - >-
+      Crypto buffers the whole body and is bounded by max_body_size, which rejects
+      rather than streams. Raise it deliberately, with the memory cost in mind.
+    - >-
+      Encryption is neither authentication nor a signature. Anyone who can reach the
+      route receives a document they cannot read, and nothing here establishes who
+      sent an inbound message.
+
+  assumptions:
+    - API "Statements API" with routes /statements/inbound and /statements/{statementId}. All illustrative.
+    - One counterparty and one key pair.
+    - The private key is unprotected; a passphrase would be a second literal in the document.
+    - The upstream echoes requests, which is what makes the decrypted plaintext observable.
+
+  not_established_here:
+    - Whether a gateway accepts this configuration (that is a dry-run).
+    - Whether YOUR key material parses — a key that does not is a runtime failure, not a config one.
+    - The CPU cost of crypto at your request rate and payload size.

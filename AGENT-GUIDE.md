@@ -51,8 +51,8 @@ WHAT I WANT    Numbered outcomes, in the order a request encounters them.
 CONSTRAINTS    Known platform behaviour to respect, and the wrong turns to
                avoid — each with a reason.
 
-BEFORE YOU     Show me the spec. Run validate_route and dry_run_deploy. Wait
-DEPLOY         for my confirmation.
+BEFORE YOU     Show me the spec. Run dry_run_deploy — skip validate_route, see
+DEPLOY         below. Wait for my confirmation.
 
 AFTER YOU      What to hand back: credentials, a curl command that proves it,
 DEPLOY         and a plain-language description of what a rejected caller sees.
@@ -71,8 +71,14 @@ keys and the loop that makes the 429 appear — but only if you ask.
 The order that works, every time:
 
 ```
-validate_route  →  dry_run_deploy  →  show me the spec  →  [you confirm]  →  deploy_revision
+dry_run_deploy  →  show me the spec  →  [you confirm]  →  deploy_revision
 ```
+
+> **Do not ask the agent to run `validate_route`.** Verified against a live control
+> plane: the tool posts `{"route": {…}}` and the endpoint requires
+> `{"routeSpec": [ … ]}`, so it returns 400 whatever you put in it. Asked for it,
+> the agent retries, then emits a malformed tool call and the run ends in
+> `stream closed with reason: error`. `dry_run_deploy` does the job and works.
 
 Put this in the prompt explicitly, and add the sentence that matters most:
 
@@ -199,7 +205,12 @@ route. Remove it."* works. *"That's wrong"* gets you a different guess.
 ## 10. Before you call it done
 
 - The spec the agent applied is the spec you read and confirmed.
-- `validate_route` and `dry_run_deploy` both passed, and you saw the output.
+- `dry_run_deploy` passed and you saw the output. (`validate_route` is broken on
+  this build — see above.)
+- **You read the revision back and every route has a `plugins` key.** Plugins
+  nested under `x-helix-gateway` in a live route object are silently discarded:
+  the write reports success, the dry-run passes, and the route deploys with
+  nothing on it. That nesting is correct in an OpenAPI *document* and wrong here.
 - A real call from a real app succeeded, and a deliberately bad call failed the
   way you expected.
 - You know what a rejected caller sees — the status, the body, and which headers

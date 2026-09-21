@@ -1,0 +1,6 @@
+### Case: enriched-read — the read route, with the callout succeeding.
+### Expect 200. The sample upstream echoes request headers, so the response shows
+### exactly what the backend received: the two mapped profile fields and the
+### callout's own HTTP status.
+GET {{GATEWAY}}/storefront/orders
+accept: application/json

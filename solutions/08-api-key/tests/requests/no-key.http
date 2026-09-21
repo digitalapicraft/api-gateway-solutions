@@ -1,0 +1,5 @@
+### Case: no-key — a call with no credential at all.
+### Expect 401 with "Missing API key in request".
+### Rejected in the access phase; the upstream is never contacted.
+GET {{GATEWAY}}/fleet/price-list
+accept: application/json

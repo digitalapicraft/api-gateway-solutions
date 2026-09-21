@@ -1,0 +1,99 @@
+# Solution manifest — the traceability spine for this package.
+# Every artifact below corresponds to this one solution version. If the gateway
+# config changes, bump `version` and re-derive the docs and diagrams from it
+# — never the other way round.
+
+solution:
+  name: Mask sensitive values in the response, and again in the logs
+  slug: 10-data-mask
+  version: 1.0.0
+  category:
+    - Security & Access
+    - Observability & Operations
+  tags: [pii, masking, redaction, response-rewrite, log-data-mask, compliance, audit]
+
+problem:
+  statement: >-
+    A customer API returns the whole record to every consumer. Support agents read
+    full email addresses, phone numbers and home coordinates they have no need for,
+    and the same payload is copied into a log aggregator with longer retention and
+    a wider audience — which is where an audit finding named it. Narrowing the
+    response at the backend is a schema change on a shared service and is not
+    schedulable.
+
+business_need:
+  summary: >-
+    Narrow the response at the single point every consumer passes through, so the
+    screen stops carrying what nobody needs and the logged copy is redacted
+    independently. Keep the useful half of each field — the email domain, not the
+    local part — because a control that makes the job harder is a control that gets
+    an exception and then a rollback.
+
+implementation:
+  gateway_capabilities:
+    - response-rewrite (filters)   # what the CALLER receives; regex over the response body
+    - log-data-mask                # what a LOGGER writes; named fields and headers
+    - proxy-rewrite (uri, regex_uri)  # published paths differ from the backend's; the id is carried through
+    - request-id                   # a masked response is harder to support; this is what the agent quotes
+  custom_code_required: false
+  notes: >-
+    The two masks are independent controls with independent evidence. Verified on
+    two routes differing only in this: a route carrying ONLY log-data-mask returned
+    the caller the full email and phone, while its log entry carried the mask and
+    no Authorization header. Neither plugin implies the other, and log-data-mask
+    has no effect at all on a route with no logger plugin, nor on analytics.
+    response-rewrite's `scope` defaults to `once`, which masks the FIRST match in
+    the body and leaves the rest. Reproduced deliberately: 1 of 10 records masked.
+    Every filter in this spec sets scope: global.
+    The filters are regex substitutions over the serialised body, anchored on their
+    own field names. They cannot see a value under another key or inside an encoded
+    string, and an unanchored pattern corrupts data silently.
+
+validation:
+  local: PASS
+  gateway_dry_run: PASS
+  deployment: DEPLOYED
+  functional_test: PASS
+  record: validation/
+
+artifacts:
+  documentation: [README.md, architecture.md, business-need.md]
+  source_code: [gateway/api-spec.yaml, gateway/verify.sh]
+  agent_prompt: helix-agent-prompt.md
+  diagrams: [README.md]   # mermaid blocks, rendered inline by GitHub
+  tests: [tests/test-plan.yaml, tests/requests/, tests/expected/]
+  validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
+
+assumptions:
+  - API name is "Support Console API" with routes /support/customers and /support/customers/{customerId} (illustrative).
+  - The sensitive fields are named email, phone, lat and lng in the serialised response body.
+  - The email domain is worth keeping and the local part is not. Decide this per field for your own data.
+  - A logger plugin is added separately where the log half is required; the spec carries the mask, not the logger.
+  - The package ships unauthenticated on purpose so masking is the only behaviour under test.
+
+limitations:
+  - >-
+    response-rewrite's scope defaults to `once`. A filter without scope: global
+    masks the first match and leaves every other one — one record of a list, and it
+    is the first one, which is the record that appears in every screenshot.
+  - The filters are regex substitutions over body text, not schema-aware redaction.
+    The same value under a different key, inside a base64 or URL-encoded string, or
+    quoted in a free-text error message is NOT masked.
+  - An over-broad pattern corrupts data silently. Every filter must be anchored on
+    its own field name, and a test must assert that unfiltered fields are untouched.
+  - log-data-mask has NO effect on a route that carries no logger plugin, and none on
+    analytics, which does not pass through the shared log helper.
+  - log-data-mask does not change the response. A route carrying only that plugin
+    sends the caller everything.
+  - Masking is not access control. A caller who should not see the record at all must
+    be stopped by identity.
+  - The masked value is not reversible and not format-preserving. There is no token a
+    downstream system can correlate on.
+  - The upstream still returns the sensitive data, and the gateway holds it in memory
+    to rewrite it. If the requirement is that the value never leaves the system of
+    record, this control does not meet it.
+  - Body rewriting buffers the response, which costs memory on large payloads.
+  - If a format converter runs on the same route it runs FIRST, so the patterns must
+    match the converted body rather than the upstream's original.
+
+status: READY   # validated on a gateway; verify.sh passes 6/6, log half verified separately

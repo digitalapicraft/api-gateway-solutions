@@ -1,0 +1,7 @@
+### Case: plaintext-body — not a PGP message at all.
+### Expect 400 and no call to the backend: fail-close means the backend never sees
+### a body the gateway could not decrypt.
+POST {{GATEWAY}}/statements/inbound
+content-type: text/plain
+
+hello

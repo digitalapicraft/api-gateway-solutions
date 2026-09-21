@@ -1,0 +1,7 @@
+### Case: valid-key — the terminal's own API key, in the header the route names.
+### Expect 200 and the upstream's payload.
+### A 403 here means authentication worked and authorization did not: the app's
+### product does not cover this API.
+GET {{GATEWAY}}/fleet/price-list
+X-Device-Key: {{DEVICE_API_KEY}}
+accept: application/json

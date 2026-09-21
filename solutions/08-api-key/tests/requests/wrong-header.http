@@ -1,0 +1,6 @@
+### Case: wrong-header — the right key in the wrong header.
+### Expect 401. The route declares apikey.key: X-Device-Key, and no other header
+### is accepted — the header name is part of the contract you publish to the fleet.
+GET {{GATEWAY}}/fleet/price-list
+apikey: {{DEVICE_API_KEY}}
+accept: application/json

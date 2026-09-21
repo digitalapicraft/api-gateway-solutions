@@ -131,7 +131,8 @@ The signing secret is a LITERAL on this build — no <ENV:...> resolution — so
 one real, high-entropy value in both places and don't commit it. jwt-auth is a
 validate_auth_type of helix-auth, not a standalone plugin.
 
-Show me the spec, run validate_route and dry_run_deploy, and wait before deploying.
+Show me the spec, skip validate_route (it fails on this build whatever you put in
+it) and run dry_run_deploy, then wait before deploying.
 ```
 
 Then, in the same session:

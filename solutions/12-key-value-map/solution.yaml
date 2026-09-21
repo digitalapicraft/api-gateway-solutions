@@ -1,0 +1,125 @@
+# Solution manifest — the traceability spine for this package.
+# Every artifact below corresponds to this one solution version. If the gateway
+# config changes, bump `version` and re-derive the docs and diagrams from it
+# — never the other way round.
+
+solution:
+  name: Per-partner key material fetched at request time
+  slug: 12-key-value-map
+  version: 1.0.0
+  category:
+    - Security & Access
+    - Enterprise & Hybrid
+  tags: [key-value-map, kvm, pgp-crypto, key-rotation, multi-tenant, dynamic-references]
+
+problem:
+  statement: >-
+    Key material written into a route works for the first counterparty and degrades
+    from there. Fourteen partners means fourteen near-identical routes, fourteen
+    keys inside configuration documents, and a release every time a partner rotates
+    on their own schedule — discovered, more often than not, by a file that starts
+    failing on a Friday afternoon.
+
+business_need:
+  summary: >-
+    Make the key data rather than configuration: one route serves every
+    counterparty, adding a partner is a write, and rotation is a write that takes
+    effect on the next request. No key material appears in the configuration
+    document at all. The cost is a write path that must be protected, and a second
+    plugin whose reference grammar fails silently when it is wrong.
+
+implementation:
+  gateway_capabilities:
+    - key-value-map (inserts)   # registration: value taken from the REQUEST BODY, never from the document
+    - key-value-map (fetch)     # per-request lookup into ctx.helix.key_value_map
+    - pgp-crypto (encrypt)      # resolves the SAME dynamic reference instead of a literal key
+    - proxy-rewrite             # published paths differ from the backend's
+    - request-id                # crypto errors are deliberately opaque
+  custom_code_required: false
+  notes: >-
+    Read solution 13 first: every crypto behaviour here (base64-of-armor wire
+    format, generic errors, whole-body buffering) is established there. This package
+    changes exactly one thing — where the key comes from.
+    The coupling between the two plugins is a resolved template string. The same
+    reference appears twice on the read route: once for key-value-map to decide what
+    to fetch, once for pgp-crypto to decide what to read. The grammar is
+    $request.headers.<name> (PLURAL — the singular resolves to nothing, silently),
+    $request.query.<name>, $request.body.<dotted.path>, $response.*,
+    $consumer.<suffix> and $ctx.<path>.
+    A key-value-map MISS is not an error: the plugin cannot know whether the value
+    mattered. The consuming plugin's fail_policy decides what an unregistered
+    partner receives, and fail-open there would return the backend's document IN THE
+    CLEAR.
+    There is NO control-plane API for these entries on this build, so the plugin's
+    own `inserts` is the only write path — which is why a registration route exists.
+    Its value comes from the request body precisely so that key material stays out
+    of the configuration document. Writing a literal key into `inserts` would defeat
+    the entire package.
+
+validation:
+  local: PASS
+  gateway_dry_run: PASS
+  deployment: DEPLOYED
+  functional_test: PASS
+  record: validation/
+
+artifacts:
+  documentation: [README.md, architecture.md, business-need.md]
+  source_code: [gateway/api-spec.yaml, gateway/verify.sh]
+  agent_prompt: helix-agent-prompt.md
+  diagrams: [README.md]   # mermaid blocks, rendered inline by GitHub
+  tests: [tests/test-plan.yaml, tests/requests/, tests/expected/]
+  validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
+
+assumptions:
+  - API name is "Partner Documents API" with routes /partners/keys and /partners/documents (illustrative).
+  - The partner id arrives in X-Partner-Id. Any request-resolvable value works; an authenticated identity is better.
+  - The stored value is an armored OpenPGP public key. The store is generic — keys are simply the case where being wrong costs most.
+  - The upstream echoes requests, which is what makes the registration observable in a test.
+  - The package ships unauthenticated on purpose so the store and the lookup are the only behaviour under test.
+
+limitations:
+  - >-
+    There is no control-plane API for these entries on this build. The plugin's own
+    `inserts` is the only write path, which is why this package ships a registration
+    route at all.
+  - >-
+    The registration route is ADMINISTRATIVE and ships unauthenticated. Anybody who
+    can reach it can register their own key under any partner id, and that partner's
+    documents are then encrypted to them. Protect it before this exists anywhere real.
+  - >-
+    The partner id comes from a caller-controlled header as shipped, so any caller
+    can request any partner's document. They receive ciphertext they cannot read,
+    which is a reason not to panic and not a reason to call it access control.
+  - A key-value-map miss is silent. The consuming plugin decides what a missing value
+    means, and fail-open there returns the backend's document in the clear.
+  - Registration REPLACES the entry. That is what makes rotation work, and it means a
+    bad write destroys the previous value. There is no history and no rollback.
+  - No versioning and no staged rollout — a newly written key is live on the next request.
+  - Storing the WRONG key is undetectable from the gateway. The response is well
+    formed and only the counterparty discovers the problem.
+  - >-
+    The reference grammar fails silently. $request.header.<name> (singular) resolves
+    to nothing, and the symptom is indistinguishable from an unregistered partner.
+  - ctx_namespace on key-value-map and keys_ctx_namespace on the consumer must agree.
+    Both are left at the default here so they agree by construction.
+  - >-
+    A $request.body.<path> reference requires a JSON body, which is read at request time.
+  - Entries are stored encrypted at rest and scoped per environment. That is
+    storage-side protection and says nothing about how the value reached the gateway.
+  - >-
+    A registered-but-unusable key returns 200 carrying the fail-close error body.
+    fail_close_status applies only to a store miss, so a key the crypto cannot use
+    (an OpenPGP key with no encryption subkey) is emitted as a success and a
+    status-only assertion passes while no document is returned. Assert on the body.
+  - >-
+    The registration route's status reflects the upstream echo, not the store write —
+    the insert happens in the access phase, before proxying — so neither a 2xx nor a
+    5xx there is evidence about the value. Read it back.
+  - >-
+    The consumer cannot be swapped on a free-trial org. lua-callout is the only
+    plan-gated plugin on this build and the only alternative reader of a stored
+    value, so pgp-crypto is the only way to observe one here.
+  - Every limitation of solution 13 still applies to the crypto itself.
+
+status: READY   # validated on a gateway; verify.sh passes 7/7 including rotation

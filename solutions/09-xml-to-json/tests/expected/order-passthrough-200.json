@@ -1,0 +1,9 @@
+{
+  "status": 200,
+  "body": {
+    "data": "{\"orderId\":\"SO-1\"}",
+    "headers": {
+      "Content-Type": "text/plain"
+    }
+  }
+}

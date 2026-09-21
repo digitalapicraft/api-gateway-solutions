@@ -1,0 +1,160 @@
+# Test plan — OpenPGP at the edge, both directions.
+#
+# Cases 1-4 are executed by ../gateway/verify.sh with nothing but bash, curl and
+# base64. Case 5 needs gpg and a key pair and is skipped loudly without them.
+#
+# Substitute your own values:
+#   {{GATEWAY}}                          gateway base URL
+#   {{BASE64_OF_ARMORED_PGP_MESSAGE}}    base64 of an armored message encrypted to
+#                                        the gateway's public key
+
+meta:
+  solution: 13-pgp-encryption
+  version: 1.0.0
+  executor: gateway/verify.sh
+  note: >-
+    The wire-format and fail-close cases need no key material, which is deliberate:
+    they are the ones worth running in a pipeline. The round trip needs gpg,
+    GNUPGHOME and RECIPIENT.
+  status: >-
+    EXECUTED against a deployed revision — 7/7 including the round trip. See
+    ../validation/gateway-validation.yaml.
+
+cases:
+  - id: statement-encrypted
+    type: positive
+    intent: >-
+      The outbound response leaves the gateway as base64 of an ASCII-armored PGP
+      message, with the content type changed accordingly.
+    request: requests/statement.http
+    expected: expected/statement-encrypted-200.json
+    response_notes: >-
+      The body is truncated in the fixture. Assert three things: the content type is
+      text/plain, the body base64-decodes, and the decoded bytes start with
+      "-----BEGIN PGP MESSAGE-----". Do not assert the ciphertext itself — it differs
+      on every request.
+    expected_status: 200
+    notes: >-
+      A 500 here means the response could not be encrypted, usually an unparseable
+      public key. The caller's message is deliberately generic; the reason is in the
+      gateway's telemetry.
+
+  - id: no-plaintext-survives
+    type: negative
+    intent: >-
+      The backend's document does not appear anywhere in the response — the check
+      that a fail-open policy has not silently passed the plaintext through.
+    request: requests/statement.http
+    expected: expected/statement-encrypted-200.json
+    expected_status: 200
+    notes: >-
+      This is the case that fails first if someone switches the policy to fail-open
+      "so it stops breaking". It stops breaking by returning the statement in the
+      clear.
+
+  - id: armored-body
+    type: negative
+    intent: >-
+      Establish the wire format by asserting what is REJECTED: a raw ASCII-armored
+      body, which is what every PGP tool produces by default.
+    request: requests/inbound-armored.http
+    expected: expected/armored-body-400.json
+    response_notes: >-
+      The configured fail_close_message. This is the single most likely integration
+      failure with a counterparty, and it produces an error that says nothing about
+      base64 — so it must be in the integration guide you hand them.
+    expected_status: 400
+
+  - id: plaintext-body
+    type: negative
+    intent: >-
+      A body that is not a PGP message at all is rejected, and the backend is never
+      called.
+    request: requests/inbound-plaintext.http
+    expected: expected/plaintext-body-400.json
+    expected_status: 400
+    notes: >-
+      With fail-open this would reach the backend unchanged, which on an inbound
+      financial message is worse than refusing.
+
+  - id: inbound-decrypted
+    type: positive
+    intent: >-
+      A correctly framed inbound message is decrypted and the backend receives the
+      plaintext.
+    request: requests/inbound-base64.http
+    expected: expected/inbound-decrypted-200.json
+    response_notes: >-
+      The sample upstream echoes what it received, so `data` is the decrypted
+      instruction and `headers.Content-Type` shows the plugin also set
+      application/json on the upstream call. Against a backend that does not echo,
+      read its own log — a 200 from the gateway does not prove the backend got
+      plaintext.
+    expected_status: 200
+
+  - id: statement-round-trip
+    type: positive
+    intent: >-
+      The encrypted statement decrypts back to the backend's document with the
+      partner's private key — the only assertion that proves the right recipient key
+      was used.
+    request: requests/statement.http
+    expected: expected/statement-encrypted-200.json
+    expected_status: 200
+    notes: >-
+      Executed by verify.sh when gpg, GNUPGHOME and RECIPIENT are set. Encrypting to
+      the WRONG public key produces a response that passes every other case in this
+      plan and that the partner cannot read.
+
+  - id: wrong-recipient
+    type: failure
+    intent: >-
+      Establish what a mismatched key pair looks like, because every other signal
+      says the solution is working.
+    type_of_execution: manual
+    procedure: >-
+      In a THROWAWAY environment, configure the encrypt route with a public key the
+      partner does not hold the private half of. Call it and try to decrypt.
+    expected_outcome: >-
+      200, a well-formed base64 armored message, and decryption fails at the
+      partner. Nothing at the gateway indicates a problem. The round-trip case above
+      is the only automated defence.
+    notes: >-
+      This is the failure that reaches production, because it is invisible from the
+      gateway's side.
+
+  - id: oversized-body
+    type: boundary
+    intent: >-
+      Establish the behaviour at max_body_size before a real file hits it.
+    type_of_execution: manual
+    procedure: >-
+      Send an encrypted body larger than max_body_size (1 MiB as shipped).
+    expected_outcome: >-
+      Rejected rather than processed. Decryption buffers the whole body, so raise the
+      limit deliberately and with the memory cost in mind rather than to make one
+      file work.
+    notes: >-
+      Batch files are the usual reason this limit is discovered, and usually at the
+      worst time of the month.
+
+  - id: key-rotation
+    type: boundary
+    intent: >-
+      Establish the rotation procedure before a counterparty's key expires.
+    type_of_execution: manual
+    procedure: >-
+      Replace the key material in the route and deploy a new revision. Note that the
+      old and new keys cannot both be live on one route.
+    expected_outcome: >-
+      A hard cutover. Messages encrypted to the old key fail after the switch.
+      Coordinate it, or move the key material out of the route entirely — see
+      solution 12, where rotation is a data change rather than a deploy.
+    notes: >-
+      This limitation is the entire reason solution 12 exists.
+
+coverage:
+  positive: [statement-encrypted, inbound-decrypted, statement-round-trip]
+  negative: [no-plaintext-survives, armored-body, plaintext-body]
+  boundary: [oversized-body, key-rotation]
+  failure:  [wrong-recipient]

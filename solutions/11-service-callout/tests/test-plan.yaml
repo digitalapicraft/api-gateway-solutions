@@ -1,0 +1,160 @@
+# Test plan — one shared lookup at the edge, delivered to the backend as headers.
+#
+# Cases 1-5 are executed by ../gateway/verify.sh. The failure-policy and
+# phase-ordering cases need a route pointed at an unreachable callout, so they are
+# procedures rather than assertions against the shipped routes.
+#
+# Substitute your own values:
+#   {{GATEWAY}}   gateway base URL, e.g. https://<YOUR_GATEWAY_HOST>
+
+meta:
+  solution: 11-service-callout
+  version: 1.0.0
+  executor: gateway/verify.sh
+  note: >-
+    The assertions are about what the BACKEND received, so they need an upstream
+    that echoes request headers. The package's sample upstream does; against your
+    own backend run verify.sh with ECHOES_HEADERS=0 and read its log instead.
+  status: >-
+    EXECUTED against a deployed revision — 5/5 — and the three manual cases were
+    each reproduced on a temporary lab API. See ../validation/gateway-validation.yaml.
+
+cases:
+  - id: enriched-read
+    type: positive
+    intent: >-
+      The callout runs once, its response is mapped into the request context, and
+      the mapped fields reach the backend as headers.
+    request: requests/orders.http
+    expected: expected/orders-enriched-200.json
+    response_notes: >-
+      The echo shows the backend's view. X-Profile-Status carries the CALLOUT's HTTP
+      status, which is what lets a backend tell a real answer from a fail-open miss.
+    expected_status: 200
+    notes: >-
+      If the headers are absent: the callout is on the access phase rather than
+      rewrite (proxy-rewrite has already run by then), the variable name does not
+      match ctx.helix.<ctx_namespace>.<field> exactly, or the callout failed under
+      a fail-open policy.
+
+  - id: mapped-second-field
+    type: positive
+    intent: >-
+      Every path in map_response_to_ctx resolves independently; one missing path
+      does not fail the request or the others.
+    request: requests/orders.http
+    expected: expected/orders-enriched-200.json
+    expected_status: 200
+    notes: >-
+      A dotted path that matches nothing yields no value and no error. That is
+      convenient and it means a typo in a path is invisible until a backend
+      notices the header is missing.
+
+  - id: spoofed-header
+    type: negative
+    intent: >-
+      A client that sends the header the gateway sets does not get to keep its own
+      value.
+    request: requests/spoofed-header.http
+    expected: expected/spoofed-header-200.json
+    response_notes: >-
+      The backend received the gateway's value. This is a property of headers.set —
+      it replaces. headers.add would have left the client's value alongside, and
+      any caller could then assert its own plan.
+    expected_status: 200
+    notes: >-
+      Do not skip this one. It is the difference between enrichment and a
+      privilege-escalation path, and it breaks silently if someone changes `set` to
+      `add` while tidying.
+
+  - id: enriched-write
+    type: positive
+    intent: >-
+      The write route is enriched too, and the request body is forwarded unchanged.
+    request: requests/checkout.http
+    expected: expected/checkout-enriched-200.json
+    expected_status: 200
+    notes: >-
+      service-callout is configured per route. A new route added later gets no
+      enrichment until someone remembers, and the backend sees an absent header
+      rather than an error.
+
+  - id: callout-down-fail-close
+    type: failure
+    intent: >-
+      On a write path, an unreachable profile service stops the request rather than
+      letting it proceed without the answer.
+    request: requests/callout-down.http
+    expected: expected/callout-down-503.json
+    response_notes: >-
+      503 with the configured message. The backend is never called. Reproduced on a
+      lab route whose callout pointed at an unresolvable host.
+    expected_status: 503
+    type_of_execution: manual
+    procedure: >-
+      In a THROWAWAY environment, point the write route's callout at an unresolvable
+      host and call the route.
+    notes: >-
+      Outside verify.sh because it requires breaking the callout deliberately.
+
+  - id: callout-down-fail-open
+    type: failure
+    intent: >-
+      On a read path, an unreachable profile service does NOT stop the request —
+      and the headers are simply absent.
+    type_of_execution: manual
+    procedure: >-
+      Same lab route, policy fail-open, callout pointed at an unresolvable host.
+    expected_outcome: >-
+      200, and the backend receives the request with the enrichment headers ABSENT
+      — not empty, absent. Reproduced during this package's validation run. Your
+      backend must therefore treat them as optional and decide explicitly what to
+      do when they are missing; a backend that assumes the header is always there
+      will fail in a way that looks like a gateway bug.
+    notes: >-
+      This is the case that decides whether fail-open is the right policy for your
+      route. If the backend cannot behave sensibly without the answer, use
+      fail-close.
+
+  - id: wrong-phase
+    type: failure
+    intent: >-
+      Establish the symptom of the most common misconfiguration, so it is
+      recognisable: a callout that runs too late to be read.
+    type_of_execution: manual
+    procedure: >-
+      In a THROWAWAY environment, change the callout's phase from rewrite to access
+      and call the route.
+    expected_outcome: >-
+      200, and no enrichment headers at the backend at all. Reproduced during this
+      package's validation run. proxy-rewrite runs in the rewrite phase, so a
+      callout in the access phase produces its values after the injection has
+      already happened. Nothing errors; the headers are just not there.
+    notes: >-
+      "It deploys cleanly and does nothing" is the hardest class of bug to
+      recognise, which is why this is a written case rather than a sentence in the
+      README.
+
+  - id: latency-budget
+    type: boundary
+    intent: >-
+      Measure what the callout costs, because it is a synchronous call in the
+      request path and its timeout is added to this route's worst case.
+    type_of_execution: manual
+    procedure: >-
+      Compare p50 and p99 for the route with the callout against an equivalent route
+      without it, under representative load, then set `timeout` from the result.
+    expected_outcome: >-
+      The added latency is roughly the profile service's own response time, and the
+      worst case is bounded by `timeout` (3000ms as shipped). Choose that number
+      rather than inheriting it: it is how long the caller waits before a fail-open
+      route gives up.
+    notes: >-
+      Keepalive matters here. Without it every request pays a fresh TCP and TLS
+      handshake to the profile service.
+
+coverage:
+  positive: [enriched-read, mapped-second-field, enriched-write]
+  negative: [spoofed-header]
+  boundary: [latency-budget]
+  failure:  [callout-down-fail-close, callout-down-fail-open, wrong-phase]

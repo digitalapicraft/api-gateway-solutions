@@ -1,0 +1,7 @@
+### Case: takings — the write route with a valid key.
+### Expect 201 and the backend's acknowledgement.
+POST {{GATEWAY}}/fleet/takings
+X-Device-Key: {{DEVICE_API_KEY}}
+content-type: application/json
+
+{"terminalId":"T-3312","periodEnd":"2026-01-01T00:00:00Z","grossCents":184250}
