@@ -22,4 +22,16 @@ gateway_validation:
       - { id: alg-none,                expected: 401, actual: 401, result: PASS }
       - { id: malformed-authorization, expected: 400, actual: 400, result: PASS, note: "400, NOT 401 — rejected at header parse, before the plugin runs" }
 
+  agent_prompt_run:
+    executor: harness/verify-agent.sh (hosted agent, default model)
+    date: 2026-09-21
+    status: PASS
+    detail: >-
+      Three routes with cors, openid-connect and request-id. bearer_only true,
+      unauth_action deny and use_jwks true all set — the redirect-to-login trap
+      avoided — and no helix-auth anywhere.
+    verified_by: >-
+      get_revision read back after the run; the stored routeSpec was inspected
+      directly, not inferred from the agent transcript.
+
   overall: READY WITH WARNINGS

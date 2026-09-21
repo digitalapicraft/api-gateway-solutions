@@ -102,4 +102,18 @@ gateway_validation:
         these responses are NOT from the enforcer — they appear identically on a
         route with no enforcer on it, so they are a gateway-level default (1000/s).
 
+  agent_prompt_run:
+    executor: harness/verify-agent.sh (hosted agent, default model)
+    date: 2026-09-21
+    status: PASS (config), run ended on a tool-call defect
+    detail: >-
+      Config landed correctly before the run died: two routes with hmac-auth,
+      proxy-rewrite and request-id. signed_headers set per method ["@request-
+      target","date"] on GET, plus "digest" on POST; validate_request_body true
+      on the write route; no secrets in the route config. The session then ended
+      with "stream closed with reason: error" during a later step.
+    verified_by: >-
+      get_revision read back after the run; the stored routeSpec was inspected
+      directly, not inferred from the agent transcript.
+
   overall: READY

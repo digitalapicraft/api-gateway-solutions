@@ -183,6 +183,16 @@ touch the body at all — then `request-validation` can stay.
 See [helix-agent-prompt.md](helix-agent-prompt.md) for the step-by-step prompts,
 verified on the default agent model.
 
+**One limitation is specific to this solution.** The agent path installs the
+route and all three plugins, but it cannot carry a property-level `body_schema` —
+the nesting depth reproducibly corrupts the agent's own tool-call arguments, so
+nothing gets written at all. The prompt therefore ships a required-only schema,
+which still rejects events missing `event_id`, `event_type` or `occurred_at` but
+does not constrain their types. For the full schema in
+[`gateway/api-spec.yaml`](gateway/api-spec.yaml), import the spec as below — that
+path is unaffected. The failure and the evidence are documented under *Known
+failure modes* in the prompt.
+
 ## Install it directly
 
 ```text
@@ -346,6 +356,7 @@ deployed, `verify.sh` 4/4, and the Kafka leg confirmed on a topic.**
 | Gateway dry-run | **PASS** | `{"success":true,"message":"Dry-run validation successful"}` |
 | Gateway deployed | **DEPLOYED** | Revision ACTIVE on a temporary test API, since torn down |
 | Functional tests | **PASS (4/4 + 3 manual)** | `verify.sh` exit 0; message-on-topic, rejected-event-not-published and broker-down all confirmed against a real broker |
+| Agent prompt | **PASS, with a documented limitation** | Run live 2026-09-21. Seven runs: the shipped prompt lands the route, all three plugins correctly keyed, `_meta.filter` nested, `$apisix_request_id`, and `request-id` at API level. A property-level `body_schema` fails 5/5 — see *Known failure modes* in the prompt |
 
 Overall: **READY.** A valid event publishes with a complete `event` field, a
 malformed one is rejected and not published, and with the broker unreachable the

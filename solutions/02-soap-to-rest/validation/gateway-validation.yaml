@@ -32,4 +32,16 @@ gateway_validation:
       - { id: response-really-converted, expected_status: 200, result: PASS, note: "body contains no XML markup" }
       - { id: invalid-token,             expected_status: 401, result: PASS }
 
+  agent_prompt_run:
+    executor: harness/verify-agent.sh (hosted agent, default model)
+    date: 2026-09-21
+    status: PASS
+    detail: >-
+      One route with proxy-rewrite, request-id and xml-to-json. Both documented
+      traps avoided unprompted: transform_request true, and no Content-Type
+      forced in proxy-rewrite.
+    verified_by: >-
+      get_revision read back after the run; the stored routeSpec was inspected
+      directly, not inferred from the agent transcript.
+
   overall: READY

@@ -26,4 +26,18 @@ analytics_validation:
     - No quota-usage metric — 429s can be counted, but not "percent of a limit used".
     - X-Request-Id is not a dimension — correlate a single request in your own logs.
 
+  agent_prompt_run:
+    executor: harness/verify-agent.sh (hosted agent, default model)
+    date: 2026-09-21
+    status: PASS
+    detail: >-
+      Ran the first everyday prompt ("requests to all my APIs, broken down by
+      API, busiest first") widened to 7d against the live org. The agent called
+      get_analytics_metadata then a single get_metrics with metricType
+      REQUESTS_COUNT, dimensions [api_name], aggregation SUM, chartType bar —
+      exactly the shape the prompt is written to elicit — and returned a ranked
+      breakdown matching traffic this session actually generated. No config is
+      written by this prompt, so the live-route plugin-placement correction
+      added to the other packages does not apply here.
+
   overall: READY   # read-only; all documented queries verified live

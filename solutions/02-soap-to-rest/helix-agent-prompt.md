@@ -47,7 +47,21 @@ response direction only fires when the client sends Accept: application/json.
 Do not set Content-Type in proxy-rewrite — it runs before the transform and would
 hide the JSON body. Do not add json-to-xml; it is the opposite job.
 
-Show me the spec, dry-run it, and wait for me to confirm before deploying.
+We are editing a LIVE route object, not authoring an OpenAPI document — so do not
+follow the spec-generator examples for plugin placement. Each route object in
+routeSpec takes "plugins" as a TOP-LEVEL key, and inside it each plugin is
+keyed by its own NAME:
+  { "name": ..., "uri": ..., "methods": [...], "service_id": ...,
+    "plugins": { "<plugin-name>": { <that plugin's own fields> } } }
+Do not promote a plugin's fields into the plugins map: "plugins":
+{"response_status": 202, "content_type": ...} is four broken plugins, not one
+working one — the plugin name level is mandatory.
+There must be no "x-helix-gateway" key anywhere in a route object: a live route
+silently discards that wrapper, the write still reports success, and the route
+deploys with no plugins at all.
+
+Show me the spec, dry-run it, then call get_revision and show me
+the stored routeSpec so I can see the plugins landed. Wait before deploying.
 ```
 
 **Check before act 2.** Confirm a JSON call returns JSON with no angle brackets in

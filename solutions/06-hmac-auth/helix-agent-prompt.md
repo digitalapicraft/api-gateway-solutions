@@ -54,9 +54,24 @@ The key_id and secret_key live on the app credential.
 
 Also add request-id at the API level with header_name X-Request-Id.
 
-Check get_plugin_config for hmac-auth before writing config. Show me the spec,
-skip validate_route (it fails on this build whatever you put in it) and run
-dry_run_deploy, then wait before deploying.
+Check get_plugin_config for hmac-auth before writing config.
+
+We are editing a LIVE route object, not authoring an OpenAPI document — so do not
+follow the spec-generator examples for plugin placement. Each route object in
+routeSpec takes "plugins" as a TOP-LEVEL key, and inside it each plugin is
+keyed by its own NAME:
+  { "name": ..., "uri": ..., "methods": [...], "service_id": ...,
+    "plugins": { "<plugin-name>": { <that plugin's own fields> } } }
+Do not promote a plugin's fields into the plugins map: "plugins":
+{"response_status": 202, "content_type": ...} is four broken plugins, not one
+working one — the plugin name level is mandatory.
+There must be no "x-helix-gateway" key anywhere in a route object: a live route
+silently discards that wrapper, the write still reports success, and the route
+deploys with no plugins at all.
+
+Show me the spec, skip validate_route (it fails on this build whatever you put
+in it) and run dry_run_deploy, then call get_revision and show me
+the stored routeSpec so I can see the plugins landed. Wait before deploying.
 ```
 
 **Step 2 — create a credential and test it** (same session, after Step 1 deploys)

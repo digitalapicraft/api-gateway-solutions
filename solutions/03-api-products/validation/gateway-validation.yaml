@@ -31,4 +31,17 @@ gateway_validation:
       - { id: quota-exhausted,  expected_status: 429, result: PASS, note: "body {\"error\":\"quota exceeded\"}" }
       - { id: isolation,        expected_status: 200, result: PASS, note: "second app on a different product unaffected — the case that matters" }
 
+  agent_prompt_run:
+    executor: harness/verify-agent.sh (hosted agent, default model)
+    date: 2026-09-21
+    status: PASS
+    detail: >-
+      helix-auth validate/key-auth with apikey.source plus api-product-enforcer
+      carrying error_policy only. Correctly did NOT reach for limit-count.
+      Created a free-plan product as a side effect, which had to be deleted
+      before the scratch API could be removed.
+    verified_by: >-
+      get_revision read back after the run; the stored routeSpec was inspected
+      directly, not inferred from the agent transcript.
+
   overall: READY

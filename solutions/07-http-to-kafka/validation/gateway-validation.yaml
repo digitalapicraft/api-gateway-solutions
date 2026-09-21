@@ -118,4 +118,29 @@ gateway_validation:
         named in log_format. Harmless, but do not assume log_format is the complete
         set when writing a consumer schema.
 
+  agent_prompt_run:
+    executor: harness/verify-agent.sh (hosted agent, default model)
+    date: 2026-09-21
+    status: PASS with a documented limitation
+    detail: >-
+      Seven runs. The shipped prompt (literal route object, required-only
+      body_schema) lands the route with all three plugins correctly keyed,
+      _meta.filter nested inside kafka-logger, $apisix_request_id in log_format,
+      with_mock_header false, and request-id at the API level. A property-level
+      body_schema fails 5 runs out of 5: the agent tool-call serialiser
+      transposes its closing delimiters (emits ...1}}]}} where ...1}}}]} is
+      valid), the call never reaches the control plane and nothing is written.
+      Removing that one nesting level made the identical prompt succeed. One run
+      also dropped the plugin-name level entirely, writing the mocking fields as
+      four top-level plugin names — write reported success, dry-run passed,
+      route had no mocking.
+    limitation: >-
+      The agent path cannot install the property-level body_schema in
+      gateway/api-spec.yaml. Spec import is unaffected and is the documented
+      route to the full schema.
+    verified_by: >-
+      get_revision read back after every run; the stored routeSpec was
+      inspected directly, and the malformed tool arguments were recovered from
+      the run transcripts and re-parsed to locate the corruption.
+
   overall: READY

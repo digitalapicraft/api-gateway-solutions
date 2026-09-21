@@ -31,4 +31,17 @@ gateway_validation:
       - { id: wrong-secret,            expected_status: 401, result: PASS, note: "the client secret is checked — a real credentials flow" }
       - { id: malformed-authorization, expected_status: 401, result: PASS }
 
+  agent_prompt_run:
+    executor: harness/verify-agent.sh (hosted agent, default model)
+    date: 2026-09-21
+    status: PASS
+    detail: >-
+      Four routes written, helix-auth flat on every one: generate/jwt-auth with
+      token_ttl 900 on POST /oauth/token, validate/jwt-auth on the /posts
+      routes. Correctly used one shared signing_secret across issue and
+      validate.
+    verified_by: >-
+      get_revision read back after the run; the stored routeSpec was inspected
+      directly, not inferred from the agent transcript.
+
   overall: READY
