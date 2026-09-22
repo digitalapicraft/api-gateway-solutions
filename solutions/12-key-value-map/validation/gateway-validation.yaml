@@ -85,12 +85,14 @@ gateway_validation:
       returned ciphertext encrypted to it. Neither a 2xx nor a 5xx on that route is
       evidence about the value; read it back.
     - >-
-      The consumer cannot be swapped on this plan. lua-callout is the ONLY
+      The injecting consumer cannot be swapped on this plan. lua-callout is the ONLY
       enterpriseOnly plugin of the 96 in this org's catalogue, and attaching it is
-      refused at import with 403 "available on Enterprise plans only". Since
-      key-value-map does not mirror values into ctx.var, and pgp-crypto plus
-      lua-callout are its only consumers, pgp-crypto is the only way to observe a
-      stored value on a free-trial org. This is why the package pairs them.
+      refused at import with 403 "available on Enterprise plans only". pgp-crypto and
+      lua-callout are the only plugins that resolve a KVM reference themselves and
+      apply the value to a proxied request, so pgp-crypto is what this package uses.
+      Observing a stored value carries no such constraint: key-value-map publishes
+      into ctx.helix.<ctx_namespace>, and mocking reads it with the bare
+      $ctx.<path> grammar on any plan.
 
   not_established_here:
     - Whether the store is provisioned in any environment other than the one used

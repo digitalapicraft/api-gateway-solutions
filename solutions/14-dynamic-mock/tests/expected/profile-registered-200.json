@@ -1,0 +1,5 @@
+{
+  "status": 200,
+  "headers": { "X-Partner-Tier": "gold" },
+  "body": { "partner": "acme-42", "tier": "gold", "settlement": "GB29-SANDBOX-0001" }
+}

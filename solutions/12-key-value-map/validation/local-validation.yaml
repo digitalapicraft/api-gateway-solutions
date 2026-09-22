@@ -69,9 +69,11 @@ local_validation:
       store write, because the insert happens in the access phase before proxying.
       Read the value back to confirm a write.
     - >-
-      The consumer cannot be swapped on a free-trial org: lua-callout is the only
-      plan-gated plugin on this build and the only alternative reader of a stored
-      value, which leaves pgp-crypto as the only way to observe one.
+      The injecting consumer cannot be swapped on a free-trial org: lua-callout is the
+      only plan-gated plugin on this build, which leaves pgp-crypto as the only way to
+      apply a stored value to a proxied request. Reading one back is unrestricted —
+      mocking resolves it on any plan, but short-circuits, so it cannot feed an
+      upstream.
     - >-
       Every limitation of solution 13 still applies to the crypto itself, including
       the base64-of-armor wire format and whole-body buffering.

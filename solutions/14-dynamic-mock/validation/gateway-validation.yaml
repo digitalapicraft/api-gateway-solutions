@@ -1,0 +1,90 @@
+# Gateway validation — what actually ran against a live gateway.
+# Statuses here use the library's vocabulary: Configuration generated, Locally
+# validated, Gateway dry-run passed, Gateway deployed, Functional test passed are
+# five DIFFERENT statuses.
+
+gateway_validation:
+  target: an API imported from gateway/api-spec.yaml
+  environment: a free-trial organisation's test environment
+  dry_run_status: PASS
+  errors: []
+  warnings: []
+
+  resource_changes:
+    - One API created by spec import, one revision, bound to the environment's
+      upstream and deployed ACTIVE.
+    - Key-value entries written by the registration route during testing, under
+      the partner ids the tests generated.
+
+deployment:
+  status: DEPLOYED
+  note: >-
+    Deployed ACTIVE to a test environment in order to execute the functional
+    tests below. The import was rejected once before this, for an unrelated
+    free-trial API cap; the cap is on the number of APIs in the org, not on
+    anything in this spec.
+
+functional_tests:
+  executor: gateway/verify.sh
+  result: 6/6 PASS
+  cases:
+    - id: register
+      result: PASS
+      detail: POST /sandbox/partners returned 202 and echoed the inserted table.
+    - id: profile-registered
+      result: PASS
+      detail: >-
+        The caller's own tier and settlement account came back, and the
+        X-Partner-Tier response header carried the same value — confirming that
+        mocking templates response_headers as well as response_example.
+    - id: profile-other-partner
+      result: PASS
+      detail: >-
+        A second partner received its own values on the same route, and the first
+        partner's values were absent from the response.
+    - id: profile-unregistered
+      result: PASS
+      detail: An unknown partner received 200 with empty strings, not an error.
+    - id: change-without-deploy
+      result: PASS
+      detail: >-
+        Re-registering an existing partner changed the next read immediately. No
+        revision was created, no route was changed and nothing was redeployed.
+    - id: grammar-guard
+      result: PASS
+      detail: >-
+        On one route and one request, `$ctx.helix.key_value_map.tier` resolved to
+        the stored value while `${ctx.helix.key_value_map.tier}` resolved to
+        empty.
+
+  findings:
+    - >-
+      Two defects were found in the first version of this spec by running it, and
+      both are now documented in the spec's own header comments because a reader
+      will hit them. First, `$request.headers.<name>` is key-value-map's key/value
+      grammar and mocking does not know it — a response_example containing
+      `$request.headers.x-partner-id` emitted the mangled literal "-partner-id"
+      rather than the header value or an error. Inside mocking, the working forms
+      are `$ctx.<path>` and ordinary gateway variables such as
+      `$http_x_partner_id`.
+    - >-
+      Second, a ctx reference to a TABLE expands to a JSON object. Placed inside
+      quotes in a JSON body it produced structurally invalid JSON, returned with a
+      200 and no error. It must be embedded unquoted.
+    - >-
+      A dotted suffix cannot be appended to a request reference. Everything after
+      `headers.` is taken as the header name, so `$request.headers.x-partner-id.tier`
+      looks up a header literally named `x-partner-id.tier` and resolves to
+      nothing. The key template here therefore puts its discriminator in FRONT of
+      the reference, separated by a colon.
+    - >-
+      The two reference grammars have DIFFERENT segment character classes, which
+      is worth knowing before naming a key. key-value-map's own key/value
+      references accept hyphens; the $ctx template resolver does not, and a hyphen
+      there silently ends the reference and passes the remainder through as a
+      literal.
+
+  not_established_here:
+    - Behaviour under a store outage.
+    - Whether values written in one environment are visible in another.
+    - Any load or latency characteristic of a per-request fetch.

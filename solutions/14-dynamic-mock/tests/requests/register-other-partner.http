@@ -1,0 +1,4 @@
+POST {{gateway}}/sandbox/partners
+x-partner-id: globex-7
+x-tier: bronze
+x-settlement-account: GB29-SANDBOX-0002

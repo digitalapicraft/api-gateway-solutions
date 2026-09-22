@@ -1,0 +1,242 @@
+# =============================================================================
+# 14-dynamic-mock — a sandbox that answers each caller with that caller's own
+# values, with no backend behind it and no deploy to change a value.
+#
+# THE IMPORTABLE ARTIFACT IS THIS DOCUMENT. It is both the OpenAPI description
+# and the gateway configuration: plugins live under
+# `paths.<path>.<method>.x-helix-gateway.plugins` for route policy, and at the
+# document root for API-wide policy. Do not hand-write route JSON.
+#
+# UPSTREAM is bound on the service at import/bind time, NOT in the OpenAPI
+# paths. This solution never contacts it — `mocking` short-circuits every route
+# here — but the binding is still required for the revision to deploy.
+#
+# -----------------------------------------------------------------------------
+# THE ONE THING TO GET RIGHT: THERE ARE TWO SUBSTITUTION GRAMMARS.
+#
+#   ${ctx.helix.<ns>.<field>}   looks the WHOLE dotted string up as one variable
+#                               NAME in a flat table. Only `service-callout`
+#                               writes to that table. A key-value-map value is
+#                               never in it. This form returns EMPTY here.
+#
+#   $ctx.<dotted.path>          bare $, no braces. WALKS the request context
+#                               segment by segment, so it reaches anything
+#                               actually present — including the store.
+#
+# `mocking` is the only plugin on this build that resolves the second form, in
+# `response_example` AND `response_headers`. That is why this solution is shaped
+# around `mocking` and not around `proxy-rewrite`. (Verified live 2026-09-22 —
+# on one route, one request, `response-rewrite` dropped the same reference that
+# `mocking` resolved.)
+#
+# THE GRAMMARS ARE NOT INTERCHANGEABLE ACROSS PLUGINS. `$request.headers.<name>`
+# is `key-value-map`'s own key/value grammar. `mocking` does not know it — put it
+# in a `response_example` and you get mangled output, not an error (it emitted
+# `"-partner-id"` in testing). Inside `mocking` the two things that DO resolve are
+# `$ctx.<path>` and ordinary gateway variables such as `$http_x_partner_id`.
+#
+# A TABLE JSON-ENCODES. `$ctx.helix.key_value_map.inserted` expands to a JSON
+# object, so it must NOT sit inside quotes in a JSON body — quoting it produces
+# invalid JSON that still returns 200.
+#
+# Segment characters are [A-Za-z0-9_] ONLY. A hyphen silently ENDS the
+# reference and the remainder passes through as a literal — so a key named
+# `partner-tier` can be stored but can never be referenced. Underscores only.
+#
+# WHERE VALUES LAND:
+#   fetched  ->  ctx.helix.<ctx_namespace>.<key>            (flat)
+#   inserted ->  ctx.helix.<ctx_namespace>.inserted.<key>   (one level down)
+#   default ctx_namespace is `key_value_map`.
+#
+# KEY SHAPE — `tier:$request.headers.x-partner-id`, and the `:` is deliberate.
+#   A key template is a substitution over a string, so literals around the
+#   reference survive. The reference grammar here is
+#   `$request.headers.<name>` and EVERYTHING after `headers.` is taken as the
+#   header name, dots included — so `$request.headers.x-partner-id.tier` looks
+#   up a header literally called `x-partner-id.tier` and resolves to nothing.
+#   You cannot suffix a reference with a dot. Put the discriminator in FRONT,
+#   or separate it with a character outside [A-Za-z0-9_-] such as `:`.
+#   Note this class DIFFERS from the ctx_template one above: hyphens are part
+#   of a reference here, and terminate one there.
+#
+# WHY `alias` IS LOAD-BEARING, NOT COSMETIC:
+#   The fetch key here is DYNAMIC — `$request.headers.x-partner-id` — so the
+#   field it would publish under is whatever the caller sent, which you cannot
+#   write into a static template. `alias` RENAMES the published field to a name
+#   you choose, which is the only thing that makes a per-caller value
+#   referenceable. With `alias: tier`, the value is at `.tier`; without it, it
+#   would be at `.tier:acme-42` — a field name containing a colon, which no
+#   template can address.
+#
+# EXECUTION ORDER (priorities confirmed against the live catalogue 2026-09-22):
+#   key-value-map (3001)  access phase — fetch/insert, publishes into ctx.helix
+#   mocking       (1999)  access phase — reads ctx.helix, then SHORT-CIRCUITS
+# The store outranks the mock, so the mock reads what the store just published.
+# Reverse that and every value is empty, with no error to tell you why.
+#
+# LIMIT OF THE PATTERN: because `mocking` short-circuits, a stored value can be
+# SHOWN but never handed to an upstream. To use one on a real proxied response
+# you need `pgp-crypto` or `lua-callout` — see solution 12.
+#
+# NO SECRETS ARE IN THIS FILE. The values are supplied per request by the
+# caller; nothing here is a credential.
+# =============================================================================
+
+openapi: 3.0.3
+
+info:
+  title: Partner Sandbox API
+  version: 1.0.0
+  description: >-
+    A partner sandbox whose responses are per-partner. An operator registers a
+    partner's values once; every later call from that partner is answered with
+    them. Adding or changing a partner is a write, not a release, and there is no
+    service behind the endpoint.
+
+paths:
+  /sandbox/partners:
+    post:
+      summary: Register or replace one partner's sandbox values (administrative)
+      description: >-
+        Stores this partner's tier and settlement account under their own partner
+        id. Re-registering the same id replaces the values — that is how you
+        change a partner without a deploy. ADMINISTRATIVE: see the README, this
+        route ships unauthenticated and must be protected before it is exposed.
+      parameters:
+        - name: x-partner-id
+          in: header
+          required: true
+          description: The partner being registered. Becomes the storage key.
+          schema: { type: string }
+        - name: x-tier
+          in: header
+          required: true
+          description: The tier this partner should see in the sandbox.
+          schema: { type: string, example: gold }
+        - name: x-settlement-account
+          in: header
+          required: true
+          description: The settlement account this partner should see.
+          schema: { type: string, example: GB29-SANDBOX-0001 }
+      responses:
+        '202':
+          description: >-
+            Values accepted. This is an acknowledgement that the insert was
+            configured, not proof of a store write — read it back with
+            GET /sandbox/profile to confirm.
+      x-helix-gateway:
+        plugins:
+          # Priority 3001 — runs first, in the access phase.
+          # The KEY is dynamic: each partner writes under their own id, so one
+          # route serves every partner and adding one is a request, not config.
+          key-value-map:
+            fail_action: close
+            inserts:
+              - key: "tier:$request.headers.x-partner-id"
+                value: "$request.headers.x-tier"
+                ttl: 86400
+              - key: "settlement:$request.headers.x-partner-id"
+                value: "$request.headers.x-settlement-account"
+                ttl: 86400
+
+          # Priority 1999 — short-circuits, so nothing is proxied.
+          # `inserted` values sit one level DOWN, under .inserted.<key>.
+          mocking:
+            response_status: 202
+            content_type: application/json
+            response_example: |-
+              {"registered":true,"stored":$ctx.helix.key_value_map.inserted}
+
+  /sandbox/profile:
+    get:
+      summary: The calling partner's own sandbox profile
+      description: >-
+        Answers with the values registered for whatever partner id the caller
+        presents. One route, no per-partner configuration. An unregistered
+        partner gets empty values and a 200 — a miss is not an error to the
+        store, so the shape of a miss is a decision this package makes
+        deliberately, not a default.
+      parameters:
+        - name: x-partner-id
+          in: header
+          required: true
+          description: Identifies the caller. Used as the lookup key.
+          schema: { type: string }
+      responses:
+        '200':
+          description: The caller's registered values, or empty strings if unregistered.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  partner:    { type: string }
+                  tier:       { type: string }
+                  settlement: { type: string }
+      x-helix-gateway:
+        plugins:
+          # `alias` is what makes this work. The key is dynamic, so without an
+          # alias the value would publish under the caller's own id and no
+          # static template could name it.
+          key-value-map:
+            fail_action: close
+            fetch:
+              keys:
+                - key: "tier:$request.headers.x-partner-id"
+                  alias: tier
+                - key: "settlement:$request.headers.x-partner-id"
+                  alias: settlement
+
+          # FETCHED values are FLAT under the namespace — .tier, not
+          # .inserted.tier. That asymmetry with the route above is real.
+          mocking:
+            content_type: application/json
+            response_headers:
+              X-Partner-Tier: "$ctx.helix.key_value_map.tier"
+            response_example: |-
+              {"partner":"$http_x_partner_id","tier":"$ctx.helix.key_value_map.tier","settlement":"$ctx.helix.key_value_map.settlement"}
+
+  /sandbox/diagnostics:
+    get:
+      summary: Show both grammars side by side (teaching route)
+      description: >-
+        Exists to make the failure legible. The same stored value is referenced
+        twice — once with the bare $ctx form, once with the ${...} form. The
+        first resolves, the second is always empty. Keep this route while your
+        team is learning the syntax; drop it before production.
+      parameters:
+        - name: x-partner-id
+          in: header
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: The same reference in both grammars, plus the whole namespace.
+      x-helix-gateway:
+        plugins:
+          key-value-map:
+            fail_action: close
+            fetch:
+              keys:
+                - key: "tier:$request.headers.x-partner-id"
+                  alias: tier
+
+          mocking:
+            content_type: text/plain
+            response_example: |-
+              bare_form   = $ctx.helix.key_value_map.tier
+              brace_form  = ${ctx.helix.key_value_map.tier}
+              namespace   = $ctx.helix.key_value_map
+
+# API-wide policy. request-id gives you a correlation handle for a caller who
+# reports "my sandbox says bronze" — the store itself logs nothing per request.
+x-helix-gateway:
+  plugins:
+    request-id:
+      algorithm: uuid
+      header_name: X-Request-Id
+    cors:
+      allow_origins: "*"
+      allow_methods: "GET,POST,OPTIONS"
+      allow_headers: "content-type,x-partner-id,x-tier,x-settlement-account"
+      allow_credential: false

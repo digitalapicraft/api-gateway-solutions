@@ -1,0 +1,2 @@
+GET {{gateway}}/sandbox/profile
+x-partner-id: nobody-9

@@ -117,9 +117,12 @@ limitations:
     the insert happens in the access phase, before proxying — so neither a 2xx nor a
     5xx there is evidence about the value. Read it back.
   - >-
-    The consumer cannot be swapped on a free-trial org. lua-callout is the only
-    plan-gated plugin on this build and the only alternative reader of a stored
-    value, so pgp-crypto is the only way to observe one here.
+    The INJECTING consumer cannot be swapped on a free-trial org. lua-callout is the
+    only plan-gated plugin on this build, so pgp-crypto is the only way to put a
+    stored value into a proxied call here. Reading a value back is not restricted:
+    mocking resolves $ctx.helix.key_value_map.<key> on any plan (solution
+    14-dynamic-mock), but short-circuits the request, so it cannot hand the value
+    to an upstream.
   - Every limitation of solution 13 still applies to the crypto itself.
 
 status: READY   # validated on a gateway; verify.sh passes 7/7 including rotation
