@@ -33,9 +33,11 @@ into a call that reaches your backend.
 
 This package *uses* one, on a real proxied response, and for that the consumer set
 is narrower: `pgp-crypto` and `lua-callout` are the only plugins that resolve a KVM
-reference themselves. `lua-callout` is **Enterprise-only** — the single plan-gated
-plugin of the 96 in the catalogue, refused at import on a free trial with a 403 —
-which leaves `pgp-crypto`. If you want to understand the crypto itself, that is
+reference themselves. `lua-callout` carries `enterpriseOnly: true` and is refused
+at import **on a free-trial organisation** — which is why this package is built on
+`pgp-crypto`, and why it runs anywhere. On an organisation that is not on a free
+trial, `lua-callout` imports and deploys normally and becomes a second option;
+test the import rather than trusting the catalogue flag, which does not change. If you want to understand the crypto itself, that is
 [solution 13](../13-pgp-encryption/) — read it if you need it, skip it if you
 don't. Everything below is about the store.
 
@@ -170,12 +172,15 @@ Stated up front, because two of them are load-bearing.
 path is the plugin's own `inserts`, which is why a registration route exists at
 all. That is a real constraint, not a design preference.
 
-**You cannot swap the consumer for an *injecting* one on a free-trial org.**
-`lua-callout` — the obvious choice if you wanted to inject a stored value as an
-upstream header and skip crypto entirely — is the one plan-gated plugin on this
-build. Import returns `403 Plugin 'lua-callout' is available on Enterprise plans
-only`. On Enterprise that route opens up and this package's store half is
-unchanged; on free trial, `pgp-crypto` is what you have.
+**On a free-trial organisation you cannot swap the consumer for an *injecting*
+one.** `lua-callout` — the obvious choice if you wanted to inject a stored value
+as an upstream header and skip crypto entirely — is the one gated plugin on this
+build, and import returns `403 Plugin 'lua-callout' is available on Enterprise
+plans only ... cannot be attached on a free trial organization`. Off free trial
+it imports and deploys, and the store half of this package is unchanged either
+way. If you try it, note its priority is **0**: put it on a route with a
+short-circuiting plugin such as `mocking` (1999) and it never runs, returning an
+empty value with no error. Raise it with `_meta.priority`.
 
 This is narrower than it sounds, and the boundary is worth knowing: **reading** a
 stored value needs neither. `mocking` resolves `$ctx.helix.key_value_map.<key>`
