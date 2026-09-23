@@ -1,0 +1,3 @@
+POST https://{{gateway}}/timing.TimingUnit/Ping
+content-type: application/grpc
+X-Unit-Key: definitely-not-a-real-key

@@ -1,0 +1,94 @@
+# Gateway validation — what actually ran against a live gateway.
+# Statuses use the library's vocabulary: Configuration generated, Locally
+# validated, Gateway dry-run passed, Gateway deployed, Functional test passed are
+# five DIFFERENT statuses.
+
+gateway_validation:
+  target: an API imported from gateway/api-spec.yaml, bound to a scheme grpc upstream
+  environment: >-
+    A development organisation whose data plane has NO HTTP/1.1 hop in front of
+    it. This distinction is load-bearing — see environment_dependency below.
+  dry_run_status: PASS
+  errors: []
+  warnings:
+    - >-
+      An upstream scheme change did not reach the deployed revision until the
+      revision was undeployed and deployed again. Editing the upstream and
+      redeploying was not sufficient.
+
+  resource_changes:
+    - One gRPC upstream created (scheme grpc, plaintext, to the streaming backend).
+    - One API created by spec import, bound and deployed ACTIVE.
+    - One product, and one app credential under an existing developer.
+
+deployment:
+  status: DEPLOYED
+  note: Deployed ACTIVE to a development environment in order to execute the tests below.
+
+functional_tests:
+  executor: gateway/verify.sh
+  result: 5/5 PASS
+  cases:
+    - id: no-key
+      result: PASS
+      detail: A stream with no credential was refused with 401 before the upstream was contacted.
+    - id: invalid-key
+      result: PASS
+      detail: An unknown key was refused with 401, so the credential is resolved rather than merely required.
+    - id: unary
+      result: PASS
+      detail: An authenticated unary call returned the service's response cleanly.
+    - id: bidi-stream
+      result: PASS
+      detail: >-
+        An authenticated bidirectional stream completed with its trailers intact,
+        so the client could read grpc-status.
+    - id: held-stream
+      result: PASS
+      detail: >-
+        A stream held open for 20s received server-pushed messages and closed
+        cleanly with trailers intact. No idle timeout intervened.
+
+environment_dependency:
+  finding: >-
+    THE SAME PACKAGE FAILS ON A DIFFERENT DEPLOYMENT, AND THE CONFIG IS NOT WHY.
+    On an environment whose data plane sits behind an HTTP/1.1 load balancer, every
+    gRPC call — unary, server-streaming and bidirectional, with and without any
+    plugin on the route — delivered its payload and then ended
+    "Internal: server closed the stream without sending trailers".
+  cause: >-
+    HTTP/1.1 cannot carry HTTP/2 trailers, and grpc-status lives in the trailers.
+    Bodies survive the downgrade; the status does not, so a client cannot tell
+    success from failure. The tell is a `via: 1.1 <proxy>` header on an ordinary
+    response from that host.
+  remedy: >-
+    An infrastructure change on the platform side — the backend service in front
+    of the data plane must speak HTTP/2. Nothing in this spec, the control plane
+    or the plugin set can work around it.
+  scope: >-
+    Verified working where no such hop exists, and verified failing where one
+    does. Check your own path before adopting this package; verify.sh case 4
+    fails loudly and names the cause.
+
+findings:
+  - >-
+    ONE STREAM IS ONE REQUEST. Every access-phase plugin evaluates exactly once,
+    at stream initiation — which is what makes authenticating a connection work.
+    It also means a product quota counts STREAMS, NOT MESSAGES: measured with a
+    limit-count of 1, which allowed five messages on a single stream and then
+    rejected the next stream.
+  - >-
+    limit-conn did NOT cap concurrent streams on this build. With conn 2, four
+    concurrent held-open streams were all accepted, keyed on consumer_name and
+    again on remote_addr. The equivalent configuration DID cap streams on stock
+    APISIX 3.9.1 locally, third stream refused 503. The difference is unexplained,
+    so no concurrency cap is shipped in this package.
+  - >-
+    The gateway does not proxy the gRPC reflection service unless a route exists
+    for it, so grpcurl against the gateway needs -proto or -protoset.
+
+not_established_here:
+  - grpcs (TLS) to the upstream; a TLS upstream returned 502 elsewhere and was not isolated.
+  - Streams held open for hours rather than seconds.
+  - Whether the analytics API reports per-app stream counts and durations.
+  - mTLS and client-certificate identity.
