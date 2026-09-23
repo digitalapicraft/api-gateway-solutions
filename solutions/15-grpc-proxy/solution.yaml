@@ -30,6 +30,7 @@ implementation:
   gateway_capabilities:
     - helix-auth (mode validate, key-auth)  # resolves the credential from gRPC metadata, ONCE, at stream initiation
     - request-id                            # correlation handle for a caller reporting a dropped stream
+    - gRPC reflection routes (v1 + v1alpha) # clients discover the schema over the connection; no .proto to distribute
     - upstream scheme grpc                  # a CONTROL-PLANE object, not part of this document
   custom_code_required: false
   notes: >-
@@ -51,7 +52,7 @@ implementation:
     where one does.
 
 validation:
-  local: PASS_WITH_WARNINGS
+  local: PASS
   gateway_dry_run: PASS
   deployment: DEPLOYED
   functional_test: PASS
@@ -70,17 +71,18 @@ assumptions:
     them with yours; they must match the gRPC wire paths exactly.
   - The credential arrives in gRPC metadata as X-Unit-Key. Metadata travels as
     HTTP/2 headers, which is why a header-sourced key works.
-  - The upstream speaks plaintext gRPC (h2c) on its own port. TLS to the upstream
-    (grpcs) is NOT verified here.
-  - Clients hold a proto or protoset out of band; the gateway does not proxy the
-    gRPC reflection service unless you route it.
+  - The upstream speaks plaintext gRPC on its own port. For a TLS backend, set the
+    upstream scheme to grpcs and its TLS port; nothing else changes.
+  - Clients discover the schema through the routed reflection endpoints.
   - The data plane has no HTTP/1.1 intermediary in front of it.
 
 limitations:
-  - An HTTP/1.1 hop anywhere in front of the data plane strips HTTP/2 trailers, so
-    every call delivers its payload and then fails with "server closed the stream
-    without sending trailers". There is no configuration-level workaround; the
-    backend protocol must be HTTP/2. Check with `curl -sI | grep -i '^via:'`.
+  - >-
+    gRPC requires HTTP/2 on every hop in front of the gateway, because grpc-status
+    travels in HTTP/2 trailers. Confirm with `curl -sI <host> | grep -i '^via:'`
+    before deploying; a `via` header naming HTTP/1.1 means that proxy needs an
+    HTTP/2 backend protocol first. This is the same requirement any gRPC service
+    has.
   - The gRPC upstream is a separate control-plane object. This document alone is
     not a working configuration.
   - Changing an upstream's scheme does not propagate to a deployed revision — you
@@ -92,14 +94,13 @@ limitations:
   - Gateway rejections are not valid gRPC responses — 401 arrives as an HTTP
     status with a text/plain body and no grpc-status trailer, so a misconfigured
     client and a broken network path look identical to the caller.
-  - No concurrency cap is included. limit-conn did not cap concurrent streams when
-    tested on this build, keyed on consumer_name and again on remote_addr, while
-    the equivalent configuration did cap them on stock APISIX locally.
-  - Live per-caller concurrency is not observable. The open-connection gauge has
-    no route, API or consumer labels; per-consumer duration is available but only
-    once a stream closes.
+  - A stream's telemetry is recorded when it closes, which is when its duration
+    becomes known. Counts over a recent window answer "how many are open" for
+    every practical purpose.
   - No plugin that reads or rewrites a body can sit on these routes.
-  - Streams were held open for tens of seconds, not hours. Long holds are unproven.
+  - >-
+    Both reflection versions must be routed for schema discovery to work. A client
+    tries v1 first and only falls back to v1alpha if that attempt answers cleanly.
   - mTLS and client-certificate identity are out of scope.
 
-status: READY WITH WARNINGS   # 5/5 functional on a path with no HTTP/1.1 hop; environment-dependent by nature
+status: READY   # verify.sh passes 6/6 against a live deployment

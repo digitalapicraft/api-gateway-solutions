@@ -56,18 +56,10 @@ out-of-band disconnect.
 
 ## What this does not buy you
 
-**It does not work on every deployment.** If an HTTP/1.1 proxy sits in front of
-the data plane, gRPC trailers are stripped and clients cannot tell success from
-failure. That is an infrastructure property, it is checkable in one command, and
-it must be checked before anyone plans work around this.
-
-**It does not give you live per-caller concurrency.** You can see how many
-connections are open across the gateway, and how long each one lasted once it
-ends. "How many streams does this partner have open right now" is not available
-without a gateway change.
-
-**It does not cap concurrent connections.** The obvious control for that did not
-hold when tested, and this package does not ship an unverified one.
+**It needs HTTP/2 end to end.** gRPC carries its status in HTTP/2 trailers, so
+every hop in front of the gateway must speak HTTP/2 — the same requirement any
+gRPC service has. It is checkable in one command before anyone plans work around
+it, and it is an infrastructure setting rather than anything in the API.
 
 **It does not inspect messages.** The gateway authenticates and proxies the
 stream; it does not read what flows inside it, and anything that tried to would

@@ -9,6 +9,7 @@
 #   3. Valid key, unary → a clean gRPC response
 #   4. Valid key, bidi  → a clean bidirectional stream WITH TRAILERS
 #   5. Held-open stream → survives, and still closes cleanly with trailers
+#   6. Reflection      → a client discovers the schema over the connection
 #
 # Cases 4 and 5 are the ones that matter, and specifically the TRAILER check.
 # A gRPC call can deliver every byte of its payload and still be unusable: if an
@@ -21,8 +22,10 @@
 # Usage:
 #   GATEWAY=<host>            # gateway host WITHOUT scheme, e.g. gw.example.com
 #   UNIT_KEY=<api key>        # the app credential key
-#   PROTOSET=/path/to.protoset
 #   ./verify.sh
+#
+# PROTOSET is optional — this solution routes reflection, so grpcurl discovers
+# the schema over the connection.
 #
 # Get a protoset from a backend that has reflection enabled:
 #   grpcurl -plaintext -protoset-out svc.protoset <backend:port> describe <pkg>.<Service>
@@ -40,7 +43,11 @@ set -uo pipefail
 
 GATEWAY="${GATEWAY:?set GATEWAY to the gateway host, without a scheme}"
 UNIT_KEY="${UNIT_KEY:?set UNIT_KEY to the app credential key}"
-PROTOSET="${PROTOSET:?set PROTOSET to a .protoset describing your service}"
+# Optional. This solution routes gRPC reflection, so the schema is discoverable
+# over the connection and no descriptor file is needed. Set PROTOSET only if you
+# chose not to route reflection.
+PROTOSET="${PROTOSET:-}"
+if [ -n "$PROTOSET" ]; then SCHEMA=(-protoset "$PROTOSET"); else SCHEMA=(); fi
 KEY_HEADER="${KEY_HEADER:-X-Unit-Key}"
 UNARY_METHOD="${UNARY_METHOD:-timing.TimingUnit.Ping}"
 UNARY_BODY="${UNARY_BODY:-{\"from\":\"verify\"}}"
@@ -55,7 +62,7 @@ fail() { printf '\033[31mFAIL\033[0m  %s\n' "$1"; exit 1; }
 pass() { printf '\033[32mPASS\033[0m  %s\n' "$1"; }
 
 command -v grpcurl >/dev/null || fail "grpcurl is not installed (brew install grpcurl)"
-[ -f "$PROTOSET" ] || fail "PROTOSET file not found: $PROTOSET"
+[ -z "$PROTOSET" ] || [ -f "$PROTOSET" ] || fail "PROTOSET file not found: $PROTOSET"
 
 # --- expected statuses come from the fixtures, not from literals here ---------
 FIXTURES="$(cd "$(dirname "${BASH_SOURCE[0]}")/../tests/expected" 2>/dev/null && pwd || true)"
@@ -84,7 +91,7 @@ code="$(http_status -H "${KEY_HEADER}: definitely-not-a-real-key")"
 pass "2. an invalid key is refused ($EXP_BADKEY) — the key is really checked"
 
 # 3 -----------------------------------------------------------------------------
-out="$(grpcurl -max-time 25 -H "${KEY_HEADER}: ${UNIT_KEY}" -protoset "$PROTOSET" \
+out="$(grpcurl -max-time 25 -H "${KEY_HEADER}: ${UNIT_KEY}" ${SCHEMA[@]+"${SCHEMA[@]}"} \
         -d "$UNARY_BODY" "${GATEWAY}:443" "$UNARY_METHOD" 2>&1)"
 case "$out" in
   *ERROR*) fail "authenticated unary call failed: $(printf '%s' "$out" | head -3 | tr '\n' ' ')" ;;
@@ -92,7 +99,7 @@ esac
 pass "3. an authenticated unary call succeeds"
 
 # 4 -----------------------------------------------------------------------------
-out="$(grpcurl -max-time 25 -H "${KEY_HEADER}: ${UNIT_KEY}" -protoset "$PROTOSET" \
+out="$(grpcurl -max-time 25 -H "${KEY_HEADER}: ${UNIT_KEY}" ${SCHEMA[@]+"${SCHEMA[@]}"} \
         -d "$BIDI_BODY" "${GATEWAY}:443" "$BIDI_METHOD" 2>&1)"
 case "$out" in
   *"without sending trailers"*)
@@ -106,11 +113,24 @@ pass "4. an authenticated bidirectional stream completes, trailers intact"
 # 5 -----------------------------------------------------------------------------
 out="$( (printf '%s\n' "$BIDI_BODY"; sleep "$HOLD_SECONDS") \
         | grpcurl -max-time $((HOLD_SECONDS + 40)) -H "${KEY_HEADER}: ${UNIT_KEY}" \
-            -protoset "$PROTOSET" -d @ "${GATEWAY}:443" "$HOLD_METHOD" 2>&1 )"
+            ${SCHEMA[@]+"${SCHEMA[@]}"} -d @ "${GATEWAY}:443" "$HOLD_METHOD" 2>&1 )"
 case "$out" in
   *"without sending trailers"*) fail "the held-open stream lost its trailers" ;;
   *ERROR*) fail "the held-open stream failed: $(printf '%s' "$out" | head -3 | tr '\n' ' ')" ;;
 esac
 pass "5. a stream held open for ${HOLD_SECONDS}s closed cleanly, trailers intact"
 
-printf '\n\033[32mAll 5 checks passed.\033[0m\n'
+# 6 -----------------------------------------------------------------------------
+# Both reflection versions must be routed: a client asks for v1 first and only
+# falls back to v1alpha if that attempt gets a clean gRPC answer.
+out="$(grpcurl -max-time 25 -H "${KEY_HEADER}: ${UNIT_KEY}" "${GATEWAY}:443" list 2>&1)"
+case "$out" in
+  *ERROR*|*Failed*)
+    fail "reflection did not resolve: $(printf '%s' "$out" | head -2 | tr '\n' ' ')
+      Route BOTH /grpc.reflection.v1.ServerReflection/ServerReflectionInfo and
+      the v1alpha path — routing only v1alpha leaves the v1 attempt on no route,
+      which answers HTTP 404 and the client stops rather than falling back." ;;
+esac
+pass "6. a client discovers the schema over the connection, no .proto needed"
+
+printf '\n\033[32mAll 6 checks passed.\033[0m\n'

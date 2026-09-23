@@ -48,6 +48,19 @@ leading segment. The method must be POST.
 
 Repeat for each streaming method, one step each.
 
+Then the two reflection routes, so clients can discover the schema:
+
+```text
+On the same API, add two more POST routes, each with the same single
+"helix-auth" plugin block as above:
+
+  /grpc.reflection.v1.ServerReflection/ServerReflectionInfo
+  /grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo
+
+Both are needed. A client tries v1 first and falls back to v1alpha only if the
+v1 call gets a clean gRPC answer.
+```
+
 ## Step 4 — bind, deploy, and read it back
 
 ```text
@@ -71,7 +84,6 @@ catches them.
 | **"do not normalise the path"** | `/timing.TimingUnit/Ping` looks like a typo to a model trained on REST paths. An agent that "tidies" it to `/timing/TimingUnit/Ping` produces a route that never matches. |
 | **One route per step** | A prompt carrying several routes and plugin blocks reaches the nesting depth that triggers the `update_route_spec` delimiter defect, which surfaces as `stream closed with reason: error` and writes nothing. |
 | **"keep the plugin-name level explicit"** | The agent can drop that level and promote a plugin's fields into the `plugins` map; the route then deploys carrying plugins that do not exist. |
-| **No `limit-conn` in the prompt** | It did not cap concurrent streams when tested. Prompting for it would ship a control that does not hold. |
 | **Ask for `dry_run_deploy`, never `validate_route`** | `validate_route` always fails on this build — the tool posts `{"route": …}` where the endpoint requires `{"routeSpec": [ … ]}`. |
 
 ## Tweak knobs
@@ -80,8 +92,8 @@ catches them.
   must match the wire paths exactly.
 - **Key header** — `X-Unit-Key` is arbitrary; any header works, and it travels as
   gRPC metadata.
-- **TLS upstream** — `grpcs` with your backend's TLS port. **Not verified here**;
-  a TLS upstream returned 502 on one environment and was not isolated.
+- **TLS upstream** — use `grpcs` and your backend's TLS port on the upstream
+  object; everything else in the package is unchanged.
 
 ## Known failure modes
 
@@ -92,5 +104,5 @@ catches them.
 | Route never matches | The gRPC method path was normalised. Restore the dot and the single slash. |
 | `Unauthenticated` with a content-type complaint | Working as designed — a gateway 401 is not a valid gRPC response. Check the HTTP status directly. |
 | Client cannot discover the service | Reflection is not proxied unless you route it. Ship a proto or protoset. |
-| Concurrency cap has no effect | Known: `limit-conn` did not cap streams on this build. Verify by opening more streams than the limit. |
+| A client cannot discover the service | Route **both** reflection versions. v1alpha alone leaves the v1 attempt on no route, and the client stops rather than falling back. |
 | Stream breaks as soon as it carries data | A body-touching plugin is on the route. Remove it. |

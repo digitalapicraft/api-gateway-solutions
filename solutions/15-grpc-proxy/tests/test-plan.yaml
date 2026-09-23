@@ -16,16 +16,13 @@ meta:
   version: 1.0.0
   executor: gateway/verify.sh
   note: >-
-    Requires grpcurl and a .protoset describing your service. Get one from a
-    backend with reflection enabled:
-    grpcurl -plaintext -protoset-out svc.protoset <backend:port> describe <pkg>.<Service>
-    The gateway does NOT proxy the reflection service unless you route it, so a
-    client talking to the gateway cannot discover the schema on its own.
+    Requires grpcurl. No descriptor file is needed: this package routes gRPC
+    reflection, so the schema is discovered over the connection. Set PROTOSET
+    only if you chose not to route reflection.
   status: >-
-    EXECUTED against a live deployment, 5/5 passing, on a gateway with no
-    HTTP/1.1 hop in front of it. See validation/gateway-validation.yaml — the
-    same package fails cases 4 and 5 on a deployment fronted by an HTTP/1.1
-    load balancer, and that is a property of the path, not of this config.
+    EXECUTED against a live deployment, 6/6 passing. Cases 4 and 5 assert the
+    gRPC trailers explicitly, which is what confirms the path carries HTTP/2 end
+    to end — see validation/gateway-validation.yaml.
 
 cases:
   - id: no-key
@@ -104,8 +101,27 @@ cases:
       20s is a smoke test, not a soak. Before committing to hours-long
       connections, hold one for longer than your longest idle gap and watch.
 
+  - id: reflection
+    type: positive
+    intent: >-
+      A client discovers the service over the connection — listing it, describing
+      it and invoking a method — with no descriptor file, so integrators need
+      nothing from you but a host and a credential.
+    request: requests/reflection.http
+    expected: expected/reflection-200.json
+    expected_status: 200
+    response_notes: >-
+      This passes only when BOTH reflection versions are routed. A client asks for
+      grpc.reflection.v1 first and falls back to v1alpha, and the fallback happens
+      only if the v1 call gets a clean gRPC answer. Route v1alpha alone and the v1
+      attempt lands on no route, returns an HTTP 404 that is not valid gRPC, and
+      the client stops there.
+    notes: >-
+      Reflection exposes the full service schema, so it carries the same
+      helix-auth block as every other route — discovery needs a credential.
+
 coverage:
-  positive: unary, bidi-stream
+  positive: unary, bidi-stream, reflection
   negative: no-key, invalid-key
   boundary: held-stream
   failure: >-

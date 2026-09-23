@@ -1,0 +1,6 @@
+# Schema discovery over the connection — no .proto file needed.
+#   grpcurl -H "X-Unit-Key: {{key}}" {{gateway}}:443 list
+#   grpcurl -H "X-Unit-Key: {{key}}" {{gateway}}:443 describe timing.TimingUnit
+POST https://{{gateway}}/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo
+content-type: application/grpc
+X-Unit-Key: {{key}}

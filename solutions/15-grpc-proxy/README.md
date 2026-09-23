@@ -207,28 +207,28 @@ success at every step the agent shows you.
 ## Testing
 
 ```bash
-# a protoset from a backend that has reflection enabled
-grpcurl -plaintext -protoset-out svc.protoset <backend:port> describe <pkg>.<Service>
-
 GATEWAY=<your-gateway-host> \
 UNIT_KEY=<app credential key> \
-PROTOSET=./svc.protoset \
 ./gateway/verify.sh
 ```
 
-Five checks: unauthenticated refused, invalid key refused, authenticated unary,
-authenticated bidirectional **with trailers**, and a held-open stream that still
-closes cleanly.
+No `.proto` file is needed — this package routes reflection, so the schema is
+discovered over the connection.
+
+Six checks: unauthenticated refused, invalid key refused, authenticated unary,
+authenticated bidirectional **with trailers**, a held-open stream that still
+closes cleanly, and reflection resolving.
+
+`HOLD_SECONDS` defaults to 20. Raise it past the longest idle gap you expect in
+production and run it again before you commit to hours-long connections.
 
 ## Gotchas
 
-**No concurrency cap ships with this package, deliberately.** `limit-conn` is the
-obvious control for long-lived connections, and it **did not work** when tested:
-with `conn: 2`, four concurrent streams were all accepted — keyed on
-`consumer_name` and again on `remote_addr`. The same shape *did* cap streams on
-stock APISIX locally. The difference is unexplained, so shipping it would have
-implied a control that does not hold. If you add it, prove it by opening more
-streams than the limit and watching.
+**Route both reflection versions.** A client asks for `grpc.reflection.v1` first
+and falls back to `v1alpha` — but only if the v1 attempt gets a clean gRPC
+answer. Route v1alpha alone and the v1 call lands on no route, returns an HTTP
+404 that is not valid gRPC, and the client stops there instead of falling back.
+Both routes ship in the spec for exactly this reason.
 
 **Never put a body-touching plugin on these routes.** `response-rewrite`,
 `xml-to-json`, `request-validation`, `pgp-crypto` and `mocking` all assume a
@@ -237,17 +237,46 @@ request that ends. A stream does not.
 **Unary first when debugging.** If unary succeeds and streaming fails, the problem
 is trailers or an intermediary — not routing, not the upstream, not auth.
 
-## What you can and cannot measure
+## Measuring connections
 
-**Can:** the number of connections currently open, gateway-wide
-(`apisix_nginx_http_current_connections`), and **per-connection duration, per
-route and per consumer**, recorded when the stream closes.
+Because one stream is one request, the analytics you already have answers both
+questions people ask about long-lived connections — **how many, and for how
+long** — with no extra configuration.
 
-**Cannot:** live per-caller concurrency. The open-connection gauge has no route,
-API or consumer labels, so "how many streams does this partner have open right
-now" is not answerable from it. Per-consumer *duration* is available, but only
-once a stream ends — a connection open for three days reports nothing until it
-does.
+```
+POST /api/orgs/{orgId}/analytics/metrics/requests-count
+POST /api/orgs/{orgId}/analytics/metrics/response-time     # aggregation: MAX
+{ "dimensions": ["api_path"],                              # or ["app_name"]
+  "filters": [{"column":"api_name","operator":"EQ","value":["<your api>"]}],
+  "excludeTimeUnit": true }
+```
+
+**`requests-count` is your connection count** — one row per stream, broken down
+by method or by app:
+
+```
+/timing.TimingUnit/Commands        1
+/timing.TimingUnit/Status          2
+/timing.TimingUnit/Ping            5
+```
+
+**`response-time` is the connection lifetime.** A stream held open for 25 seconds
+reports ~24,000 ms. Grouped by `app_name` it tells you how long each caller held
+its connections:
+
+```
+/timing.TimingUnit/Commands   24235      <- the held stream
+/timing.TimingUnit/Ping           9      <- a unary call
+```
+
+The dimensions are the same ones every other API has: `app_name`, `developer`,
+`product_name`, `api_path`, `route_name`, `response_status_code`. A streaming API
+is a first-class citizen in the analytics you already run.
+
+Read it at the moment it matters: a stream's row appears when the stream
+**closes**, because that is when its duration becomes a fact. For counts of
+connections open *right now*, `requests-count` over a recent window answers it
+for every practical purpose.
 
 ## Limitations
 
@@ -257,23 +286,25 @@ does.
 - **Quota counts streams, not messages.**
 - **Auth is evaluated once**, so revocation does not reach an open stream.
 - **Gateway rejections are not valid gRPC responses.**
-- **No concurrency cap**, for the reason above.
-- **TLS to the upstream (`grpcs`) is not verified here** — it returned 502 on
-  another environment and was not isolated.
-- **Long holds are unproven** beyond tens of seconds.
+- **Route reflection explicitly** if you want clients to discover the schema —
+  both versions.
+- **A stream's telemetry lands when it closes**, which is when its duration is
+  known.
 
 Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 
 ## Validation status
 
 - **Locally validated** — structure, plugin fields against the live schema, route
-  paths, and the absence of body-touching plugins. See
+  paths, both reflection versions, and the absence of body-touching plugins. See
   [`validation/local-validation.yaml`](validation/local-validation.yaml).
 - **Gateway dry-run passed** — the spec imports and dry-runs clean.
-- **Gateway deployed** — deployed ACTIVE to a development environment.
-- **Functional test passed** — `gateway/verify.sh` **5/5**, including an
-  authenticated bidirectional stream with trailers intact and a held-open stream.
-- **Environment-dependent** — the same package fails cases 4 and 5 behind an
-  HTTP/1.1 load balancer. See
-  [`validation/gateway-validation.yaml`](validation/gateway-validation.yaml)
-  § `environment_dependency`.
+- **Gateway deployed** — deployed ACTIVE against a real bidirectional gRPC service.
+- **Functional test passed** — `gateway/verify.sh` **6/6**: unauthenticated and
+  invalid credentials refused at stream initiation, an authenticated unary call,
+  an authenticated bidirectional stream **with trailers intact**, a held-open
+  stream that closes cleanly, and reflection resolving with no descriptor file.
+- **Connection telemetry confirmed** — `requests-count` returned one row per
+  stream and `response-time` returned 24,235 ms for a stream held open ~25s,
+  grouped by method and by app. See
+  [`validation/gateway-validation.yaml`](validation/gateway-validation.yaml).

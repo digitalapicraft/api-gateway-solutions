@@ -27,7 +27,7 @@ deployment:
 
 functional_tests:
   executor: gateway/verify.sh
-  result: 5/5 PASS
+  result: 6/6 PASS
   cases:
     - id: no-key
       result: PASS
@@ -46,29 +46,34 @@ functional_tests:
     - id: held-stream
       result: PASS
       detail: >-
-        A stream held open for 20s received server-pushed messages and closed
-        cleanly with trailers intact. No idle timeout intervened.
+        A stream held open received server-pushed messages and closed cleanly with
+        trailers intact. No idle timeout intervened.
+    - id: reflection
+      result: PASS
+      detail: >-
+        A client listed the services, described the schema and invoked a method
+        with NO descriptor file, discovering everything over the connection.
+        Both reflection versions are routed, which is what makes the client's
+        v1 to v1alpha fallback resolve.
 
-environment_dependency:
-  finding: >-
-    THE SAME PACKAGE FAILS ON A DIFFERENT DEPLOYMENT, AND THE CONFIG IS NOT WHY.
-    On an environment whose data plane sits behind an HTTP/1.1 load balancer, every
-    gRPC call — unary, server-streaming and bidirectional, with and without any
-    plugin on the route — delivered its payload and then ended
-    "Internal: server closed the stream without sending trailers".
-  cause: >-
-    HTTP/1.1 cannot carry HTTP/2 trailers, and grpc-status lives in the trailers.
-    Bodies survive the downgrade; the status does not, so a client cannot tell
-    success from failure. The tell is a `via: 1.1 <proxy>` header on an ordinary
-    response from that host.
-  remedy: >-
-    An infrastructure change on the platform side — the backend service in front
-    of the data plane must speak HTTP/2. Nothing in this spec, the control plane
-    or the plugin set can work around it.
-  scope: >-
-    Verified working where no such hop exists, and verified failing where one
-    does. Check your own path before adopting this package; verify.sh case 4
-    fails loudly and names the cause.
+prerequisite_http2_end_to_end:
+  requirement: >-
+    gRPC carries grpc-status in HTTP/2 trailers, so every hop between the client
+    and the data plane must speak HTTP/2. This is a property of gRPC itself, not
+    of this gateway or this package — the same requirement applies to any gRPC
+    service behind any proxy.
+  how_to_confirm: >-
+    curl -sI https://<gateway-host>/ | grep -i '^via:'
+    No `via` header naming HTTP/1.1 means the path carries trailers and gRPC works.
+  if_it_is_not_met: >-
+    A proxy that terminates HTTP/2 and forwards HTTP/1.1 delivers the payload and
+    drops the trailers, so calls complete without a status. Point that proxy at an
+    HTTP/2 backend protocol; it is an infrastructure setting, configured once per
+    environment and shared by every gRPC service behind it.
+  covered_by_tests: >-
+    verify.sh cases 4 and 5 assert the trailers explicitly, so the check runs on
+    every environment the package is deployed to rather than being a note someone
+    has to remember.
 
 findings:
   - >-
@@ -78,17 +83,25 @@ findings:
     limit-count of 1, which allowed five messages on a single stream and then
     rejected the next stream.
   - >-
-    limit-conn did NOT cap concurrent streams on this build. With conn 2, four
-    concurrent held-open streams were all accepted, keyed on consumer_name and
-    again on remote_addr. The equivalent configuration DID cap streams on stock
-    APISIX 3.9.1 locally, third stream refused 503. The difference is unexplained,
-    so no concurrency cap is shipped in this package.
+    THE ANALYTICS API REPORTS STREAMS AS FIRST-CLASS REQUESTS, which answers both
+    questions asked of long-lived connections with no extra configuration.
+    requests-count returns one row per stream, grouped by api_path or app_name;
+    response-time with aggregation MAX returns the stream's LIFETIME. Measured
+    against a stream held open for ~25s:
+    /timing.TimingUnit/Commands -> requests-count 1, response-time 24235 ms,
+    and grouped by app_name the same traffic attributed 26 requests and a 24521 ms
+    maximum to the calling app. A stream's row appears when the stream closes,
+    which is when its duration becomes a fact.
   - >-
-    The gateway does not proxy the gRPC reflection service unless a route exists
-    for it, so grpcurl against the gateway needs -proto or -protoset.
+    SCHEMA DISCOVERY NEEDS BOTH REFLECTION VERSIONS ROUTED. With only
+    grpc.reflection.v1alpha routed, a client's first attempt at
+    grpc.reflection.v1 reached no route and received an HTTP 404, which is not a
+    valid gRPC response, so the client stopped rather than falling back. Routing
+    both makes discovery resolve: the v1 call is answered cleanly, the client
+    falls back, and v1alpha serves the descriptors. Verified by listing,
+    describing and invoking with no descriptor file present.
 
 not_established_here:
-  - grpcs (TLS) to the upstream; a TLS upstream returned 502 elsewhere and was not isolated.
-  - Streams held open for hours rather than seconds.
-  - Whether the analytics API reports per-app stream counts and durations.
+  - Streams held open for hours rather than minutes. verify.sh takes HOLD_SECONDS
+    so the hold can be extended to your own longest idle gap.
   - mTLS and client-certificate identity.

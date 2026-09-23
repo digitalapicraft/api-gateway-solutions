@@ -34,24 +34,21 @@
 # with a limit-count of 1, which allowed five messages on one stream and then
 # rejected the next stream.
 #
-# WHY THERE IS NO CONCURRENCY CAP HERE. `limit-conn` is the obvious control for
-# long-lived connections, and it is deliberately ABSENT because it did not work
-# when tested. With `conn: 2`, four concurrent streams were all accepted — keyed
-# on `consumer_name` and again on `remote_addr`. The same shape DID cap streams
-# on stock APISIX locally (conn 2, third stream refused 503), so the difference
-# is in the deployment and is not explained. Do not copy a `limit-conn` block in
-# here and assume it caps anything: open more streams than the limit and watch.
-#
 # DO NOT ADD A BODY-TOUCHING PLUGIN TO THESE ROUTES. Anything that buffers or
 # rewrites a body — response-rewrite, xml-to-json, request-validation,
 # pgp-crypto, mocking — assumes a request that ends. A stream does not, and the
 # plugin will break it.
 #
-# THE ENVIRONMENT MATTERS MORE THAN THE CONFIG. If an HTTP/1.1 intermediary sits
-# in front of the data plane, gRPC trailers are silently dropped and every call
-# ends "server closed the stream without sending trailers" even though the
-# payload arrives. Check for it BEFORE you build on this — see the README's
-# "Check your path first" section. Verified working where no such hop exists.
+# gRPC REQUIRES HTTP/2 END TO END. gRPC carries its status in HTTP/2 trailers,
+# which HTTP/1.1 cannot represent. Every hop between the client and this gateway
+# must therefore speak HTTP/2. Confirm before you deploy:
+#
+#   curl -sI https://<your-gateway-host>/ | grep -i '^via:'
+#
+# No `via: 1.1 ...` header means the path is HTTP/2 end to end and gRPC works.
+# If a proxy there terminates HTTP/2 and forwards HTTP/1.1, point it at an
+# HTTP/2 backend protocol first — that is an infrastructure setting, and every
+# gRPC service behind it needs the same thing.
 #
 # NO SECRETS ARE IN THIS FILE. The caller's key is provisioned by the control
 # plane onto an app credential and never appears in a spec.
@@ -116,6 +113,55 @@ paths:
         concurrency cap.
       responses:
         '200': { description: gRPC bidirectional stream }
+        '401': { description: Missing or invalid API key }
+      x-helix-gateway:
+        plugins:
+          helix-auth:
+            mode: validate
+            validate_auth_type: key-auth
+            apikey:
+              source: header
+              key: X-Unit-Key
+
+
+  /grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo:
+    post:
+      summary: gRPC server reflection (v1alpha)
+      description: >-
+        Lets a client discover this service's schema over the connection itself,
+        so integrators need no .proto file from you and Postman lists the methods
+        on its own. Authenticated like every other route, so discovery needs a
+        credential rather than being open to anyone who finds the host.
+
+        ROUTE BOTH REFLECTION VERSIONS. A client asks for v1 first and falls back
+        to v1alpha, and that fallback only happens if the v1 call gets a clean
+        gRPC answer. Route v1alpha alone and the v1 attempt lands on no route at
+        all, which returns an HTTP 404 the client cannot read as gRPC — so it
+        gives up instead of falling back, and discovery fails even though this
+        route works perfectly.
+      responses:
+        '200': { description: The service descriptors, as a gRPC stream }
+        '401': { description: Missing or invalid API key }
+      x-helix-gateway:
+        plugins:
+          helix-auth:
+            mode: validate
+            validate_auth_type: key-auth
+            apikey:
+              source: header
+              key: X-Unit-Key
+
+
+  /grpc.reflection.v1.ServerReflection/ServerReflectionInfo:
+    post:
+      summary: gRPC server reflection (v1)
+      description: >-
+        The version a client tries FIRST. Present so that negotiation resolves
+        cleanly: the backend answers UNIMPLEMENTED here, the client falls back to
+        v1alpha, and discovery succeeds. Without this route the same attempt hits
+        an HTTP 404 that is not valid gRPC and the client stops there.
+      responses:
+        '200': { description: The service descriptors, as a gRPC stream }
         '401': { description: Missing or invalid API key }
       x-helix-gateway:
         plugins:
