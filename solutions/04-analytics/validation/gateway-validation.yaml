@@ -27,7 +27,7 @@ analytics_validation:
     - X-Request-Id is not a dimension — correlate a single request in your own logs.
 
   agent_prompt_run:
-    executor: harness/verify-agent.sh (hosted agent, default model)
+    executor: the hosted agent, default model
     date: 2026-09-21
     status: PASS
     detail: >-

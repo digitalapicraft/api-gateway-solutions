@@ -21,7 +21,7 @@ write — neither is a release.**
 request, and replacing it without a deploy. That is the whole subject, and it is
 the part that transfers to any value you want to keep out of your configuration.
 
-The crypto is machinery, not the lesson. A stored value has to be *consumed* by
+The crypto is plumbing, not the lesson. A stored value has to be *consumed* by
 something for you to see it work, and the choice of consumer turns on one
 distinction: **observing** a stored value and **using** one are different jobs.
 

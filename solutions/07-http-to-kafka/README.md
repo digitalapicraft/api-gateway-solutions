@@ -292,7 +292,7 @@ alternatives, cheapest first:
 |---|---|---|
 | **`service-callout` → Kafka REST Proxy** | Runs in the *access* phase, synchronously, so `error_handling.policy: fail-close` returns 503 to the caller when Kafka rejects | An HTTP hop and a REST-proxy deployment; adds latency to every request |
 | **Producer service behind the gateway** | The gateway proxies to a real service that produces with `acks=all` and idempotence, and only then returns 202 | One more deployable — the thing you were trying to avoid — but a real acknowledgement |
-| **Transactional outbox** | Ingest writes to its own store, a relay publishes | Strongest guarantee, most machinery |
+| **Transactional outbox** | Ingest writes to its own store, a relay publishes | Strongest guarantee, most moving parts |
 
 The first is the natural upgrade from this solution: the same route shape, with
 the publish moved into a phase that can still answer the caller.

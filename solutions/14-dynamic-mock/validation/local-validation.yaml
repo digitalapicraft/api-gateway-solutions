@@ -1,5 +1,5 @@
 # Local validation — structural checks performed before any gateway contact.
-# Evidence only. Dates and who ran it live in the machinery verification record.
+# Evidence only — no dates, and no record of who ran it.
 
 local_validation:
   status: PASS

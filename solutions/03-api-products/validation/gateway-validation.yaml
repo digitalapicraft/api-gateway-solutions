@@ -32,7 +32,7 @@ gateway_validation:
       - { id: isolation,        expected_status: 200, result: PASS, note: "second app on a different product unaffected — the case that matters" }
 
   agent_prompt_run:
-    executor: harness/verify-agent.sh (hosted agent, default model)
+    executor: the hosted agent, default model
     date: 2026-09-21
     status: PASS
     detail: >-
