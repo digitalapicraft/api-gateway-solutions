@@ -32,6 +32,7 @@ it, and an honest record of what was and wasn't validated.
 | **11** | [Service callout](solutions/11-service-callout/) | *"Seven services each start by calling the customer-profile service. Seven caches, seven timeouts, seven opinions about what to do when it fails."* Do the lookup once and hand the answer to the backend as a header. | [prompt](solutions/11-service-callout/helix-agent-prompt.md) |
 | **12** | [Key-value map](solutions/12-key-value-map/) | *"Fourteen partners, fourteen keys in fourteen routes, and a deploy every time one of them rotates."* Fetch the key per request so rotation is a write, not a release. | [prompt](solutions/12-key-value-map/helix-agent-prompt.md) |
 | **13** | [PGP encryption](solutions/13-pgp-encryption/) | *"The bank only accepts PGP-encrypted payloads. Today that's a Python script with a keyring on a VM, and it's what pages us at 2am."* Decrypt inbound and encrypt outbound at the edge; the backend never handles ciphertext. | [prompt](solutions/13-pgp-encryption/helix-agent-prompt.md) |
+| **14** | [Dynamic mock](solutions/14-dynamic-mock/) | *"Every partner gets the same canned response from our sandbox, so nobody catches an integration bug until production."* Answer each caller with that caller's own stored values — one route, no backend, and changing a value is a write rather than a release. | [prompt](solutions/14-dynamic-mock/helix-agent-prompt.md) |
 
 They compose. 01 gives you identity, 02 gives you the protocol bridge, 03 turns
 the result into something sellable, and 04 tells you what happened. Running all

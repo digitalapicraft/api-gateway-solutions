@@ -64,8 +64,7 @@ implementation:
     wrong issuer, which correctly rejected a genuine token.
 
 validation:
-  # Stage statuses only. What was checked and what happened is in validation/;
-  # dates and who ran it are in the machinery verification record.
+  # Stage statuses only. What was checked and what happened is in validation/.
   local: PASS
   gateway_dry_run: PASS
   deployment: DEPLOYED

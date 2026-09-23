@@ -1,0 +1,2 @@
+GET {{gateway}}/sandbox/diagnostics
+x-partner-id: acme-42

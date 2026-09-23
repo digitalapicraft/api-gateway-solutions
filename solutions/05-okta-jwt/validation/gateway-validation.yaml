@@ -23,7 +23,7 @@ gateway_validation:
       - { id: malformed-authorization, expected: 400, actual: 400, result: PASS, note: "400, NOT 401 — rejected at header parse, before the plugin runs" }
 
   agent_prompt_run:
-    executor: harness/verify-agent.sh (hosted agent, default model)
+    executor: the hosted agent, default model
     date: 2026-09-21
     status: PASS
     detail: >-

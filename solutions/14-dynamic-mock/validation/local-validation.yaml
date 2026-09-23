@@ -1,0 +1,58 @@
+# Local validation — structural checks performed before any gateway contact.
+# Evidence only — no dates, and no record of who ran it.
+
+local_validation:
+  status: PASS
+
+  checks:
+    openapi:                 PASS   # OpenAPI 3.0.3, parses, every path carries an operation and responses
+    plugin_fields:           PASS   # every field on key-value-map and mocking is drawn from the live plugin schema in the target org; no commentary keys, _meta unused
+    plugin_scope:            PASS   # key-value-map and mocking are route-scoped; request-id and cors are document-root
+    ordering:                PASS   # key-value-map (3001) outranks mocking (1999), both access phase, so the store publishes before the mock reads
+    references:              PASS   # every $ctx reference names a field the route's own key-value-map block actually publishes — the aliases on the read route match the names in the template
+    alias_agreement:         PASS   # fetch aliases (tier, settlement) are exactly the fields the mocking template reads
+    key_agreement:           PASS   # the insert keys and the fetch keys are the identical template, including the literal prefix and the colon
+    reference_charset:       PASS   # no $ctx path segment contains a hyphen; segments are [A-Za-z0-9_] only
+    json_validity:           PASS   # the one table-valued reference is embedded unquoted; the quoted references are scalars
+    secrets:                 PASS   # no credentials anywhere — every value is supplied per request by the caller
+    tests_match_spec:        PASS   # every test case addresses a path and header that exists in the spec
+    fixtures:                PASS   # every expected/ fixture is referenced by a case and carries a status
+
+  warnings:
+    - >-
+      The registration route ships UNAUTHENTICATED. Anyone who can reach
+      /sandbox/partners can overwrite any partner's values. This is deliberate so
+      the package is runnable as shipped, and it is the first thing to change
+      before exposing it.
+    - >-
+      A store miss is indistinguishable from a stored empty string. Both render as
+      "". If that distinction matters, store a sentinel value rather than relying
+      on emptiness.
+    - >-
+      fail_action: close governs store ERRORS (the store being unreachable), not
+      misses. Nothing in this route fails closed on an unknown partner.
+    - >-
+      The diagnostics route exposes the grammar and the namespace contents. It is
+      a teaching aid; drop it before production.
+    - >-
+      Values are stored with a TTL of 86400 seconds. A partner registered and then
+      left alone for a day reverts to the unregistered response with no signal.
+    - >-
+      mocking SHORT-CIRCUITS every route here, so the bound upstream is never
+      contacted. The binding is still required for the revision to deploy.
+
+  assumptions:
+    - The caller's identity arrives in x-partner-id. In a real deployment this
+      should be derived from an authenticated credential rather than trusted from
+      a header the caller controls.
+    - Partner ids contain no character that would collide with the colon used as
+      the key separator.
+    - The key-value store is provisioned on the target environment. It is
+      infrastructure, not something this spec creates.
+
+  not_established_here:
+    - Whether the store is shared across environments, or scoped per environment.
+    - >-
+      Behaviour when the store itself is unreachable; fail_action close is set,
+      but no outage was simulated.
+    - Any statement about throughput or the cost of a fetch per request.

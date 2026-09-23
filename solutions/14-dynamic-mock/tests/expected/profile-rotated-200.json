@@ -1,0 +1,4 @@
+{
+  "status": 200,
+  "body": { "partner": "acme-42", "tier": "platinum", "settlement": "GB29-SANDBOX-0009" }
+}

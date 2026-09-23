@@ -1,0 +1,130 @@
+# Test plan — a per-caller sandbox served from the key-value store, with no
+# backend behind it.
+#
+# All six cases are executed in order by ../gateway/verify.sh, which exits 0 only
+# if every one of them holds. The fixtures under requests/ and expected/ document
+# each case independently so you can run one by hand.
+#
+# Substitute your own values:
+#   {{gateway}}   gateway base URL, e.g. https://<YOUR_GATEWAY_HOST>
+#
+# The partner ids in the fixtures are illustrative. verify.sh generates its own
+# per run, because a re-run against the same environment would otherwise be
+# answered by the previous run's stored values — the store outlives the test.
+
+meta:
+  solution: 14-dynamic-mock
+  version: 1.0.0
+  executor: gateway/verify.sh
+  note: >-
+    Every case is automated; none requires waiting or mutating environment
+    configuration. Case 6 asserts a negative about syntax rather than about
+    policy, which is unusual for this library — it is here because the failure it
+    guards against is silent, returning 200 with empty strings and no error.
+  status: >-
+    EXECUTED against a live deployment, 6/6 passing. See
+    validation/gateway-validation.yaml for what ran and when.
+
+cases:
+  - id: register
+    type: positive
+    intent: >-
+      The administrative route stores a partner's values under a key built from
+      that partner's own id, so one route serves every partner and onboarding one
+      is a request rather than a configuration change.
+    request: requests/register-partner.http
+    expected: expected/register-202.json
+    expected_status: 202
+    response_notes: >-
+      The echoed `stored` object is the ctx.helix.key_value_map.inserted table,
+      JSON-encoded by the template engine. It shows the KEY SHAPE — `tier:acme-42`
+      — which is why the reference in the read route needs an alias. Note what
+      this 202 is NOT: an acknowledgement that the insert was configured, not
+      proof of a store write. Read the value back to confirm one.
+    notes: >-
+      This route ships unauthenticated, exactly like solution 12's registration
+      route. Protecting it is part of adopting this package, not an optional
+      extra — anyone who can reach it can rewrite any partner's sandbox.
+
+  - id: profile-registered
+    type: positive
+    intent: >-
+      A caller reading its own profile is answered with its own stored values,
+      resolved per request from the store, with no per-partner configuration
+      anywhere in the route.
+    request: requests/profile-registered.http
+    expected: expected/profile-registered-200.json
+    expected_status: 200
+    response_notes: >-
+      `tier` and `settlement` come from `$ctx.helix.key_value_map.<alias>`, and
+      `partner` comes from `$http_x_partner_id` — an ordinary gateway variable,
+      NOT `$request.headers.x-partner-id`, which is key-value-map's grammar and
+      does not resolve inside mocking. The X-Partner-Tier response header proves
+      `response_headers` is templated the same way `response_example` is.
+
+  - id: profile-other-partner
+    type: positive
+    intent: >-
+      A second partner calling the same route gets its own values. This is the
+      case that distinguishes a per-caller sandbox from a fancier static mock.
+    request: requests/profile-other-partner.http
+    expected: expected/profile-other-partner-200.json
+    expected_status: 200
+    response_notes: >-
+      verify.sh additionally asserts that the first partner's tier does NOT appear
+      in this response. A shared-key bug would still return 200 with plausible
+      content, so asserting the absence is what catches it.
+
+  - id: profile-unregistered
+    type: negative
+    intent: >-
+      A caller with no stored values gets empty strings and a 200, because a miss
+      is not an error to key-value-map.
+    request: requests/profile-unregistered.http
+    expected: expected/profile-unregistered-200.json
+    expected_status: 200
+    response_notes: >-
+      This is the package's most important caveat expressed as a test. The store
+      cannot know whether the value mattered, so NOTHING here fails closed. If an
+      empty tier must not be served, the check belongs downstream of this route —
+      `fail_action: close` on key-value-map governs store ERRORS, not misses.
+    notes: >-
+      An unregistered partner is indistinguishable from a registered one whose
+      value is the empty string. If that distinction matters to you, store a
+      sentinel rather than relying on emptiness.
+
+  - id: change-without-deploy
+    type: boundary
+    intent: >-
+      Re-registering an existing partner replaces its values, and the next read
+      reflects them — no revision, no route change, no deploy.
+    request: requests/rotate-partner.http
+    expected: expected/profile-rotated-200.json
+    expected_status: 200
+    response_notes: >-
+      This is the business claim of the package, so it is asserted rather than
+      described. The write and the read are separate requests on separate routes;
+      the store is what connects them.
+
+  - id: grammar-guard
+    type: failure
+    intent: >-
+      The bare `$ctx.<path>` form resolves a stored value and the `${...}` form
+      does not — on the same route, in the same request, against the same value.
+    request: requests/diagnostics.http
+    expected: expected/diagnostics-200.json
+    expected_status: 200
+    response_notes: >-
+      `bare_form` carries the value; `brace_form` is empty. verify.sh fails if the
+      brace form ever starts resolving, because that would mean this package's
+      central explanation is wrong and its guidance should change.
+    notes: >-
+      Keep this route while a team is learning the syntax and drop it before
+      production. It exists because the failure mode it demonstrates is silent:
+      the wrong grammar returns 200 with an empty string and logs nothing.
+
+coverage:
+  positive: register, profile-registered, profile-other-partner
+  negative: profile-unregistered
+  boundary: change-without-deploy
+  failure: grammar-guard

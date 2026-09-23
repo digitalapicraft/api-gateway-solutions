@@ -9,7 +9,7 @@
 - [ ] No secrets — placeholders only. The gateway uses `signing_secret` and
       `redis_host` **verbatim**; it does not resolve `<ENV:...>` or `${...}`.
 - [ ] `solution.yaml`, `gateway/api-spec.yaml`, `gateway/products.json` parse
-- [ ] No machinery-side artifacts (`blog.md`, `video-script.md`, `infographic.md`,
+- [ ] No non-public artifacts (`blog.md`, `video-script.md`, `infographic.md`,
       `marketplace-publish.md`, `VERIFICATION.md`)
 
 ## Validation status
@@ -21,10 +21,9 @@ Reached: `Configuration generated` / `Locally validated` / `Gateway dry-run pass
 
 ## After this merges
 
-This repo is a submodule of the private machinery repo. Once merged, the pin must
-be moved to **this** merged commit on `main` — never to the branch tip, which a
-squash merge leaves unreachable and which breaks `git submodule update` on a
-fresh clone.
+This repo is consumed as a submodule. Once merged, the pin must be moved to
+**this** merged commit on `main` — never to the branch tip, which a squash merge
+leaves unreachable and which breaks `git submodule update` on a fresh clone.
 
 ```bash
 git -C public checkout main && git -C public pull --ff-only

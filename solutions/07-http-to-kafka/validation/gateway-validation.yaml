@@ -119,7 +119,7 @@ gateway_validation:
         set when writing a consumer schema.
 
   agent_prompt_run:
-    executor: harness/verify-agent.sh (hosted agent, default model)
+    executor: the hosted agent, default model
     date: 2026-09-21
     status: PASS with a documented limitation
     detail: >-

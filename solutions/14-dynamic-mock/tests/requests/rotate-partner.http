@@ -1,0 +1,4 @@
+POST {{gateway}}/sandbox/partners
+x-partner-id: acme-42
+x-tier: platinum
+x-settlement-account: GB29-SANDBOX-0009

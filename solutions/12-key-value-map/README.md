@@ -21,16 +21,23 @@ write — neither is a release.**
 request, and replacing it without a deploy. That is the whole subject, and it is
 the part that transfers to any value you want to keep out of your configuration.
 
-The crypto is machinery, not the lesson. A stored value has to be *consumed* by
-something for you to see it work, and on this build there are exactly two plugins
-that can read one: `pgp-crypto` and `lua-callout`. `key-value-map` does not mirror
-its values into `ctx.var`, so `proxy-rewrite` cannot read them the way it reads
-[solution 11](../11-service-callout/)'s. And `lua-callout` is **Enterprise-only** —
-it is the single plan-gated plugin of the 96 in the catalogue, and attaching it on
-a free-trial org is refused at import with a 403.
+The crypto is plumbing, not the lesson. A stored value has to be *consumed* by
+something for you to see it work, and the choice of consumer turns on one
+distinction: **observing** a stored value and **using** one are different jobs.
 
-So `pgp-crypto` is the consumer here because on a free-trial org it is the only
-one available. If you want to understand the crypto itself, that is
+`mocking` can *observe* a stored value — it reads `ctx.helix.key_value_map`
+directly, needs no crypto and no Enterprise plan. That is
+[solution 14](../14-dynamic-mock/), and it is the shortest way to see the store
+work. But `mocking` short-circuits the request, so it can never put a stored value
+into a call that reaches your backend.
+
+This package *uses* one, on a real proxied response, and for that the consumer set
+is narrower: `pgp-crypto` and `lua-callout` are the only plugins that resolve a KVM
+reference themselves. `lua-callout` carries `enterpriseOnly: true` and is refused
+at import **on a free-trial organisation** — which is why this package is built on
+`pgp-crypto`, and why it runs anywhere. On an organisation that is not on a free
+trial, `lua-callout` imports and deploys normally and becomes a second option;
+test the import rather than trusting the catalogue flag, which does not change. If you want to understand the crypto itself, that is
 [solution 13](../13-pgp-encryption/) — read it if you need it, skip it if you
 don't. Everything below is about the store.
 
@@ -165,12 +172,20 @@ Stated up front, because two of them are load-bearing.
 path is the plugin's own `inserts`, which is why a registration route exists at
 all. That is a real constraint, not a design preference.
 
-**You cannot swap the consumer on a free-trial org.** `lua-callout` — the obvious
-choice if you wanted to inject a stored value as an upstream header and skip crypto
-entirely — is the one plan-gated plugin on this build. Import returns
-`403 Plugin 'lua-callout' is available on Enterprise plans only`. On Enterprise
-that route opens up and this package's store half is unchanged; on free trial,
-`pgp-crypto` is what you have.
+**On a free-trial organisation you cannot swap the consumer for an *injecting*
+one.** `lua-callout` — the obvious choice if you wanted to inject a stored value
+as an upstream header and skip crypto entirely — is the one gated plugin on this
+build, and import returns `403 Plugin 'lua-callout' is available on Enterprise
+plans only ... cannot be attached on a free trial organization`. Off free trial
+it imports and deploys, and the store half of this package is unchanged either
+way. If you try it, note its priority is **0**: put it on a route with a
+short-circuiting plugin such as `mocking` (1999) and it never runs, returning an
+empty value with no error. Raise it with `_meta.priority`.
+
+This is narrower than it sounds, and the boundary is worth knowing: **reading** a
+stored value needs neither. `mocking` resolves `$ctx.helix.key_value_map.<key>`
+on any plan — see [solution 14](../14-dynamic-mock/) — it simply short-circuits
+the request, so what it cannot do is hand the value to your backend.
 
 **The registration route is administrative, and ships unauthenticated.** Every
 package in this library ships with the behaviour under test and nothing else — so
@@ -409,9 +424,10 @@ Don't use it when:
   assertions pass while no document is returned.
 - **The registration route's status reflects the upstream echo, not the store
   write**, so neither a 2xx nor a 5xx there is evidence about the value.
-- **The consumer cannot be swapped on a free-trial org.** `lua-callout` is the one
-  plan-gated plugin on this build, which leaves `pgp-crypto` as the only way to
-  observe a stored value.
+- **The *injecting* consumer cannot be swapped on a free-trial org.** `lua-callout`
+  is the one plan-gated plugin on this build, which leaves `pgp-crypto` as the only
+  way to put a stored value into a proxied call. Reading one back is unrestricted —
+  `mocking` does it on any plan ([solution 14](../14-dynamic-mock/)).
 - **Entries are stored encrypted at rest and scoped per environment**, which says
   nothing about how the value reached the gateway.
 - **Everything in [solution 13's](../13-pgp-encryption/) limitations still applies.**

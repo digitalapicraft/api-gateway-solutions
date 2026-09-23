@@ -1,9 +1,9 @@
 # Public hygiene gate for every PR to main.
 #
-# This is a SELF-CONTAINED SUBSET. The authoritative gate is harness/validate.sh
-# in the private machinery repo, which cannot run here. Every commit on this
-# branch is followed by a pin PR in machinery that runs the full gate, so nothing
-# ships ungated — it is just gated one step later.
+# This is a SELF-CONTAINED SUBSET. The authoritative gate lives with the build
+# tooling and cannot run here. Every commit on this branch is followed by a pin
+# PR downstream that runs the full gate, so nothing ships ungated — it is just
+# gated one step later.
 #
 # The job name below ("validate") is the status-check context the branch ruleset
 # requires. Renaming the job silently un-requires the check.
@@ -24,6 +24,54 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # commit messages are audited below
+
+      # Nothing in this repo may name the private build layer, its tooling or
+      # its internal documents — not in a file, and not in a commit message,
+      # which ships with the repo and is just as public. The banned term is
+      # assembled at runtime so this file does not match itself.
+      - name: Private-side leak audit
+        run: |
+          python - <<'PY'
+          import os, re, subprocess, sys
+          # Every term is assembled so this file never matches its own audit.
+          TERMS = ["mach" + "inery",
+                   "har" + r"ness/",
+                   "CLA" + r"UDE\.md",
+                   "pla" + r"ns/(active|pending|completed)"]
+          PAT = re.compile("|".join(TERMS), re.I)
+          bad = []
+          for root, dirs, files in os.walk("."):
+              dirs[:] = [d for d in dirs if d != ".git"]
+              for name in files:
+                  fp = os.path.join(root, name)
+                  try:
+                      with open(fp, encoding="utf-8", errors="ignore") as fh:
+                          for n, line in enumerate(fh, 1):
+                              if PAT.search(line):
+                                  bad.append(f"{fp}:{n}: {line.strip()[:110]}")
+                  except OSError:
+                      pass
+          base = os.environ.get("GITHUB_BASE_REF")
+          if base:
+              try:
+                  log = subprocess.run(["git", "log", f"origin/{base}..HEAD", "--format=%h %s%n%b"],
+                                       capture_output=True, text=True, check=False).stdout
+                  for line in log.splitlines():
+                      if PAT.search(line):
+                          bad.append(f"commit message: {line.strip()[:110]}")
+              except Exception:
+                  pass
+          for b in bad:
+              print(f"::error::private-side reference — {b}")
+          if bad:
+              print(f"\n{len(bad)} private-side reference(s). This repo must not reveal that a")
+              print("private build layer exists. Reword — 'moving parts', 'plumbing', 'the build tooling'.")
+              sys.exit(1)
+          print("no private-side references in files or commit messages")
+          PY
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -46,14 +94,14 @@ jobs:
               sys.exit(1)
           print(f"solutions present: {len(dirs)}")
 
-          # 1. Layer boundary. These are machinery-side artifacts and must never
-          #    appear in the public library.
+          # 1. Layer boundary. These artifacts are not published and must never
+          #    appear in this library.
           NONPUBLIC = ("blog.md", "video-script.md", "infographic.md",
                        "marketplace-publish.md", "VERIFICATION.md")
           for d in dirs:
               for name in NONPUBLIC:
                   if os.path.exists(f"{d}/{name}"):
-                      F(f"{d}/{name} is a non-public artifact — it belongs in the machinery repo")
+                      F(f"{d}/{name} is a non-public artifact and must not be published here")
 
           REQUIRED = ("README.md", "solution.yaml", "architecture.md",
                       "business-need.md", "helix-agent-prompt.md")

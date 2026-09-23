@@ -1,0 +1,7 @@
+{
+  "status": 202,
+  "body": {
+    "registered": true,
+    "stored": { "tier:acme-42": "gold", "settlement:acme-42": "GB29-SANDBOX-0001" }
+  }
+}
