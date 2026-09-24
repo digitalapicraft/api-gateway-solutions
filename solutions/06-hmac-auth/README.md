@@ -68,7 +68,7 @@ Quantified in [business-need.md](business-need.md). No ROI figures are invented 
 ```mermaid
 flowchart TD
     Q{"Can the caller hold a long-lived<br/>shared secret, and run code that<br/>signs each request?"}
-    Q -->|"No — it's a browser, a mobile app,<br/>or anything a user can read"| T["A secret in an app a user controls<br/>is not a secret.<br/><br/>Use a token flow — SOLUTION 01,<br/>or SOLUTION 05 if an IdP already issues them"]
+    Q -->|"No — it's a browser, a mobile app,<br/>or anything a user can read"| T["A secret in an app a user controls<br/>is not a secret.<br/><br/>Use a token flow — SOLUTION 02,<br/>or SOLUTION 05 if an IdP already issues them"]
     Q -->|"Yes — a server, a device fleet,<br/>a partner's backend"| S{"Do you need to prove the BODY<br/>arrived unmodified?"}
     S -->|"Yes, or the endpoint is a webhook<br/>or settlement receiver"| H["Sign every request.<br/><br/>hmac-auth — THIS SOLUTION"]
     S -->|"No — identity alone is enough<br/>and tokens are simpler to consume"| T
@@ -386,7 +386,7 @@ payload's integrity matters (payments, settlement, telemetry, webhooks); when th
 credential must survive being logged; or when the other side has already built a
 signing client for someone else's API.
 
-**Use a token instead** ([01](../01-oauth-jwt/), [05](../05-okta-jwt/)) when the
+**Use a token instead** ([02](../02-oauth-jwt/), [05](../05-okta-jwt/)) when the
 caller is a browser or mobile app, when an IdP already owns identity, or when you
 need short-lived credentials and per-user identity rather than per-integration.
 
@@ -418,11 +418,11 @@ supported configuration in this package and is not covered by its validation.
   above rather than a link to the RFC.
 - **Quota composes — this was tested, and it works.** Adding
   `api-product-enforcer` to a signed route meters it per app exactly as
-  [solution 03](../03-api-products/) describes: with a 3/minute product quota,
+  [solution 01](../01-api-products/) describes: with a 3/minute product quota,
   three signed requests returned 201 and the next three returned
   `429 {"error":"quota exceeded"}`. The enforcer resolves the consumer and its
   `credential_id` from `hmac-auth` without any extra configuration. This package
-  still ships without the enforcer, because metering is solution 03's subject —
+  still ships without the enforcer, because metering is solution 01's subject —
   but you can add it, and nothing about signing gets in the way.
 
 ## Validation status
@@ -449,12 +449,12 @@ the detail.
 
 ## Related solutions
 
-- **[01 — OAuth 2.0 with JWT](../01-oauth-jwt/)** — the token alternative, for
+- **[02 — OAuth 2.0 with JWT](../02-oauth-jwt/)** — the token alternative, for
   callers that can hold one. The gateway issues and verifies.
 - **[05 — OAuth with Okta](../05-okta-jwt/)** — tokens again, when an external
   IdP is the issuer.
-- **[03 — API Products](../03-api-products/)** — per-app quotas. The product this
-  solution creates for its credential is the same object 03 meters on.
+- **[01 — API Products](../01-api-products/)** — per-app quotas. The product this
+  solution creates for its credential is the same object 01 meters on.
 - **[07 — HTTP to Kafka](../07-http-to-kafka/)** — an ingest endpoint with no
   service behind it. Unauthenticated as shipped; this solution is how you close
   it, and that package documents what it costs.

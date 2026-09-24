@@ -4,7 +4,7 @@
 # x-helix-gateway.plugins. Import it, bind an upstream, fill in the four Okta
 # values below, and deploy the revision.
 #
-# THIS IS THE MIRROR OF SOLUTION 01. There, the gateway ISSUES the token
+# THIS IS THE MIRROR OF SOLUTION 02. There, the gateway ISSUES the token
 # (helix-auth generate on POST /oauth/token) and verifies its own signature with a
 # shared HMAC secret. Here Okta issues, Okta holds the private key, and the
 # gateway's only job is to verify an RS256 signature against Okta's published
@@ -39,7 +39,7 @@
 #   <OKTA_CLIENT_SECRET>  its client secret (see the note on the plugin block — it is schema-required)
 #
 # AUTH IS AT THE DOCUMENT ROOT, NOT PER ROUTE — the deliberate opposite of
-# solution 01. Solution 01 must scope helix-auth per route because POST
+# solution 02. Solution 02 must scope helix-auth per route because POST
 # /oauth/token has to stay reachable without a token. Here there is no token
 # endpoint at all: Okta issues, off-gateway. So every route is protected by one
 # root-level block and there is no hole to leave open by accident.

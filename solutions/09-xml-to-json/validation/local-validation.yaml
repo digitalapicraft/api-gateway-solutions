@@ -55,7 +55,7 @@ local_validation:
       text/html or application/soap+xml matches neither and nothing will happen.
     - >-
       This package ships with no authentication. It demonstrates mediation only;
-      put solution 08 or solution 01 in front before it carries anything real.
+      put solution 08 or solution 02 in front before it carries anything real.
 
   assumptions:
     - API "Catalog API" with routes /catalog/items and /catalog/orders. All illustrative.

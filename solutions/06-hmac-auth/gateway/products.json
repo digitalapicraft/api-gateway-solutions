@@ -3,11 +3,11 @@
 
   "_why_a_product_exists_here": "This solution is about signing, not about selling. The product is here because it is the only way to get a CREDENTIAL: an app subscribes to a product, and creating the app is what mints the key_id and secret_key the caller signs with. No product, no app; no app, no credential; no credential, nothing to sign with.",
 
-  "_authMethods_is_the_field_that_matters": "authMethods MUST list hmac-auth. It defaults to [\"helix-auth\"], and an app created under a product that does not name hmac-auth is rejected. This is the single most likely thing to get wrong when adapting solution 01's or 03's products file.",
+  "_authMethods_is_the_field_that_matters": "authMethods MUST list hmac-auth. It defaults to [\"helix-auth\"], and an app created under a product that does not name hmac-auth is rejected. This is the single most likely thing to get wrong when adapting solution 02's or 03's products file.",
 
   "_the_credential": "Create the app with plugins: {\"hmac-auth\": {}} — an EMPTY config object. The control plane generates key_id and secret_key and returns them ONCE, in the create response. Supply your own values there instead if you must match a secret a partner already holds. Rotating regenerates both; there is no way to rotate one and keep the other.",
 
-  "_quota_is_mandatory": "Every product MUST carry a quota object; a product with no quota is rejected at creation. Note that the quota is only ENFORCED if api-product-enforcer is on the route, which this solution does not put there — see solution 03 for metering, and this package's README for what is and isn't known about combining it with hmac-auth.",
+  "_quota_is_mandatory": "Every product MUST carry a quota object; a product with no quota is rejected at creation. Note that the quota is only ENFORCED if api-product-enforcer is on the route, which this solution does not put there — see solution 01 for metering, and this package's README for what is and isn't known about combining it with hmac-auth.",
 
   "products": [
     {

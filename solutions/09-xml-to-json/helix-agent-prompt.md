@@ -9,7 +9,7 @@ says why each block earns its place. Read [AGENT-GUIDE.md](../../AGENT-GUIDE.md)
 first if you haven't.
 
 > **If your backend is SOAP, this is the wrong prompt.** Use
-> [solution 02](../02-soap-to-rest/helix-agent-prompt.md). The two produce
+> [solution 03](../03-soap-to-rest/helix-agent-prompt.md). The two produce
 > incompatible documents.
 
 ---
@@ -81,7 +81,7 @@ sent as text/plain, which passes through unconverted with no error.
 |---|---|
 | **"This is a fresh org — create one"** | On a new free-trial org there is no API to "find". The agent must create it, or it stalls looking for something that isn't there. |
 | **"Upstream: httpbin … /xml … /post echoes"** | One upstream demonstrates both directions on a fresh org: a real XML document to convert, and an echo that shows the XML your backend would have received. |
-| **"Do NOT set a Content-Type in proxy-rewrite"** | `proxy-rewrite` (1008) runs before `xml-to-json` (997). An override there changes the header the transform matches on, and the request direction silently stops converting. This is a recorded defect from solution 02, and it is exactly the tidy-up an agent volunteers. |
+| **"Do NOT set a Content-Type in proxy-rewrite"** | `proxy-rewrite` (1008) runs before `xml-to-json` (997). An override there changes the header the transform matches on, and the request direction silently stops converting. This is a recorded defect from solution 03, and it is exactly the tidy-up an agent volunteers. |
 | **"transform_request true — it defaults to false"** | The single most likely wrong turn. An agent writes `xml-to-json: {}`, the response direction works, and the request direction silently never happens. |
 | **"request_root_name / array_item_name / root_attributes"** | The generated document's root name and namespace are what a real backend's parser checks first. Left to the agent they get defaults, and the backend rejects a document that otherwise looks right. |
 | **"Do not set pretty"** | Verified on this build: `pretty: true` makes the route return 503 with the connection terminated before headers. An agent asked for "readable JSON" will reach for it. |
@@ -151,7 +151,7 @@ conversion exactly as it is.
 
 ## Related
 
-- **[Solution 02 — SOAP to REST](../02-soap-to-rest/helix-agent-prompt.md)** — the
+- **[Solution 03 — SOAP to REST](../03-soap-to-rest/helix-agent-prompt.md)** — the
   envelope case. Choose between them before you start.
 - **[Solution 08 — API keys](../08-api-key/helix-agent-prompt.md)** — this package
   ships open; put identity in front of it.

@@ -48,7 +48,7 @@ implementation:
     NO SECRET APPEARS IN THE SPEC AND NONE CAN — hmac-auth's route schema has no
     secret field. key_id and secret_key live on the app credential, which the
     control plane generates and returns once. This is the structural difference
-    from solution 01, whose signing_secret is a literal in the spec.
+    from solution 02, whose signing_secret is a literal in the spec.
     request-validation CANNOT share a route with validate_request_body: it runs
     earlier in the same phase (2800 vs 2530) and re-encodes the body, so the
     digest comparison fails on key order and whitespace.
@@ -86,7 +86,7 @@ limitations:
   - The integration cost lands on the caller, who must get canonicalisation byte-exact. Off-the-shelf draft-cavage libraries do NOT interoperate — the keyId line, the trailing newline and the @request-target form each differ.
   - Not usable from browser JavaScript. Date is a forbidden header for fetch and XHR, and a secret shipped to a user's device is not a secret.
   - request-validation cannot be added to a signed route. It re-encodes the body ahead of the digest check.
-  - Metering is not included here, but it does compose: api-product-enforcer added to a signed route meters per app exactly as solution 03 describes (tested — a 3/minute quota gave three 201s then 429 "quota exceeded"). This is a scope decision, not a limitation of signing.
+  - Metering is not included here, but it does compose: api-product-enforcer added to a signed route meters per app exactly as solution 01 describes (tested — a 3/minute quota gave three 201s then 429 "quota exceeded"). This is a scope decision, not a limitation of signing.
   - hmac-auth's exact schema varies by build. Confirm with get_plugin_config in your org before deploying rather than trusting the field names in this spec.
 
 status: READY   # deployed to a temporary test API and verified: verify.sh exit 0, 8/8

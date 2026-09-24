@@ -159,8 +159,8 @@ You add nothing to your APIs for analytics — but two properties of how an API 
 - **Per-app / per-developer / per-product breakdowns need identity resolved on the
   API.** If an API authenticates callers (`helix-auth`), its rows carry
   `app_name` / `developer` / `product_name`; if it's anonymous, that traffic is the
-  "unattributed" bucket. (Adding auth is [solution 01](../01-oauth-jwt/) /
-  [solution 03](../03-api-products/) — not something you do for analytics.)
+  "unattributed" bucket. (Adding auth is [solution 02](../02-oauth-jwt/) /
+  [solution 01](../01-api-products/) — not something you do for analytics.)
 - **Group route-level views by `route_id`, not `api_path`.** `route_id` collapses a
   templated route (`/orders/{id}`) to one row; `api_path` gives one row per concrete
   id.

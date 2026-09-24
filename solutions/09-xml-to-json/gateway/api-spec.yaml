@@ -5,11 +5,11 @@
 # Mode (it creates the API and binds the upstream for you), or import this file,
 # bind the upstream, and deploy the revision.
 #
-# THIS IS NOT THE SOAP SOLUTION. Solution 02 mediates SOAP: it builds an envelope,
+# THIS IS NOT THE SOAP SOLUTION. Solution 03 mediates SOAP: it builds an envelope,
 # sets SOAPAction, and targets a single handler path. This one is for the far more
 # common case of a plain REST/HTTP backend that happens to speak XML — an
 # inventory system from 2009, a payments file API, an industry schema. No
-# envelope, no WSDL, no SOAPAction. If your backend has an envelope, use 02.
+# envelope, no WSDL, no SOAPAction. If your backend has an envelope, use 03.
 #
 # RUNNABLE ON A FRESH FREE-TRIAL ORG. The upstream is the public httpbin.org,
 # whose /xml returns an XML document and whose /post echoes what it received —
@@ -41,7 +41,7 @@
 # safe; setting Content-Type in proxy-rewrite is NOT — it rewrites the header
 # before xml-to-json inspects it, so the body stops matching
 # request_content_types and the request transform silently does nothing. That
-# exact mistake is recorded against solution 02.
+# exact mistake is recorded against solution 03.
 
 openapi: 3.0.3
 

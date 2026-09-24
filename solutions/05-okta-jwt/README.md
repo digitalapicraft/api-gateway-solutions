@@ -59,7 +59,7 @@ This is the fork, and getting it wrong wastes the build.
 flowchart TD
     Q{"Does an identity provider already issue<br/>tokens to this API's callers?"}
     Q -->|Yes| V["Okta / Entra ID / Auth0 / Keycloak is the issuer.<br/>The gateway only VERIFIES.<br/><br/>openid-connect — THIS SOLUTION"]
-    Q -->|No| I["No IdP. Callers are your own partner apps<br/>holding credentials you issued.<br/>The gateway ISSUES and verifies.<br/><br/>helix-auth generate + validate — SOLUTION 01"]
+    Q -->|No| I["No IdP. Callers are your own partner apps<br/>holding credentials you issued.<br/>The gateway ISSUES and verifies.<br/><br/>helix-auth generate + validate — SOLUTION 02"]
 ```
 
 **These are not two styles of the same thing.** They sit on opposite sides of
@@ -127,7 +127,7 @@ or briefly down does not make your API slow or down — until the key cache expi
 and needs refreshing.
 
 The second: **the auth block sits at the document root**, not per route. Solution
-01 must scope its auth per route because `POST /oauth/token` has to stay reachable
+02 must scope its auth per route because `POST /oauth/token` has to stay reachable
 without a token. Here there is no token endpoint — Okta issues, off-gateway — so
 one root-level block covers every route and there is no hole to leave open.
 
@@ -387,7 +387,7 @@ Full matrix in [tests/test-plan.yaml](tests/test-plan.yaml).
 - Callers are services or partner apps that can do client credentials against Okta.
 
 Not this solution if: no IdP exists and you'd be deploying Okta *for* this
-(solution 01 is smaller), or your authorization server issues opaque tokens.
+(solution 02 is smaller), or your authorization server issues opaque tokens.
 
 ## Limitations
 
@@ -395,7 +395,7 @@ Not this solution if: no IdP exists and you'd be deploying Okta *for* this
   says. It carries no per-route permissions in this configuration.
   `required_scopes` is the next step and is deliberately not used here.
 - **No per-caller metering.** Okta-issued tokens do not resolve an app credential,
-  so `api-product-enforcer` has nothing to meter. Quotas need solution 03's model.
+  so `api-product-enforcer` has nothing to meter. Quotas need solution 01's model.
 - **The audience is not enforced by value.** Verified against a deployed route: a
   token minted for an unrelated API was accepted with `200`. `required: true` only
   asserts the claim is present. If you need to scope a token to one API among
@@ -431,10 +431,10 @@ configuration, but no Okta tenant was tested.
 
 ## Related solutions
 
-- **[01 — OAuth 2.0 with JWT](../01-oauth-jwt/)** — the mirror image: the gateway
+- **[02 — OAuth 2.0 with JWT](../02-oauth-jwt/)** — the mirror image: the gateway
   *issues* the tokens with `helix-auth`. Read the fork above and pick one; you do
   not want both on the same route.
-- **[03 — API Products](../03-api-products/)** — per-app quotas. Note the seam:
+- **[01 — API Products](../01-api-products/)** — per-app quotas. Note the seam:
   metering keys off an app credential, which an Okta-issued token does not carry.
 - **[04 — Analytics](../04-analytics/)** — every call is captured regardless of
   which auth plugin resolved it.

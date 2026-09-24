@@ -148,7 +148,7 @@ shape its rows:
 - **Per-app / per-developer / per-product breakdowns need the API to resolve
   identity.** An API that authenticates callers attributes rows to an app; an
   anonymous one lands in the "unattributed" bucket. (That's how the API is built —
-  see [solution 01](../01-oauth-jwt/) / [solution 03](../03-api-products/) — not
+  see [solution 02](../02-oauth-jwt/) / [solution 01](../01-api-products/) — not
   something you do for analytics.)
 - **Group route-level views by `route_id`, not `api_path`** — `route_id` collapses
   a templated route to one row; `api_path` gives one row per concrete id.
@@ -164,7 +164,7 @@ your data.
 
 ## Related solutions
 
-- **[01 — OAuth 2.0 with JWT](../01-oauth-jwt/)** — resolve identity on an API so
+- **[02 — OAuth 2.0 with JWT](../02-oauth-jwt/)** — resolve identity on an API so
   its analytics attributes per app instead of landing in the unattributed bucket.
-- **[03 — API Products](../03-api-products/)** — per-product rows and the 429
+- **[01 — API Products](../01-api-products/)** — per-product rows and the 429
   counts come from having products with quotas.

@@ -278,7 +278,7 @@ policy "so it stops breaking".
 > in the document you import and still sit in the revision you can read back.
 
 This is the same class of footgun as `signing_secret` in
-[solution 01](../01-oauth-jwt/), and worse: a private key outlives a signing
+[solution 02](../02-oauth-jwt/), and worse: a private key outlives a signing
 secret and is usually shared with a counterparty.
 
 **If you have more than one counterparty, do not copy this route N times with N

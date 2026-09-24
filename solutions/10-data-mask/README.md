@@ -307,7 +307,7 @@ removed for comparison.
   helper.
 - **Masking is not access control.** A caller who should not see the record at all
   must be stopped by identity — [solution 08](../08-api-key/) or
-  [solution 01](../01-oauth-jwt/). This package ships unauthenticated so the
+  [solution 02](../02-oauth-jwt/). This package ships unauthenticated so the
   masking is the only thing under test; do not deploy it that way.
 - **The regex sees text, not meaning.** Renamed keys, encoded strings and free-text
   copies are not masked.
@@ -373,7 +373,7 @@ masks were both reproduced deliberately and are recorded in
 
 ## Related solutions
 
-- **[08 — API keys](../08-api-key/)** · **[01 — OAuth 2.0 with JWT](../01-oauth-jwt/)** —
+- **[08 — API keys](../08-api-key/)** · **[02 — OAuth 2.0 with JWT](../02-oauth-jwt/)** —
   masking is not access control. Put one of these in front.
 - **[09 — XML to JSON](../09-xml-to-json/)** — if you convert on the same route,
   the converter runs first and your patterns must match the converted body.

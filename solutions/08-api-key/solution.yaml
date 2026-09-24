@@ -41,7 +41,7 @@ implementation:
     config without it at dry-run.
     No key or secret appears in the spec — the route names only the header the key
     arrives in, and the credential is provisioned on the app by the control plane.
-    This is structurally unlike helix-auth generate (solution 01), whose
+    This is structurally unlike helix-auth generate (solution 02), whose
     signing_secret IS a literal in the document.
     secret_validation is deliberately absent: per the plugin's own schema it makes
     the credential secret an ALTERNATIVE credential accepted when the key is

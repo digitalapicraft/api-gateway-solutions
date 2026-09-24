@@ -22,7 +22,7 @@
 #
 # NO SECRET APPEARS IN THIS FILE, and none can. hmac-auth's route schema has no
 # secret field at all — key_id and secret_key live on the APP CREDENTIAL, which
-# the control plane provisions and returns exactly once. Contrast solution 01,
+# the control plane provisions and returns exactly once. Contrast solution 02,
 # whose signing_secret is a literal in the spec. There is nothing here to leak.
 #
 # EXECUTION IS PHASE- AND PRIORITY-ORDERED, NOT DOCUMENT-ORDERED. hmac-auth runs

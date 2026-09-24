@@ -78,7 +78,7 @@ actually return — otherwise you'll get an empty or approximated answer:
 | grouping by **route** | expecting one row per URL | Group by `route_id` (a templated route is one row), not `api_path`. |
 
 Per-app / per-developer / per-product breakdowns only carry names for APIs that
-resolve identity ([solution 01](../01-oauth-jwt/) / [solution 03](../03-api-products/));
+resolve identity ([solution 02](../02-oauth-jwt/) / [solution 01](../01-api-products/));
 anonymous traffic shows up unattributed.
 
 ## Follow-ups in the same session

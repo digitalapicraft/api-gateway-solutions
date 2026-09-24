@@ -91,7 +91,7 @@ proposes the spec, and stops for your confirmation.
 | **"add proxy-rewrite … /todos/1 … /posts"** | The published route paths are the contract with the fleet; the upstream's paths are not. Saying this explicitly stops the agent renaming your routes to match the backend. |
 | **"key-auth is a validate_auth_type of helix-auth, not a standalone plugin"** | The most likely wrong turn. A general model reaches for a `key-auth` plugin by name — it does not exist on this build. |
 | **"apikey with source is required … a dry-run rejects the config without it"** | Verified: the published JSON schema marks `apikey` optional and the plugin's own check does not. Without this line the agent produces a config that fails at dry-run with a message about a property it believed was optional. |
-| **"No secret goes in the spec"** | True here and worth stating, because it is *not* true of `helix-auth` in generate mode (solution 01), where the signing secret is a literal. An agent generalising from that solution will try to put a key in this one. |
+| **"No secret goes in the spec"** | True here and worth stating, because it is *not* true of `helix-auth` in generate mode (solution 02), where the signing secret is a literal. An agent generalising from that solution will try to put a key in this one. |
 | **"Do not set secret_validation"** | Its name reads like a second factor. It accepts the credential's secret as an *alternative* credential — turning it on widens what authenticates. |
 | **"Do not add cors"** | Devices are not browsers. An agent pattern-matching on the other auth solutions will add a wildcard CORS policy this API has no use for. |
 | **"the right key in an 'apikey' header -> 401"** | Proves the header name is genuinely enforced rather than one of several accepted. |
@@ -122,12 +122,12 @@ Now meter them. The product quota is already counted per app, so set a real limi
 on the product rather than adding a limit-count plugin keyed on the caller. Show
 me what a caller sees when it goes over.
 ```
-(That's [solution 03](../03-api-products/).)
+(That's [solution 01](../01-api-products/).)
 
 **Move to tokens for the callers that can manage it**
 ```text
 Some of these callers are partner backends that CAN cache a token and refresh it.
-Add a second API for them using helix-auth generate + validate as in solution 01,
+Add a second API for them using helix-auth generate + validate as in solution 02,
 and leave the device API on key-auth. Do not mix the two on one route.
 ```
 
@@ -160,9 +160,9 @@ and leave the device API on key-auth. Do not mix the two on one route.
 
 ## Related
 
-- **[Solution 01 — OAuth 2.0 with JWT](../01-oauth-jwt/helix-agent-prompt.md)** —
+- **[Solution 02 — OAuth 2.0 with JWT](../02-oauth-jwt/helix-agent-prompt.md)** —
   the same question answered for callers that *can* run an exchange.
 - **[Solution 06 — Signed requests](../06-hmac-auth/helix-agent-prompt.md)** — for
   callers that can hold a secret, when the payload's integrity matters.
-- **[Solution 03 — API Products](../03-api-products/helix-agent-prompt.md)** —
+- **[Solution 01 — API Products](../01-api-products/helix-agent-prompt.md)** —
   metering the apps this solution resolves.

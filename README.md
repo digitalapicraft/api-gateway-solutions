@@ -19,11 +19,11 @@ it, and an honest record of what was and wasn't validated.
 
 | # | Solution | The problem it solves | Build it with the Agent |
 |---|---|---|---|
-| **01** | [OAuth 2.0 with JWT](solutions/01-oauth-jwt/) | *"Partners want OAuth. Adding it to the backend is a six-week release."* Issue and validate JWTs at the edge — the backend never learns about auth. | [prompt](solutions/01-oauth-jwt/helix-agent-prompt.md) |
-| **02** | [SOAP to REST](solutions/02-soap-to-rest/) | *"Our core system speaks SOAP/XML and every partner wants JSON."* Mediate both directions at the gateway; the SOAP service is untouched. | [prompt](solutions/02-soap-to-rest/helix-agent-prompt.md) |
-| **03** | [API Products](solutions/03-api-products/) | *"We sell an 'Enterprise tier' with no way to enforce it, and one partner's retry loop can take down everyone."* Bundle APIs into products with quotas, enforced per app. | [prompt](solutions/03-api-products/helix-agent-prompt.md) |
+| **01** | [API Products](solutions/01-api-products/) | *"We sell an 'Enterprise tier' with no way to enforce it, and one partner's retry loop can take down everyone."* Bundle APIs into products with quotas, enforced per app. | [prompt](solutions/01-api-products/helix-agent-prompt.md) |
+| **02** | [OAuth 2.0 with JWT](solutions/02-oauth-jwt/) | *"Partners want OAuth. Adding it to the backend is a six-week release."* Issue and validate JWTs at the edge — the backend never learns about auth. | [prompt](solutions/02-oauth-jwt/helix-agent-prompt.md) |
+| **03** | [SOAP to REST](solutions/03-soap-to-rest/) | *"Our core system speaks SOAP/XML and every partner wants JSON."* Mediate both directions at the gateway; the SOAP service is untouched. | [prompt](solutions/03-soap-to-rest/helix-agent-prompt.md) |
 | **04** | [Analytics](solutions/04-analytics/) | *"We can't tell which of our 400 integrations caused the 3am pager."* Analytics is already capturing every call — this is how you query it, through the metrics API, for the answers that matter. | [prompt](solutions/04-analytics/helix-agent-prompt.md) · [charts](solutions/04-analytics/charts.md) · [script](solutions/04-analytics/scripts/query-analytics.sh) |
-| **05** | [OAuth with Okta](solutions/05-okta-jwt/) | *"We already run Okta, but our APIs still check a static key from 2021."* Verify the IdP's own tokens at the edge — the mirror of 01, for when someone else is the issuer. | [prompt](solutions/05-okta-jwt/helix-agent-prompt.md) |
+| **05** | [OAuth with Okta](solutions/05-okta-jwt/) | *"We already run Okta, but our APIs still check a static key from 2021."* Verify the IdP's own tokens at the edge — the mirror of 02, for when someone else is the issuer. | [prompt](solutions/05-okta-jwt/helix-agent-prompt.md) |
 | **06** | [Signed requests](solutions/06-hmac-auth/) | *"We gave a partner an API key in 2021. It's in their runbook, their CI, and a Jira ticket — and it tells us nothing about the payload it arrived with."* Prove the caller holds a secret without ever sending it, and bind the proof to the request body. | [prompt](solutions/06-hmac-auth/helix-agent-prompt.md) |
 | **07** | [HTTP to Kafka](solutions/07-http-to-kafka/) | *"Partners want to POST us events. The service in between is three lines long and has been on the roadmap for three quarters."* Validate, acknowledge and publish at the edge — no ingest service. At-most-once, and the package proves it by breaking the broker. | [prompt](solutions/07-http-to-kafka/helix-agent-prompt.md) |
 | **08** | [API keys](solutions/08-api-key/) | *"Four thousand terminals in the field. They can't run a token exchange, and the only thing protecting the endpoint is that the URL isn't published."* Per-caller identity for clients that can set one header — and revocation you perform in seconds. | [prompt](solutions/08-api-key/helix-agent-prompt.md) |
@@ -35,17 +35,17 @@ it, and an honest record of what was and wasn't validated.
 | **14** | [Dynamic mock](solutions/14-dynamic-mock/) | *"Every partner gets the same canned response from our sandbox, so nobody catches an integration bug until production."* Answer each caller with that caller's own stored values — one route, no backend, and changing a value is a write rather than a release. | [prompt](solutions/14-dynamic-mock/helix-agent-prompt.md) |
 | **15** | [gRPC stream proxy](solutions/15-grpc-proxy/) | *"Our units hold a bidirectional gRPC stream open for hours. Anything that wants to authenticate or count them has to be built into the service."* Authenticate each stream as it opens, from gRPC metadata, without touching the service. | [prompt](solutions/15-grpc-proxy/helix-agent-prompt.md) |
 
-They compose. 01 gives you identity, 02 gives you the protocol bridge, 03 turns
+They compose. 02 gives you identity, 03 gives you the protocol bridge, 01 turns
 the result into something sellable, and 04 tells you what happened. Running all
 four against one API takes you from *internal SOAP endpoint* to *metered,
 observable, partner-facing product* without a backend change.
 
 **Four answer "who is calling" and you want exactly one of them on a route:**
-01 (the gateway mints the token), 05 (an external IdP does and the gateway only
+02 (the gateway mints the token), 05 (an external IdP does and the gateway only
 verifies), 06 (the caller signs, and the credential never travels) and 08 (the
 caller can set one header and nothing more). Pick by what the caller can hold.
 
-**Three pairs are deliberately two packages rather than one.** 02 and 09 both
+**Three pairs are deliberately two packages rather than one.** 03 and 09 both
 mediate XML, and the first table in 09 tells you which you have. 13 and 12 do the
 same crypto with the key in the route and in a store respectively — read 13 first
 and move to 12 at the second counterparty. 10's two masks are the third pair, and
@@ -150,7 +150,7 @@ account for most early mistakes:
   [solution 05](solutions/05-okta-jwt/).
 - **Per-caller metering is API Products, counted per app.** The quota lives on
   the product, not on the route, and is keyed on the credential — not on an IP,
-  not on `consumer_name`. Solution 03 covers this in full.
+  not on `consumer_name`. Solution 01 covers this in full.
 
 Vocabulary, because the docs and the UI use both halves of each pair:
 

@@ -19,15 +19,15 @@ in XML, and four client teams who each wrote their own parser.**
 Worth settling in the first ten seconds, because two different people land here
 from two different searches.
 
-| | [Solution 02 — SOAP to REST](../02-soap-to-rest/) | **This one** |
+| | [Solution 03 — SOAP to REST](../03-soap-to-rest/) | **This one** |
 |---|---|---|
 | The backend | A SOAP service: envelope, `SOAPAction`, one handler path, a WSDL | Plain HTTP that happens to carry XML — an inventory API, a payments file feed, an industry schema |
 | What the gateway must build | A whole envelope around your data | Nothing. Element for element, key for key |
 | Route shape | Every operation collapses onto one upstream path | Ordinary REST paths |
 | Reach for it when | There is a `<soap:Envelope>` anywhere in the conversation | There isn't |
 
-If your backend has an envelope, stop reading and use 02 — this package will
-convert your JSON into XML that the SOAP handler rejects. If it doesn't, 02 will
+If your backend has an envelope, stop reading and use 03 — this package will
+convert your JSON into XML that the SOAP handler rejects. If it doesn't, 03 will
 wrap your data in an envelope nothing is expecting. They are not variants of each
 other.
 
@@ -153,7 +153,7 @@ returns **503** and the connection is terminated before headers. `root_name` and
 runs before `xml-to-json` (997) in the rewrite phase, so an override there
 changes the header the transform is about to match on, and the request direction
 silently stops converting. This exact mistake is on the record against
-[solution 02](../02-soap-to-rest/).
+[solution 03](../03-soap-to-rest/).
 
 ## What the conversion actually does to your document
 
@@ -307,7 +307,7 @@ Use it when:
 
 Don't use it when:
 
-- **There is a SOAP envelope.** Use [solution 02](../02-soap-to-rest/).
+- **There is a SOAP envelope.** Use [solution 03](../03-soap-to-rest/).
 - **Your backend validates against a strict `xs:sequence`** and you need the
   request direction. Key order is not preserved; use a template-based transform.
 - **Meaning lives in attributes or mixed content.** The conversion is lossy there.
@@ -352,9 +352,9 @@ observations were both produced by this run and are recorded in
 
 ## Related solutions
 
-- **[02 — SOAP to REST](../02-soap-to-rest/)** — the envelope case. Read the table
+- **[03 — SOAP to REST](../03-soap-to-rest/)** — the envelope case. Read the table
   at the top before choosing.
-- **[08 — API keys](../08-api-key/)** · **[01 — OAuth 2.0 with JWT](../01-oauth-jwt/)** —
+- **[08 — API keys](../08-api-key/)** · **[02 — OAuth 2.0 with JWT](../02-oauth-jwt/)** —
   this package ships unauthenticated so the mediation is the only thing being
   demonstrated. Put one of these in front before it carries anything real.
 - **[10 — Data masking](../10-data-mask/)** — for when the converted response

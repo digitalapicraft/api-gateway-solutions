@@ -66,7 +66,7 @@ preference.
 | Your caller | Use | Why |
 |---|---|---|
 | **Can set a header, nothing more** — embedded device, legacy middleware, a partner's cron job | **`helix-auth` validate · key-auth** — this solution | One header. The gateway resolves it to an app. Revocation is immediate. |
-| **Can hold a secret and run an exchange** — a partner's backend, a server-side integration | **`helix-auth` generate + validate** — [solution 01](../01-oauth-jwt/) | The long-lived secret stops travelling; a leaked token expires on its own. |
+| **Can hold a secret and run an exchange** — a partner's backend, a server-side integration | **`helix-auth` generate + validate** — [solution 02](../02-oauth-jwt/) | The long-lived secret stops travelling; a leaked token expires on its own. |
 | **Already gets tokens from your IdP** — Okta, Entra ID, Auth0, Keycloak | **`openid-connect`** — [solution 05](../05-okta-jwt/) | The gateway verifies somebody else's tokens; it must not mint its own. |
 | **Can hold a secret and the payload's integrity matters** | **`hmac-auth`** — [solution 06](../06-hmac-auth/) | The credential never travels at all; the signature covers the body. |
 
@@ -215,7 +215,7 @@ helix-auth:
 **Read what that block does not contain.** There is no key and no secret. The
 route names the *header the key arrives in*; the key itself is issued on the app
 credential by the control plane. Unlike the signing secret in
-[solution 01](../01-oauth-jwt/), there is nothing here to fill in and nothing to
+[solution 02](../02-oauth-jwt/), there is nothing here to fill in and nothing to
 leak — the same property [solution 06](../06-hmac-auth/) has, for the same
 structural reason.
 
@@ -309,7 +309,7 @@ deliberately does not ship.
   place invalidates the old key the moment the new one is live. For a fleet that
   updates over weeks, run two apps and delete the old one after the overlap.
 - **Don't add `limit-count` keyed on the caller to meter these apps.** Per-caller
-  metering is the product quota, counted per app — [solution 03](../03-api-products/).
+  metering is the product quota, counted per app — [solution 01](../01-api-products/).
 - **No `cors` block here, on purpose.** Devices are not browsers, and a wildcard
   CORS policy on a fleet API hands browser origins a path the fleet never needs.
   Add it only if a browser genuinely calls this API.
@@ -325,13 +325,13 @@ Use it when:
 - You are handing out one shared key today and want to split it per caller so a
   single compromise stops being an estate-wide event.
 - You want identity now and metering later: this resolves the app that
-  [solution 03](../03-api-products/) meters and [solution 04](../04-analytics/)
+  [solution 01](../01-api-products/) meters and [solution 04](../04-analytics/)
   attributes.
 
 Don't use it when:
 
 - **The caller can hold a secret and run an exchange.** Use
-  [solution 01](../01-oauth-jwt/) — a credential that expires on its own is
+  [solution 02](../02-oauth-jwt/) — a credential that expires on its own is
   strictly better when it is available to you.
 - **An identity provider already issues tokens to these callers.** Use
   [solution 05](../05-okta-jwt/).
@@ -381,10 +381,10 @@ produced, is in
 
 ## Related solutions
 
-- **[01 — OAuth 2.0 with JWT](../01-oauth-jwt/)** · **[05 — OAuth with Okta](../05-okta-jwt/)** ·
+- **[02 — OAuth 2.0 with JWT](../02-oauth-jwt/)** · **[05 — OAuth with Okta](../05-okta-jwt/)** ·
   **[06 — Signed requests](../06-hmac-auth/)** — the other three answers to "who
   is calling". Pick by what the caller can hold.
-- **[03 — API Products](../03-api-products/)** — meter the apps this solution
+- **[01 — API Products](../01-api-products/)** — meter the apps this solution
   resolves. The quota is counted per app, which is the same object.
 - **[04 — Analytics](../04-analytics/)** — per-app attribution, which only works
   because identity was resolved here.

@@ -94,7 +94,7 @@ Do not deploy the revision — stop after the dry-run.
 | "confirm the plugin exists … do not substitute" | `openid-connect` is absent from some builds. Without this the agent helpfully reaches for `helix-auth` and produces something that looks right and cannot work |
 | "must only VERIFY … must not issue" | States the issuer boundary in the first sentence, before any plugin is named |
 | "Do not use helix-auth — it has no JWKS, issuer or audience field" | The single most likely wrong turn, pre-empted with the reason rather than just the instruction |
-| "at the API level, not per route" | The opposite of solution 01's rule. An agent that has seen 01 will scope per route out of habit |
+| "at the API level, not per route" | The opposite of solution 02's rule. An agent that has seen 01 will scope per route out of habit |
 | `use_jwks: true`, flagged as required and schema-absent | **The single most important line.** The agent will not find it in `get_plugin_config` and will drop it as a mistake unless told not to. Without it every token 401s |
 | `unauth_action: deny` with the 302 explanation | Explaining *what breaks* makes the agent keep the field when it starts trimming |
 | `ssl_verify: true` | Overrides a `false` default that no one would guess |
@@ -165,9 +165,9 @@ valid_issuers to match the issuer that document reports.
 
 ## Related
 
-- **[01 — OAuth 2.0 with JWT](../01-oauth-jwt/)** — the gateway as issuer. Read
+- **[02 — OAuth 2.0 with JWT](../02-oauth-jwt/)** — the gateway as issuer. Read
   the fork in this solution's README before choosing.
-- **[03 — API Products](../03-api-products/)** — per-app quotas, and why they do
+- **[01 — API Products](../01-api-products/)** — per-app quotas, and why they do
   not follow automatically from an Okta-issued token.
 - **[04 — Analytics](../04-analytics/)** — every call captured regardless of which
   plugin authenticated it.

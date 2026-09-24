@@ -120,7 +120,7 @@ flowchart LR
 - Rotation regenerates both values together. There is no previous-secret grace
   period, so rotation is a cutover.
 
-Contrast [solution 01](../01-oauth-jwt/), where `signing_secret` is a **literal in
+Contrast [solution 02](../02-oauth-jwt/), where `signing_secret` is a **literal in
 the spec** and shipping the placeholder publishes your signing key. That failure
 mode does not exist here.
 

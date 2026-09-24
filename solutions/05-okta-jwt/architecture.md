@@ -96,7 +96,7 @@ is unordered and nothing may be inferred from how it is written.
 `openid-connect` runs in the access phase, so a rejected request is refused
 before the upstream is contacted. Nothing here consumes a `ctx.*` value another
 plugin produces, so there is no ordering dependency to get wrong — unlike
-solution 03, where `api-product-enforcer` must run after `helix-auth`.
+solution 01, where `api-product-enforcer` must run after `helix-auth`.
 
 ## Who issues the token — the design decision
 
@@ -115,7 +115,7 @@ to the callers of this API?
         │                                        (Okta on the request path)
         │
         └── NO ───► the gateway issues and verifies
-                     helix-auth generate + validate  ── solution 01 ──
+                     helix-auth generate + validate  ── solution 02 ──
 ```
 
 ### Why `helix-auth` is not an option
@@ -163,7 +163,7 @@ does **not** resolve `<ENV:...>` or `${...}`, so the placeholder must be replace
 before deploy and the completed spec kept out of version control.
 
 Okta's private signing key never appears anywhere in this system. That is the
-main security improvement over solution 01's shared symmetric secret, where
+main security improvement over solution 02's shared symmetric secret, where
 anyone able to verify is also able to sign.
 
 ## Prerequisites

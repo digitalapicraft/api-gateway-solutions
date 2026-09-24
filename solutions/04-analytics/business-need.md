@@ -52,7 +52,7 @@ built decide how useful its rows are:
 - **Per-app / per-developer / per-product breakdowns need the API to resolve
   identity.** An authenticated API attributes rows to an app; an anonymous one lands
   in an "unattributed" bucket. Adding identity is
-  [solution 01](../01-oauth-jwt/) / [solution 03](../03-api-products/) — a decision
+  [solution 02](../02-oauth-jwt/) / [solution 01](../01-api-products/) — a decision
   about the API, not about analytics.
 - **Group route-level views by `route_id`, not `api_path`** — else a templated route
   fragments into one row per id.

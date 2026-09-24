@@ -170,7 +170,7 @@ paths:
 # Note what is NOT here: no authentication. This package demonstrates masking, and
 # masking is not access control — a caller who should not see the record at all
 # must be stopped by identity, not by a redacted field. Put solution 08 or
-# solution 01 in front of this before it carries anything real.
+# solution 02 in front of this before it carries anything real.
 x-helix-gateway:
   plugins:
     # Correlation id. A masked response is, by design, harder to support: the

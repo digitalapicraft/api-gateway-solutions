@@ -143,7 +143,7 @@ case "$status" in
   401) fail "correct signature → 401. In order of likelihood: the trailing newline was
      dropped from the signing base; the keyId line is missing; the Date is outside
      clock_skew (check the gateway's clock); or KEY_ID/SECRET_KEY are not this app's." ;;
-  403) fail "correct signature → 403. Authentication succeeded but authorization did not — is api-product-enforcer on this route with no subscription behind it? See solution 03." ;;
+  403) fail "correct signature → 403. Authentication succeeded but authorization did not — is api-product-enforcer on this route with no subscription behind it? See solution 01." ;;
   502|503|504) fail "correct signature → ${status}. Auth passed but the upstream errored — check the upstream binding." ;;
   *)   fail "correct signature → ${status} (expected ${EXP_SIGNED}). Body: $(tr -d '\n' < "$BODY_FILE")" ;;
 esac
