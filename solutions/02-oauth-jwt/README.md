@@ -108,25 +108,29 @@ database doesn't see it, and it doesn't consume a connection from your pool.
 ## Build it with the Helix Agent
 
 Recommended path, and it works on a **fresh org** — the agent creates the API on a
-public upstream so you get real data immediately. Two steps; confirm between them.
-Full prompt with the reasoning, tweak knobs and failure modes:
+public upstream so you get real data immediately. Three steps; confirm between
+them. Full prompt with the reasoning, tweak knobs and failure modes:
 [`helix-agent-prompt.md`](helix-agent-prompt.md).
+
+**The token route is its own step on purpose.** All four routes in one write puts
+two different `helix-auth` configurations in a single route array, which is deep
+enough to trip the agent's argument-serialisation defect — the run ends `stream
+closed with reason: error` and nothing is written. Verified twice against a clean
+org; two smaller writes both land.
+
+**Step 1 — the API and the protected routes**
 
 ```text
 Create a REST API "<<Posts API>>" on upstream https://jsonplaceholder.typicode.com,
 environment test, with routes GET /posts, GET /posts/{postId} and POST /posts
 proxied straight through. Fresh org — nothing exists yet.
 
-Add POST /oauth/token using helix-auth in generate mode: it verifies an app's
-client id and secret and issues a signed JWT with a 15-minute lifetime — long
-enough to be usable, short enough that a leaked one expires before it's useful.
+Protect all three with helix-auth validate, jwt-auth, using this signing secret
+verbatim: <<JWT_SIGNING_SECRET>>. It is a literal on this build — no <ENV:...>
+resolution — so remind me not to commit it.
 
-Protect the /posts routes with helix-auth validate, jwt-auth, referencing the SAME
-signing secret. Apply validate PER ROUTE, not API-wide — API-wide would protect
-/oauth/token and nobody could get a first token.
-
-The signing secret is a literal on this build: no <ENV:...> resolution, so put one
-real high-entropy value in both places and remind me not to commit it.
+Apply the plugin PER ROUTE, not API-wide. I am adding a token endpoint next and
+an API-wide block would protect it, leaving nobody able to get a first token.
 
 Plugins go in a top-level "plugins" map on the route object, each under its own
 plugin name. No "x-helix-gateway" wrapper — a live route discards it silently and
@@ -136,11 +140,31 @@ Show me the spec, run dry_run_deploy, then read the revision back so I can see
 which plugins actually landed. Wait before deploying.
 ```
 
-Then, in the same session:
+**Step 2 — the token endpoint**
 
 ```text
-Create a developer "<<Partner Integrations>>" with an app subscribed to this API,
-and give me the client id and secret.
+On the "<<Posts API>>" API — find it with list_apis, and if more than one matches,
+ask me before changing anything — add ONE more route, keeping its existing three
+routes exactly as they are:
+
+POST /oauth/token with helix-auth in generate mode — it verifies an app's client
+id and secret and issues a signed JWT, token_ttl 900: long enough to be usable,
+short enough that a leaked one expires before it's useful. Use the SAME signing
+secret as the other routes; a mismatch rejects every token the moment it is
+issued, and neither side's config hints the value is shared.
+
+This route takes helix-auth generate ONLY — no validate block on it, or a caller
+with no token could never get one.
+
+Send routeSpec as a JSON array of all four routes, then read the revision back and
+run dry_run_deploy.
+```
+
+**Step 3 — an app to test with**
+
+```text
+Create a developer "<<Partner Integrations>>" with an app subscribed to the
+"<<Posts API>>" API, and give me the client id and secret.
 
 Then give me curl commands showing, in order: no token → 401; client credentials
 → 200 with an access_token; that token → 200 on /posts with real data; a garbage

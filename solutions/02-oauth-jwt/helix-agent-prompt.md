@@ -1,33 +1,34 @@
 # Agent-mode prompt — OAuth 2.0 with gateway-issued JWTs
 
-Two steps, from a **fresh, empty org** to an API behind a token exchange. The
-agent creates the API on a public upstream, adds the token endpoint, protects the
-other routes, dry-runs, and hands you an app's credentials to test with.
+Three steps, from a **fresh, empty org** to an API behind a token exchange. The
+agent creates the API and the protected routes, adds the token endpoint in a
+second write, then hands you an app's credentials to test with.
 
-Paste one step at a time and confirm between them; a single mega-prompt pushes a
-smaller model into one oversized tool call. Replace the `<<...>>` values.
+**The token route is its own step on purpose.** Asking for all four routes in one
+write puts two different `helix-auth` configurations in a single route array, and
+that is deep enough to trip the agent's argument-serialisation defect: the run
+ends `stream closed with reason: error` and nothing is written. Verified twice
+against a clean org. Two smaller writes both land.
+
+Paste one step at a time and confirm between them. Replace the `<<...>>` values.
 [AGENT-GUIDE.md](../../AGENT-GUIDE.md) carries the standing rules these prompts
 assume.
 
 ---
 
-## Step 1 — create and protect the API
+## Step 1 — the API and the protected routes
 
 ```text
 Create a REST API "<<Posts API>>" on upstream https://jsonplaceholder.typicode.com,
 environment test, with routes GET /posts, GET /posts/{postId} and POST /posts
 proxied straight through. Fresh org — nothing exists yet.
 
-Add POST /oauth/token using helix-auth in generate mode: it verifies an app's
-client id and secret and issues a signed JWT with a 15-minute lifetime — long
-enough to be usable, short enough that a leaked one expires before it's useful.
+Protect all three with helix-auth validate, jwt-auth, using this signing secret
+verbatim: <<JWT_SIGNING_SECRET>>. It is a literal on this build — no <ENV:...>
+resolution — so remind me not to commit it.
 
-Protect the /posts routes with helix-auth validate, jwt-auth, referencing the SAME
-signing secret. Apply validate PER ROUTE, not API-wide — API-wide would protect
-/oauth/token and nobody could get a first token.
-
-The signing secret is a literal on this build: no <ENV:...> resolution, so put one
-real high-entropy value in both places and remind me not to commit it.
+Apply the plugin PER ROUTE, not API-wide. I am adding a token endpoint next and
+an API-wide block would protect it, leaving nobody able to get a first token.
 
 Plugins go in a top-level "plugins" map on the route object, each under its own
 plugin name. No "x-helix-gateway" wrapper — a live route discards it silently and
@@ -37,11 +38,31 @@ Show me the spec, run dry_run_deploy, then read the revision back so I can see
 which plugins actually landed. Wait before deploying.
 ```
 
-## Step 2 — an app, and the five calls that prove it
+## Step 2 — the token endpoint
 
 ```text
-Create a developer "<<Partner Integrations>>" with an app subscribed to this API,
-and give me the client id and secret.
+On the "<<Posts API>>" API — find it with list_apis, and if more than one matches,
+ask me before changing anything — add ONE more route, keeping its existing three
+routes exactly as they are:
+
+POST /oauth/token with helix-auth in generate mode — it verifies an app's client
+id and secret and issues a signed JWT, token_ttl 900: long enough to be usable,
+short enough that a leaked one expires before it's useful. Use the SAME signing
+secret as the other routes; a mismatch rejects every token the moment it is
+issued, and neither side's config hints the value is shared.
+
+This route takes helix-auth generate ONLY — no validate block on it, or a caller
+with no token could never get one.
+
+Send routeSpec as a JSON array of all four routes, then read the revision back and
+run dry_run_deploy.
+```
+
+## Step 3 — an app, and the five calls that prove it
+
+```text
+Create a developer "<<Partner Integrations>>" with an app subscribed to the
+"<<Posts API>>" API, and give me the client id and secret.
 
 Then give me curl commands showing, in order: no token → 401; client credentials
 → 200 with an access_token; that token → 200 on /posts with real data; a garbage
@@ -58,6 +79,14 @@ secret is verified rather than decorative.
 - **`helix-auth` generate and validate, not a `jwt-auth` plugin.** `jwt-auth` is a
   `validate_auth_type` here, not a standalone plugin — and it still means "a JWT
   this gateway signed". An external issuer is [solution 05](../05-okta-jwt/).
+- **Every step names the API.** A step that says "the routes you just wrote"
+  depends on conversation context; resumed in a session whose active API is
+  something else, the agent will happily edit that one instead. Naming it, plus
+  "ask me if more than one matches", costs a line and removes the whole class.
+- **The token route is written second.** Four routes and two `helix-auth`
+  configurations in one write trips the serialisation defect reproducibly — two
+  clean-org runs, `stream closed with reason: error`, nothing written. Split, both
+  writes land.
 - **The same signing secret in both places.** A mismatch rejects every freshly
   issued token, and neither side's config hints that the value is shared.
 - **`validate` per route.** An agent tidying up will hoist it to the document
@@ -107,6 +136,7 @@ already counts per app.
 | The token endpoint 401s on credentials you're sure are right | You're sending the app's secret where its client id belongs. |
 | The agent reaches for a `jwt-auth` plugin | Reply: `jwt-auth` is a `validate_auth_type` of `helix-auth`, not a plugin. |
 | The agent writes `<ENV:JWT_SIGNING_SECRET>` | Reply: this build uses `signing_secret` verbatim — put a real secret and keep it out of git. |
+| `stream closed with reason: error`, and the revision has 0 routes | The write was too deep for the agent's serialiser and never reached the control plane. Keep the steps split; don't fold step 2 back into step 1. |
 | Deploy fails: `Only INACTIVE revisions can be updated` | Clone the revision or undeploy, then apply. |
 
 ## Related
