@@ -65,7 +65,7 @@ Specifically out of scope:
   may do what. That is `required_scopes` or a policy engine, and it is a separate
   piece of work.
 - **Metering and quotas.** An Okta-issued token does not resolve an app
-  credential, so per-caller quotas do not follow from this. That is solution 03's
+  credential, so per-caller quotas do not follow from this. That is solution 01's
   model, and the two do not compose for free.
 - **Revocation before expiry.** Disabling a caller in Okta stops new tokens. The
   one it already holds stays valid until it expires. Closing that gap means

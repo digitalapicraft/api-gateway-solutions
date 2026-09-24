@@ -33,7 +33,7 @@ higher priority, so it runs first. Retargeting the path there is safe. Setting
 `Content-Type` there is not: the transform would then inspect a header
 `proxy-rewrite` has already rewritten, stop matching `request_content_types`, and
 silently skip the conversion. That exact failure is on the record against
-[solution 02](../02-soap-to-rest/).
+[solution 03](../03-soap-to-rest/).
 
 ## Native vs custom
 
@@ -78,7 +78,7 @@ absence of a migration.
 
 ## When not to use this shape
 
-- **There is a SOAP envelope** — [solution 02](../02-soap-to-rest/).
+- **There is a SOAP envelope** — [solution 03](../03-soap-to-rest/).
 - **A strict `xs:sequence` on the request side.** Key order is not preserved. Use
   a template.
 - **Meaning in attributes or mixed content.** The conversion is lossy there;

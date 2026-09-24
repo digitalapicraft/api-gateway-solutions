@@ -110,8 +110,8 @@ Act 4   Ask for the usage you just generated.
 
 Each act is independently verifiable, and when something breaks you know which
 act broke it. This is also why the agent prompts in this repo are written as
-acts — solution 02 is act 1 plus act 2, solution 03 is act 3, solution 04 is
-act 4.
+acts — solution 03 is act 1 plus act 2, solution 01 is act 3, and solution 04
+is act 4.
 
 One thing to know before act 2: **an ACTIVE revision will not accept edits.**
 You'll get `Only INACTIVE revisions can be updated`. Tell the agent to clone the
@@ -167,7 +167,7 @@ Keep asks inside what the metrics API supports: it does **averages/min/max, not
 percentiles**, has **no quota-usage metric** (count 429s instead), and no
 per-request lookup (that's a log-side join on `X-Request-Id`). And two things about
 how an API is *already* built shape its rows: **identity resolved** (so rows
-attribute to an app rather than an IP — `helix-auth`, solution 01) and **templated
+attribute to an app rather than an IP — `helix-auth`, solution 02) and **templated
 paths** (group by `route_id`, not `api_path`). Solution 04 covers all of this.
 
 ## 8. What the agent won't do

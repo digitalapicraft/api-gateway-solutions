@@ -102,7 +102,7 @@ Three consequences follow directly, and they are the whole business case:
   secret; it does not prove *which* end.
 - **Not a browser story.** A secret shipped to a device a user controls is not a
   secret. Browser and mobile callers need a token flow
-  ([01](../01-oauth-jwt/), [05](../05-okta-jwt/)).
+  ([02](../02-oauth-jwt/), [05](../05-okta-jwt/)).
 - **Not free for the caller.** They carry the implementation and debugging cost.
   Budget for the support load on the first two or three integrations.
 - **Not credential expiry.** A `secret_key` is valid until rotated, and rotation

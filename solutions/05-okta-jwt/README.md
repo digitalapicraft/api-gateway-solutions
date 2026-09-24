@@ -59,7 +59,7 @@ This is the fork, and getting it wrong wastes the build.
 flowchart TD
     Q{"Does an identity provider already issue<br/>tokens to this API's callers?"}
     Q -->|Yes| V["Okta / Entra ID / Auth0 / Keycloak is the issuer.<br/>The gateway only VERIFIES.<br/><br/>openid-connect — THIS SOLUTION"]
-    Q -->|No| I["No IdP. Callers are your own partner apps<br/>holding credentials you issued.<br/>The gateway ISSUES and verifies.<br/><br/>helix-auth generate + validate — SOLUTION 01"]
+    Q -->|No| I["No IdP. Callers are your own partner apps<br/>holding credentials you issued.<br/>The gateway ISSUES and verifies.<br/><br/>helix-auth generate + validate — SOLUTION 02"]
 ```
 
 **These are not two styles of the same thing.** They sit on opposite sides of
@@ -127,16 +127,16 @@ or briefly down does not make your API slow or down — until the key cache expi
 and needs refreshing.
 
 The second: **the auth block sits at the document root**, not per route. Solution
-01 must scope its auth per route because `POST /oauth/token` has to stay reachable
+02 must scope its auth per route because `POST /oauth/token` has to stay reachable
 without a token. Here there is no token endpoint — Okta issues, off-gateway — so
 one root-level block covers every route and there is no hole to leave open.
 
 ## Build it with the Helix Agent
 
-Recommended path, and it works on a **fresh org** — the agent *creates* the API on
-a public upstream so you get real data immediately. Run it in steps; a single
-mega-prompt pushes the default agent model into an oversized tool call. Full
-prompt with all the constraints: [`helix-agent-prompt.md`](helix-agent-prompt.md).
+Recommended path, and it works on a **fresh org**. Two steps — a single
+mega-prompt pushes the default agent model into an oversized tool call, and the
+fields it drops are the hardening ones. Full prompt, with why each field is there
+and what happens without it: [`helix-agent-prompt.md`](helix-agent-prompt.md).
 
 **Step 1 — create the API and verify Okta's tokens on it**
 
@@ -144,77 +144,62 @@ prompt with all the constraints: [`helix-agent-prompt.md`](helix-agent-prompt.md
 First, confirm the openid-connect plugin exists in this org and show me its
 schema. If it is not present, stop and tell me — do not substitute another plugin.
 
-Then create a new REST API called "Partner Posts API" and protect it with access
-tokens issued by Okta. The gateway must only VERIFY these tokens; it must not
-issue any. Do not use helix-auth — it verifies tokens it minted itself and has no
-JWKS, issuer or audience field.
+Then create a REST API "<<Partner Posts API>>" on upstream <<UPSTREAM_URL>>, with
+routes GET /posts, GET /posts/{postId} and POST /posts proxied straight through,
+protected by access tokens issued by Okta. The gateway must only VERIFY these
+tokens, never issue any. Not helix-auth — it only verifies tokens it minted
+itself, and it has no JWKS, issuer or audience field.
 
-Upstream: <<UPSTREAM_URL>> (public, so it returns real data; I'll swap in my own
-later). Routes, paths matching the upstream so no path rewrite: GET /posts,
-GET /posts/{postId}, POST /posts.
-
-Apply openid-connect at the API level, not per route — every route here needs a
+Apply openid-connect at the API level, not per route: every route here needs a
 token and there is no token endpoint to leave open.
 
 Configure it with:
   discovery: <<OKTA_DISCOVERY_URL>>
   client_id: <<OKTA_CLIENT_ID>>
   client_secret: <<OKTA_CLIENT_SECRET>>
-  bearer_only: true and unauth_action: deny  (this is an API — an unauthenticated
-    call must get 401, NOT a 302 redirect to Okta's login page, which is what the
-    default does. bearer_only also cannot be omitted: the deploy is rejected
-    without it, asking for session.secret)
-  use_jwks: true   (REQUIRED. Without it the plugin does not verify the JWT
-    against the JWKS at all — it falls back to token introspection, the IdP has no
-    introspection endpoint, and EVERY token gets a 401. It is not in the published
-    plugin schema; add it anyway, it is accepted and persisted.)
-  ssl_verify: true            (the default is false)
-  accept_unsupported_alg: false and accept_none_alg: false  (the first defaults
-    to true, which ignores the signature for unsupported algorithms)
+  bearer_only: true and unauth_action: deny   (unauth_action's default REDIRECTS
+    API callers to the IdP's login page instead of refusing them; bearer_only
+    cannot be omitted either — the deploy is rejected without it, asking for
+    session.secret)
+  use_jwks: true   (REQUIRED, and NOT in the published schema — add it anyway, it
+    is accepted and persisted. Without it the plugin never checks the JWT against
+    the JWKS; it falls back to introspection, the IdP has no introspection
+    endpoint, and EVERY token gets a 401.)
+  ssl_verify: true
+  accept_unsupported_alg: false and accept_none_alg: false
   token_signing_alg_values_expected: RS256
   claim_validator.issuer.valid_issuers: [ <<OKTA_ISSUER_URL>> ]
   claim_validator.audience.required: true
-  jwk_expires_in: 3600        (the default 86400 makes an Okta key rotation a
-    day-long outage)
-  set_id_token_header: false and set_userinfo_header: false  (both default true
-    and are for browser flows; userinfo adds a round trip to Okta per request)
+  jwk_expires_in: 3600
+  set_id_token_header: false and set_userinfo_header: false
 
 Also add request-id, and cors with authorization in the allowed headers.
 
-We are editing a LIVE route object, not authoring an OpenAPI document — so do not
-follow the spec-generator examples for plugin placement. Each route object in
-routeSpec takes "plugins" as a TOP-LEVEL key, and inside it each plugin is
-keyed by its own NAME:
-  { "name": ..., "uri": ..., "methods": [...], "service_id": ...,
-    "plugins": { "<plugin-name>": { <that plugin's own fields> } } }
-Do not promote a plugin's fields into the plugins map: "plugins":
-{"response_status": 202, "content_type": ...} is four broken plugins, not one
-working one — the plugin name level is mandatory.
-There must be no "x-helix-gateway" key anywhere in a route object: a live route
-silently discards that wrapper, the write still reports success, and the route
-deploys with no plugins at all.
+Plugins go in a top-level "plugins" map on the route object, each under its own
+plugin name. No "x-helix-gateway" wrapper — a live route discards it silently and
+still reports success.
 
-Show me the spec, then call get_revision and show me
-the stored routeSpec so I can see the plugins landed. Do not deploy yet.
+Show me the spec, then read the revision back so I can see which plugins actually
+landed. Do not deploy yet.
 ```
 
-**Step 2 — check it, then dry-run**
+**Step 2 — make the agent review its own work, then dry-run**
 
 ```text
 Before deploying: re-read the openid-connect schema from this org and tell me,
 field by field, whether every value I asked for is a real field with a legal
 value. Call out anything you had to guess or drop.
 
-use_jwks will NOT be in that schema. Keep it anyway — confirm it is still present
-in the spec you are about to deploy, and do not "clean it up".
+use_jwks will NOT be in that schema. Keep it anyway — confirm it is still in the
+spec you are about to deploy, and do not "clean it up".
 
-Then bind the upstream and run a dry-run deploy. Report exactly what it returns.
-Do not deploy the revision — stop after the dry-run.
+Then bind the upstream and run a dry-run deploy. Report exactly what it returns,
+and stop there.
 ```
 
 The agent fetches the real `openid-connect` schema from your org, proposes the
-spec, and stops. See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for why the prompt is
-shaped this way and what to do when the agent takes a wrong turn.
+spec, and stops. See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for what to do when it
+takes a wrong turn.
 
 ## Install it directly
 
@@ -387,7 +372,7 @@ Full matrix in [tests/test-plan.yaml](tests/test-plan.yaml).
 - Callers are services or partner apps that can do client credentials against Okta.
 
 Not this solution if: no IdP exists and you'd be deploying Okta *for* this
-(solution 01 is smaller), or your authorization server issues opaque tokens.
+(solution 02 is smaller), or your authorization server issues opaque tokens.
 
 ## Limitations
 
@@ -395,7 +380,7 @@ Not this solution if: no IdP exists and you'd be deploying Okta *for* this
   says. It carries no per-route permissions in this configuration.
   `required_scopes` is the next step and is deliberately not used here.
 - **No per-caller metering.** Okta-issued tokens do not resolve an app credential,
-  so `api-product-enforcer` has nothing to meter. Quotas need solution 03's model.
+  so `api-product-enforcer` has nothing to meter. Quotas need solution 01's model.
 - **The audience is not enforced by value.** Verified against a deployed route: a
   token minted for an unrelated API was accepted with `200`. `required: true` only
   asserts the claim is present. If you need to scope a token to one API among
@@ -431,10 +416,10 @@ configuration, but no Okta tenant was tested.
 
 ## Related solutions
 
-- **[01 — OAuth 2.0 with JWT](../01-oauth-jwt/)** — the mirror image: the gateway
+- **[02 — OAuth 2.0 with JWT](../02-oauth-jwt/)** — the mirror image: the gateway
   *issues* the tokens with `helix-auth`. Read the fork above and pick one; you do
   not want both on the same route.
-- **[03 — API Products](../03-api-products/)** — per-app quotas. Note the seam:
+- **[01 — API Products](../01-api-products/)** — per-app quotas. Note the seam:
   metering keys off an app credential, which an Okta-issued token does not carry.
 - **[04 — Analytics](../04-analytics/)** — every call is captured regardless of
   which auth plugin resolved it.

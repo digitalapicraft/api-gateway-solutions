@@ -371,7 +371,7 @@ message is false. Topic auto-creation is the one case not run. Detail in
 
 - **[06 — Signed requests](../06-hmac-auth/)** — how to close this endpoint, and
   what it costs.
-- **[03 — API Products](../03-api-products/)** — per-app quotas, once callers are
+- **[01 — API Products](../01-api-products/)** — per-app quotas, once callers are
   authenticated. An open ingest endpoint cannot be metered per caller.
-- **[02 — SOAP to REST](../02-soap-to-rest/)** — the other solution where the
+- **[03 — SOAP to REST](../03-soap-to-rest/)** — the other solution where the
   gateway mediates rather than proxies.

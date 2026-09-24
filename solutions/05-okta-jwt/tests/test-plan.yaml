@@ -182,7 +182,7 @@ cases:
       authorization server (a second custom auth server in the same tenant is
       enough — its issuer differs).
     notes: >-
-      This is solution 05's counterpart to solution 01's wrong-client-secret case.
+      This is solution 05's counterpart to solution 02's wrong-client-secret case.
       Note what it does NOT cover: there is no field to pin an arbitrary expected
       AUDIENCE. audience can only be required-present or matched against client_id,
       and Okta access tokens carry aud = the API's audience URI, not the client id.

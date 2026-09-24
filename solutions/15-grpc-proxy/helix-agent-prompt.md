@@ -1,6 +1,8 @@
 # Agent-mode prompt — front a gRPC stream with the gateway
 
-A standalone, reusable prompt, plus the reasoning behind its shape.
+Four bounded steps: the upstream, the API, one route at a time, then bind and read
+it back. [AGENT-GUIDE.md](../../AGENT-GUIDE.md) carries the standing rules these
+prompts assume.
 
 ## Step 1 — the upstream (this is not in the spec)
 
@@ -64,12 +66,11 @@ show me the plugins stored on each route, and the upstream binding.
 ```
 
 **Not optional.** Three of the four known agent-mode defects report success at
-every step the agent shows you; reading the revision back is the only thing that
-catches them.
+every step the agent shows you.
 
 ---
 
-## Why the prompt is shaped this way
+## Why it's shaped this way
 
 | Choice | Reason |
 |---|---|
@@ -89,7 +90,7 @@ catches them.
 - **TLS upstream** — use `grpcs` and your backend's TLS port on the upstream
   object; everything else in the package is unchanged.
 
-## Known failure modes
+## When it goes wrong
 
 | Symptom | Cause |
 |---|---|

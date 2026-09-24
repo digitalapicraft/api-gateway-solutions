@@ -39,10 +39,10 @@ implementation:
     private_key, algorithm, token_ttl, payload, apikey, client_id_claim,
     ctx_namespace, base64_* and _meta — no JWKS URL, no issuer, no audience, no
     public key, and no way to add one. It verifies tokens it minted. This and
-    solution 01 sit on opposite sides of the issuer boundary and are not
+    solution 02 sit on opposite sides of the issuer boundary and are not
     interchangeable implementations of the same thing.
-    The plugin is applied at the DOCUMENT ROOT, unlike solution 01's per-route
-    scoping. Solution 01 must leave POST /oauth/token reachable without a token;
+    The plugin is applied at the DOCUMENT ROOT, unlike solution 02's per-route
+    scoping. Solution 02 must leave POST /oauth/token reachable without a token;
     here there is no token endpoint at all, so API-wide is correct and leaves no
     route unprotected by omission.
     use_jwks: true is REQUIRED and is not in the published plugin schema. Without
@@ -117,7 +117,7 @@ limitations:
     deliberately unused.
   - No per-caller metering. An Okta-issued token does not resolve an app
     credential, so api-product-enforcer has nothing to key off. Quotas need
-    solution 03's model and the two do not compose for free.
+    solution 01's model and the two do not compose for free.
   - Token lifetime is Okta's decision. There is no token_ttl to set here — that is
     the trade made by not being the issuer.
   - No revocation before expiry. Disabling an app in Okta stops NEW tokens;

@@ -65,7 +65,7 @@ local_validation:
       it touches.
     - >-
       Metering is out of scope here by choice, not by limitation: api-product-enforcer
-      added to a signed route meters per app exactly as solution 03 describes, which
+      added to a signed route meters per app exactly as solution 01 describes, which
       was tested against a deployed route.
     - >-
       The upstream is bound on the service at import/bind time, not expressed in

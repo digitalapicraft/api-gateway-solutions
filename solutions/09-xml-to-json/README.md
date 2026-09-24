@@ -19,15 +19,15 @@ in XML, and four client teams who each wrote their own parser.**
 Worth settling in the first ten seconds, because two different people land here
 from two different searches.
 
-| | [Solution 02 — SOAP to REST](../02-soap-to-rest/) | **This one** |
+| | [Solution 03 — SOAP to REST](../03-soap-to-rest/) | **This one** |
 |---|---|---|
 | The backend | A SOAP service: envelope, `SOAPAction`, one handler path, a WSDL | Plain HTTP that happens to carry XML — an inventory API, a payments file feed, an industry schema |
 | What the gateway must build | A whole envelope around your data | Nothing. Element for element, key for key |
 | Route shape | Every operation collapses onto one upstream path | Ordinary REST paths |
 | Reach for it when | There is a `<soap:Envelope>` anywhere in the conversation | There isn't |
 
-If your backend has an envelope, stop reading and use 02 — this package will
-convert your JSON into XML that the SOAP handler rejects. If it doesn't, 02 will
+If your backend has an envelope, stop reading and use 03 — this package will
+convert your JSON into XML that the SOAP handler rejects. If it doesn't, 03 will
 wrap your data in an envelope nothing is expecting. They are not variants of each
 other.
 
@@ -153,7 +153,7 @@ returns **503** and the connection is terminated before headers. `root_name` and
 runs before `xml-to-json` (997) in the rewrite phase, so an override there
 changes the header the transform is about to match on, and the request direction
 silently stops converting. This exact mistake is on the record against
-[solution 02](../02-soap-to-rest/).
+[solution 03](../03-soap-to-rest/).
 
 ## What the conversion actually does to your document
 
@@ -184,55 +184,46 @@ the right tool for the request side — a template-based transform is.
 
 ## Build it with the Helix Agent
 
-Full prompt with all the constraints: [`helix-agent-prompt.md`](helix-agent-prompt.md).
+Two steps; confirm between them. Full prompt with the reasoning, tweak knobs and
+failure modes: [`helix-agent-prompt.md`](helix-agent-prompt.md).
 
 ```text
-Create a new REST API called "Catalog API" that puts a JSON front door on a
-backend that speaks XML. This is a fresh org — I have no existing API.
+Create a REST API "<<Catalog API>>" putting a JSON front door on an XML backend.
+Upstream https://httpbin.org — its /xml returns an XML document and its /post
+echoes what it received, so both directions are visible. Environment test. Fresh
+org — nothing exists yet.
 
-Upstream: https://httpbin.org (public; its /xml returns an XML document and its
-/post echoes whatever it received, so I can see both directions work). Deploy to
-the "test" environment.
-
-Routes: GET /catalog/items and POST /catalog/orders. Add proxy-rewrite on each:
+Routes GET /catalog/items and POST /catalog/orders, with proxy-rewrite
 /catalog/items -> /xml and /catalog/orders -> /post. Do NOT set a Content-Type in
-proxy-rewrite — it runs before xml-to-json and would break the request transform.
+proxy-rewrite — it runs first and would break the request transform. Set only the
+plugin fields you need: an empty headers {} or a regex_uri of nulls is rejected at
+dry-run.
 
-Use the xml-to-json plugin. On the GET route, response conversion only. On the
-POST route, set transform_request true as well — it defaults to false, so an empty
-block converts responses only. Set request_content_types to application/json,
-content_types to application/xml and text/xml, request_root_name "order",
-array_item_name "item", and root_attributes xmlns "urn:example:catalog".
+Use xml-to-json. On the GET route, response conversion only. On the POST route set
+transform_request true as well — it defaults to false, so an empty block converts
+responses only. Set request_content_types to application/json, content_types to
+application/xml and text/xml, request_root_name "order", array_item_name "item",
+and root_attributes xmlns "urn:example:catalog".
 
-Do not set pretty — on this build it makes the route return 503.
+Don't set pretty — on this build it makes the route return 503.
 
 Put request-id and cors in the SERVICE spec so they apply API-wide; cors must
 allow the accept header, because the response conversion is content-negotiated.
 
-Check get_plugin_config for xml-to-json before writing config. We are editing a LIVE route object, not authoring an OpenAPI document — so do not
-follow the spec-generator examples for plugin placement. Each route object in
-routeSpec takes "plugins" as a TOP-LEVEL key, and inside it each plugin is
-keyed by its own NAME:
-  { "name": ..., "uri": ..., "methods": [...], "service_id": ...,
-    "plugins": { "<plugin-name>": { <that plugin's own fields> } } }
-Do not promote a plugin's fields into the plugins map: "plugins":
-{"response_status": 202, "content_type": ...} is four broken plugins, not one
-working one — the plugin name level is mandatory.
-There must be no "x-helix-gateway" key anywhere in a route object: a live route
-silently discards that wrapper, the write still reports success, and the route
-deploys with no plugins at all. Set only the plugin fields you actually need — an empty
-headers {} or a regex_uri of nulls is rejected at dry-run. Skip validate_route —
-use dry_run_deploy for validation. Show me the spec, run dry_run_deploy, then call
-get_revision and show me the stored routeSpec so I can see the plugins landed.
-Wait before deploying.
+Plugins go in a top-level "plugins" map on the route object, each under its own
+plugin name. No "x-helix-gateway" wrapper — a live route discards it silently and
+still reports success.
+
+Show me the spec, run dry_run_deploy, then read the revision back so I can see
+which plugins actually landed. Wait before deploying.
 ```
 
 Then, in the same session:
 
 ```text
-Now give me curl commands that show, in order: GET /catalog/items with
-Accept: application/json returning JSON; the same call with
-Accept: application/xml returning the backend's XML untouched; a JSON POST to
+Now curl commands showing, in order: GET /catalog/items with
+Accept: application/json returning JSON; the same call with Accept:
+application/xml returning the backend's XML untouched; a JSON POST to
 /catalog/orders whose echo shows the XML the backend received; and the same POST
 sent as text/plain, which passes through unconverted with no error.
 ```
@@ -307,7 +298,7 @@ Use it when:
 
 Don't use it when:
 
-- **There is a SOAP envelope.** Use [solution 02](../02-soap-to-rest/).
+- **There is a SOAP envelope.** Use [solution 03](../03-soap-to-rest/).
 - **Your backend validates against a strict `xs:sequence`** and you need the
   request direction. Key order is not preserved; use a template-based transform.
 - **Meaning lives in attributes or mixed content.** The conversion is lossy there.
@@ -352,9 +343,9 @@ observations were both produced by this run and are recorded in
 
 ## Related solutions
 
-- **[02 — SOAP to REST](../02-soap-to-rest/)** — the envelope case. Read the table
+- **[03 — SOAP to REST](../03-soap-to-rest/)** — the envelope case. Read the table
   at the top before choosing.
-- **[08 — API keys](../08-api-key/)** · **[01 — OAuth 2.0 with JWT](../01-oauth-jwt/)** —
+- **[08 — API keys](../08-api-key/)** · **[02 — OAuth 2.0 with JWT](../02-oauth-jwt/)** —
   this package ships unauthenticated so the mediation is the only thing being
   demonstrated. Put one of these in front before it carries anything real.
 - **[10 — Data masking](../10-data-mask/)** — for when the converted response

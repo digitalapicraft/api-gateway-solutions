@@ -13,7 +13,7 @@ local_validation:
     required_fields:         PASS   # openid-connect's three required fields (client_id, client_secret, discovery) are all present
     references:              PASS   # <OKTA_ISSUER_URL> is documented as needing to equal the issuer reported by <OKTA_DISCOVERY_URL>; no other cross-field reference exists
     plugin_ordering:         PASS   # openid-connect (2599) runs in the access phase ahead of the upstream; nothing consumes a ctx.* value another plugin produces, so there is no ordering dependency
-    plugin_scoping:          PASS   # openid-connect is at the document root deliberately — unlike solution 01 there is no token endpoint that must stay reachable, so API-wide is correct and leaves no unprotected route
+    plugin_scoping:          PASS   # openid-connect is at the document root deliberately — unlike solution 02 there is no token endpoint that must stay reachable, so API-wide is correct and leaves no unprotected route
     auth_authz_dependencies: PASS   # authentication only; no authorization plugin and no required_scopes, stated as such in README and manifest limitations
     request_response:        PASS   # documented 200/401/404 responses match the design; every rejection path is a 401
     security:                PASS   # no literal secrets; four <OKTA_...> placeholders; the four insecure defaults (unauth_action, ssl_verify, accept_unsupported_alg, absent claim_validator) are all explicitly overridden

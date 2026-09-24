@@ -66,7 +66,7 @@ preference.
 | Your caller | Use | Why |
 |---|---|---|
 | **Can set a header, nothing more** — embedded device, legacy middleware, a partner's cron job | **`helix-auth` validate · key-auth** — this solution | One header. The gateway resolves it to an app. Revocation is immediate. |
-| **Can hold a secret and run an exchange** — a partner's backend, a server-side integration | **`helix-auth` generate + validate** — [solution 01](../01-oauth-jwt/) | The long-lived secret stops travelling; a leaked token expires on its own. |
+| **Can hold a secret and run an exchange** — a partner's backend, a server-side integration | **`helix-auth` generate + validate** — [solution 02](../02-oauth-jwt/) | The long-lived secret stops travelling; a leaked token expires on its own. |
 | **Already gets tokens from your IdP** — Okta, Entra ID, Auth0, Keycloak | **`openid-connect`** — [solution 05](../05-okta-jwt/) | The gateway verifies somebody else's tokens; it must not mint its own. |
 | **Can hold a secret and the payload's integrity matters** | **`hmac-auth`** — [solution 06](../06-hmac-auth/) | The credential never travels at all; the signature covers the body. |
 
@@ -108,67 +108,56 @@ and it doesn't take a connection from your pool.
 
 ## Build it with the Helix Agent
 
-Recommended path, and it works on a **fresh org** — the agent *creates* the API
-on a public upstream so you get real data immediately. Full prompt with all the
-constraints: [`helix-agent-prompt.md`](helix-agent-prompt.md).
+Recommended path, and it works on a **fresh org** — the agent creates the API on
+a public upstream so you get real data immediately. Two steps; confirm between
+them. Full prompt with the reasoning, tweak knobs and failure modes:
+[`helix-agent-prompt.md`](helix-agent-prompt.md).
 
 ```text
-Create a new REST API called "Terminal API" and protect every route with API-key
-authentication. This is a fresh org — I have no existing API.
+Create a REST API "<<Terminal API>>" on upstream
+https://jsonplaceholder.typicode.com, environment test, with routes
+GET /fleet/price-list and POST /fleet/takings. Fresh org — nothing exists yet.
 
-Upstream: https://jsonplaceholder.typicode.com (public, so it returns real data;
-I'll swap in my own later). Deploy to the "test" environment.
+My route paths are the contract with the fleet; the upstream's are not. Add
+proxy-rewrite: /fleet/price-list -> /todos/1 and /fleet/takings -> /posts. Don't
+rename my routes to match the backend.
 
-Routes: GET /fleet/price-list and POST /fleet/takings. The upstream paths differ
-from mine, so add proxy-rewrite: /fleet/price-list -> /todos/1 and
-/fleet/takings -> /posts.
+Protect both with helix-auth, mode validate, validate_auth_type key-auth, reading
+the key from the HEADER X-Device-Key. key-auth is a validate_auth_type here, not a
+standalone plugin. apikey with source is required in practice — the dry-run rejects
+the config without it, although the published schema marks it optional.
 
-Use helix-auth with mode validate and validate_auth_type key-auth on both routes,
-reading the key from the HEADER X-Device-Key. key-auth is a validate_auth_type of
-helix-auth, not a standalone plugin. apikey with source is required for key-auth —
-a dry-run rejects the config without it.
+No secret goes in the spec: the key lives on the app credential and the route only
+names the header it arrives in. Don't set secret_validation — despite the name it
+accepts the credential's secret as an ALTERNATIVE credential, which widens what
+authenticates.
 
-No secret goes in the spec: the key lives on the app credential, and the route
-only names the header it arrives in. Do not set secret_validation.
+Put request-id in the SERVICE spec so it applies API-wide. Don't add cors — these
+callers are devices, not browsers.
 
-Put request-id in the SERVICE spec so it applies API-wide, not on each route. Do not
-add cors — these callers are devices, not browsers.
+Plugins go in a top-level "plugins" map on the route object, each under its own
+plugin name. No "x-helix-gateway" wrapper — a live route discards it silently and
+still reports success.
 
-Check get_plugin_config for helix-auth before writing config.
-
-We are editing a LIVE route object, not authoring an OpenAPI document — so do not
-follow the spec-generator examples for plugin placement. Each route object in
-routeSpec takes "plugins" as a TOP-LEVEL key, and inside it each plugin is
-keyed by its own NAME:
-  { "name": ..., "uri": ..., "methods": [...], "service_id": ...,
-    "plugins": { "<plugin-name>": { <that plugin's own fields> } } }
-Do not promote a plugin's fields into the plugins map: "plugins":
-{"response_status": 202, "content_type": ...} is four broken plugins, not one
-working one — the plugin name level is mandatory.
-There must be no "x-helix-gateway" key anywhere in a route object: a live route
-silently discards that wrapper, the write still reports success, and the route
-deploys with no plugins at all.
-
-Skip validate_route — use dry_run_deploy for validation. Show me the spec, run
-dry_run_deploy, then call get_revision and show me the stored routeSpec so I can see
-the plugins landed. Wait before deploying.
+Show me the spec, run dry_run_deploy, then read the revision back so I can see
+which plugins actually landed. Wait before deploying.
 ```
 
 Then, in the same session:
 
 ```text
-Create a product that contains this API with a generous quota, deploy the product
-to the test environment, then create a developer with one app subscribed to it and
-give me the app's API key so I can test.
+Create a product containing this API with a generous quota, deploy it to test,
+then create a developer "<<Forecourt Estate>>" with one app subscribed to it and
+give me the app's API key.
 
-Then give me curl commands that show, in order: no key -> 401; the key in
-X-Device-Key -> 200; an unknown key -> 401; the right key in an "apikey" header
--> 401; and the right key as a query parameter -> 401. The last two prove the
-header name and the header SOURCE are both part of the contract.
+Then curl commands showing, in order: no key → 401; the key in X-Device-Key → 200;
+an unknown key → 401; the right key in an "apikey" header → 401; and the right key
+as a query parameter → 401. The last two prove the header NAME and the header
+SOURCE are both part of the contract.
 ```
 
-See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for why the prompt is shaped this way
-and what to do when the agent takes a wrong turn.
+See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for what to do when the agent takes a
+wrong turn.
 
 ## Install it directly
 
@@ -215,7 +204,7 @@ helix-auth:
 **Read what that block does not contain.** There is no key and no secret. The
 route names the *header the key arrives in*; the key itself is issued on the app
 credential by the control plane. Unlike the signing secret in
-[solution 01](../01-oauth-jwt/), there is nothing here to fill in and nothing to
+[solution 02](../02-oauth-jwt/), there is nothing here to fill in and nothing to
 leak — the same property [solution 06](../06-hmac-auth/) has, for the same
 structural reason.
 
@@ -309,7 +298,7 @@ deliberately does not ship.
   place invalidates the old key the moment the new one is live. For a fleet that
   updates over weeks, run two apps and delete the old one after the overlap.
 - **Don't add `limit-count` keyed on the caller to meter these apps.** Per-caller
-  metering is the product quota, counted per app — [solution 03](../03-api-products/).
+  metering is the product quota, counted per app — [solution 01](../01-api-products/).
 - **No `cors` block here, on purpose.** Devices are not browsers, and a wildcard
   CORS policy on a fleet API hands browser origins a path the fleet never needs.
   Add it only if a browser genuinely calls this API.
@@ -325,13 +314,13 @@ Use it when:
 - You are handing out one shared key today and want to split it per caller so a
   single compromise stops being an estate-wide event.
 - You want identity now and metering later: this resolves the app that
-  [solution 03](../03-api-products/) meters and [solution 04](../04-analytics/)
+  [solution 01](../01-api-products/) meters and [solution 04](../04-analytics/)
   attributes.
 
 Don't use it when:
 
 - **The caller can hold a secret and run an exchange.** Use
-  [solution 01](../01-oauth-jwt/) — a credential that expires on its own is
+  [solution 02](../02-oauth-jwt/) — a credential that expires on its own is
   strictly better when it is available to you.
 - **An identity provider already issues tokens to these callers.** Use
   [solution 05](../05-okta-jwt/).
@@ -381,10 +370,10 @@ produced, is in
 
 ## Related solutions
 
-- **[01 — OAuth 2.0 with JWT](../01-oauth-jwt/)** · **[05 — OAuth with Okta](../05-okta-jwt/)** ·
+- **[02 — OAuth 2.0 with JWT](../02-oauth-jwt/)** · **[05 — OAuth with Okta](../05-okta-jwt/)** ·
   **[06 — Signed requests](../06-hmac-auth/)** — the other three answers to "who
   is calling". Pick by what the caller can hold.
-- **[03 — API Products](../03-api-products/)** — meter the apps this solution
+- **[01 — API Products](../01-api-products/)** — meter the apps this solution
   resolves. The quota is counted per app, which is the same object.
 - **[04 — Analytics](../04-analytics/)** — per-app attribution, which only works
   because identity was resolved here.

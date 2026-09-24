@@ -154,66 +154,53 @@ the same field.
 
 ## Build it with the Helix Agent
 
-Full prompt with all the constraints: [`helix-agent-prompt.md`](helix-agent-prompt.md).
+Four small steps. Full prompt with the reasoning, tweak knobs and failure modes:
+[`helix-agent-prompt.md`](helix-agent-prompt.md).
 
-> **This one needs four small steps, not one big prompt — and the reason is
-> measured, not stylistic.** `update_route_spec` is a *full replace*, so every
-> incremental change resends the whole route spec. Past roughly a kilobyte the
-> agent starts emitting malformed tool arguments (a stray bracket appended to the
-> JSON), which surfaces as `stream closed with reason: error`. Four attempts at
-> the one-prompt version failed the same way; the four-step version below is the
-> shape that completed. The last step is the one that still tips it over, so it
-> ships with a fallback.
+> **The four steps are measured, not stylistic.** `update_route_spec` is a *full
+> replace*, so every increment resends the whole route spec; past roughly a
+> kilobyte the agent emits malformed tool arguments and the run dies with `stream
+> closed with reason: error`. The one-prompt version failed four times out of four.
 
 **Step 1 — the API and the collection route**
 
 ```text
-Create a new REST API called "Support Console API" with ONE route for now.
-
-Upstream: https://jsonplaceholder.typicode.com (reuse it if it already exists in this
-org as an upstream rather than creating another). Deploy to the "test" environment.
+Create a REST API "Support Console API" with ONE route for now. Upstream
+https://jsonplaceholder.typicode.com — reuse it if it already exists as an upstream
+in this org rather than creating another; the org's upstream limit is low.
+Environment test.
 
 Route: GET /support/customers -> proxy-rewrite uri /users
+Put request-id in the SERVICE spec so it applies API-wide. Set only the fields you
+need — an empty headers {} or a regex_uri of nulls is rejected at dry-run.
 
-Put request-id in the SERVICE spec so it applies API-wide.
+Plugins go in a top-level "plugins" map on the route object, each under its own
+plugin name. No "x-helix-gateway" wrapper — a live route discards it silently and
+still reports success.
 
-We are editing a LIVE route object, not authoring an OpenAPI document — so do not
-follow the spec-generator examples for plugin placement. Each route object in
-routeSpec takes "plugins" as a TOP-LEVEL key, and inside it each plugin is
-keyed by its own NAME:
-  { "name": ..., "uri": ..., "methods": [...], "service_id": ...,
-    "plugins": { "<plugin-name>": { <that plugin's own fields> } } }
-Do not promote a plugin's fields into the plugins map: "plugins":
-{"response_status": 202, "content_type": ...} is four broken plugins, not one
-working one — the plugin name level is mandatory.
-There must be no "x-helix-gateway" key anywhere in a route object: a live route
-silently discards that wrapper, the write still reports success, and the route
-deploys with no plugins at all. Set only the fields you need.
-
-Skip validate_route — use dry_run_deploy. Bind the upstream, run dry_run_deploy, then
-call get_revision and show me the stored routeSpec so I can see the plugins landed.
-Wait before deploying.
+Bind the upstream, run dry_run_deploy, then read the revision back so I can see
+which plugins actually landed. Wait before deploying.
 ```
 
 **Step 2 — the single-record route**
 
 ```text
-Now add a second route to the same revision, keeping the first exactly as it is:
+Add a second route to the same revision, keeping the first exactly as it is:
 
   GET /support/customers/{customerId}
 
 It needs proxy-rewrite with regex_uri, not uri, so the id reaches the backend:
 regex_uri: ["^/support/customers/(.*)$", "/users/$1"]
 
-Send the routeSpec as a JSON array of both route objects — update_route_spec replaces
-the whole list. Then call get_revision and show me the stored routeSpec.
+Send routeSpec as a JSON array of both route objects — update_route_spec replaces
+the whole list. Then read the revision back.
 ```
 
 **Step 3 — the masking the caller sees**
 
 ```text
-Give BOTH routes this response-rewrite block, verbatim — these are the exact patterns,
-do not rewrite them:
+Give BOTH routes this response-rewrite block, verbatim — these are the exact
+patterns, do not rewrite them:
 
 filters:
   - regex: ("email"\s*:\s*")[^"@]+@
@@ -229,11 +216,10 @@ filters:
     replace: $1[redacted]"
     scope: global
 
-Every filter keeps scope: global — the default is "once" and masks only the first match,
-which on a list leaves every record but the first in the clear.
+Every filter keeps scope: global. The default is "once" — one match, then stop —
+which on a list masks the first record and leaves the rest in the clear.
 
-Send the routeSpec as a JSON array of both routes, then call get_revision and show me the
-stored routeSpec.
+Send routeSpec as a JSON array of both routes, then read the revision back.
 ```
 
 **Step 4 — the masking the logs keep**
@@ -247,15 +233,15 @@ Add log-data-mask to both routes, keeping everything else exactly as it is:
     - { type: header, name: authorization, action: remove }
     - { type: header, name: x-api-key, action: remove }
 
-Then call get_revision, show me the stored routeSpec, and tell me in one sentence what
-log-data-mask does NOT do.
+Then read the revision back, and tell me in one sentence what log-data-mask does
+NOT do.
 ```
 
-> **If step 4 ends in `stream closed with reason: error`, that is the defect above
-> and not your prompt.** The route spec is now large enough to trigger it
-> reliably. Import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) instead — it
-> is the same configuration, complete, and the agent has already done the parts
-> that teach you anything.
+> **If step 4 ends in `stream closed with reason: error`, that's the defect above,
+> not your prompt.** The route spec is now large enough to trigger it reliably.
+> Import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) instead — same
+> configuration, complete, and the agent has already done the parts that teach you
+> anything.
 
 ## Install it directly
 
@@ -307,7 +293,7 @@ removed for comparison.
   helper.
 - **Masking is not access control.** A caller who should not see the record at all
   must be stopped by identity — [solution 08](../08-api-key/) or
-  [solution 01](../01-oauth-jwt/). This package ships unauthenticated so the
+  [solution 02](../02-oauth-jwt/). This package ships unauthenticated so the
   masking is the only thing under test; do not deploy it that way.
 - **The regex sees text, not meaning.** Renamed keys, encoded strings and free-text
   copies are not masked.
@@ -373,7 +359,7 @@ masks were both reproduced deliberately and are recorded in
 
 ## Related solutions
 
-- **[08 — API keys](../08-api-key/)** · **[01 — OAuth 2.0 with JWT](../01-oauth-jwt/)** —
+- **[08 — API keys](../08-api-key/)** · **[02 — OAuth 2.0 with JWT](../02-oauth-jwt/)** —
   masking is not access control. Put one of these in front.
 - **[09 — XML to JSON](../09-xml-to-json/)** — if you convert on the same route,
   the converter runs first and your patterns must match the converted body.

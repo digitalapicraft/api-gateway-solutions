@@ -1,77 +1,58 @@
 # Agent-mode prompt — mask sensitive values in the response and in the logs
 
-Paste these into **Helix Agent Mode**. They work from a **fresh, empty org**: the
-agent *creates* the API on a public upstream whose records carry email, phone and
-coordinates, then builds the configuration in four bounded steps.
+Four small steps, from a **fresh, empty org** to two routes whose responses are
+masked for the caller and whose log entries are masked for the aggregator.
 
-Replace the `<<...>>` values. Everything else is deliberate — the table below
-says why each block earns its place. Read [AGENT-GUIDE.md](../../AGENT-GUIDE.md)
-first if you haven't.
+**The four steps are measured, not stylistic.** `update_route_spec` is a *full
+replace*, so every increment resends the whole route spec; past roughly a kilobyte
+the agent emits malformed tool arguments and the run dies with `stream closed with
+reason: error`. The one-prompt version failed four times out of four. Step 4 is
+the one that still tips it over, so it ships with a fallback.
+
+[AGENT-GUIDE.md](../../AGENT-GUIDE.md) carries the standing rules these prompts
+assume.
 
 ---
 
-## The prompt
-
-Full prompt with all the constraints: [`helix-agent-prompt.md`](helix-agent-prompt.md).
-
-> **This one needs four small steps, not one big prompt — and the reason is
-> measured, not stylistic.** `update_route_spec` is a *full replace*, so every
-> incremental change resends the whole route spec. Past roughly a kilobyte the
-> agent starts emitting malformed tool arguments (a stray bracket appended to the
-> JSON), which surfaces as `stream closed with reason: error`. Four attempts at
-> the one-prompt version failed the same way; the four-step version below is the
-> shape that completed. The last step is the one that still tips it over, so it
-> ships with a fallback.
-
-**Step 1 — the API and the collection route**
+## Step 1 — the API and the collection route
 
 ```text
-Create a new REST API called "Support Console API" with ONE route for now.
-
-Upstream: https://jsonplaceholder.typicode.com (reuse it if it already exists in this
-org as an upstream rather than creating another). Deploy to the "test" environment.
+Create a REST API "Support Console API" with ONE route for now. Upstream
+https://jsonplaceholder.typicode.com — reuse it if it already exists as an upstream
+in this org rather than creating another; the org's upstream limit is low.
+Environment test.
 
 Route: GET /support/customers -> proxy-rewrite uri /users
+Put request-id in the SERVICE spec so it applies API-wide. Set only the fields you
+need — an empty headers {} or a regex_uri of nulls is rejected at dry-run.
 
-Put request-id in the SERVICE spec so it applies API-wide.
+Plugins go in a top-level "plugins" map on the route object, each under its own
+plugin name. No "x-helix-gateway" wrapper — a live route discards it silently and
+still reports success.
 
-We are editing a LIVE route object, not authoring an OpenAPI document — so do not
-follow the spec-generator examples for plugin placement. Each route object in
-routeSpec takes "plugins" as a TOP-LEVEL key, and inside it each plugin is
-keyed by its own NAME:
-  { "name": ..., "uri": ..., "methods": [...], "service_id": ...,
-    "plugins": { "<plugin-name>": { <that plugin's own fields> } } }
-Do not promote a plugin's fields into the plugins map: "plugins":
-{"response_status": 202, "content_type": ...} is four broken plugins, not one
-working one — the plugin name level is mandatory.
-There must be no "x-helix-gateway" key anywhere in a route object: a live route
-silently discards that wrapper, the write still reports success, and the route
-deploys with no plugins at all. Set only the fields you need.
-
-Skip validate_route — use dry_run_deploy. Bind the upstream, run dry_run_deploy, then
-call get_revision and show me the stored routeSpec so I can see the plugins landed.
-Wait before deploying.
+Bind the upstream, run dry_run_deploy, then read the revision back so I can see
+which plugins actually landed. Wait before deploying.
 ```
 
-**Step 2 — the single-record route**
+## Step 2 — the single-record route
 
 ```text
-Now add a second route to the same revision, keeping the first exactly as it is:
+Add a second route to the same revision, keeping the first exactly as it is:
 
   GET /support/customers/{customerId}
 
 It needs proxy-rewrite with regex_uri, not uri, so the id reaches the backend:
 regex_uri: ["^/support/customers/(.*)$", "/users/$1"]
 
-Send the routeSpec as a JSON array of both route objects — update_route_spec replaces
-the whole list. Then call get_revision and show me the stored routeSpec.
+Send routeSpec as a JSON array of both route objects — update_route_spec replaces
+the whole list. Then read the revision back.
 ```
 
-**Step 3 — the masking the caller sees**
+## Step 3 — the masking the caller sees
 
 ```text
-Give BOTH routes this response-rewrite block, verbatim — these are the exact patterns,
-do not rewrite them:
+Give BOTH routes this response-rewrite block, verbatim — these are the exact
+patterns, do not rewrite them:
 
 filters:
   - regex: ("email"\s*:\s*")[^"@]+@
@@ -87,14 +68,13 @@ filters:
     replace: $1[redacted]"
     scope: global
 
-Every filter keeps scope: global — the default is "once" and masks only the first match,
-which on a list leaves every record but the first in the clear.
+Every filter keeps scope: global. The default is "once" — one match, then stop —
+which on a list masks the first record and leaves the rest in the clear.
 
-Send the routeSpec as a JSON array of both routes, then call get_revision and show me the
-stored routeSpec.
+Send routeSpec as a JSON array of both routes, then read the revision back.
 ```
 
-**Step 4 — the masking the logs keep**
+## Step 4 — the masking the logs keep
 
 ```text
 Add log-data-mask to both routes, keeping everything else exactly as it is:
@@ -105,50 +85,52 @@ Add log-data-mask to both routes, keeping everything else exactly as it is:
     - { type: header, name: authorization, action: remove }
     - { type: header, name: x-api-key, action: remove }
 
-Then call get_revision, show me the stored routeSpec, and tell me in one sentence what
-log-data-mask does NOT do.
+Then read the revision back, and tell me in one sentence what log-data-mask does
+NOT do.
 ```
 
-> **If step 4 ends in `stream closed with reason: error`, that is the defect above
-> and not your prompt.** The route spec is now large enough to trigger it
-> reliably. Import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) instead — it
-> is the same configuration, complete, and the agent has already done the parts
-> that teach you anything.
-
+> **If step 4 ends in `stream closed with reason: error`, that's the defect above,
+> not your prompt.** The route spec is now large enough to trigger it reliably.
+> Import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) instead — same
+> configuration, complete, and the agent has already done the parts that teach you
+> anything.
 
 ---
 
-## Why the prompt is shaped this way
+## Why it's shaped this way
 
-| Block | Why it's there |
-|---|---|
-| **Four steps rather than one** | Measured, not stylistic. `update_route_spec` is a full replace, so each step resends the whole route spec; past roughly a kilobyte the agent emits malformed tool arguments and the run dies. The one-prompt version failed four times out of four. |
-| **"This is a fresh org — create one"** | On a new free-trial org there is no API to "find". The agent must create it, or it stalls looking for something that isn't there. |
-| **"reuse it if it already exists"** | The org's upstream limit is low, and an agent that cannot create one stops rather than looking for the one already there. |
-| **"regex_uri, not uri, so the id reaches the backend"** | A fixed `uri` sends every request to the same record. An agent that has just written one fixed rewrite writes a second one. |
-| **"Do NOT nest them under x-helix-gateway"** | Verified, and the worst failure in this package: nested plugins on a live route are **silently discarded**. `update_route_spec` reports success, the dry-run passes, and the routes deploy with no masking. |
-| **"call get_revision and show me the stored routeSpec"** | The only check that catches the silent drop. A prompt that does not ask for the read-back cannot tell a working deploy from an empty one. |
-| **"verbatim — these are the exact patterns"** | Asked to invent them, the agent produced a replacement containing a literal `[^"]*`, which would have written that text into every response. Given the patterns, it reproduced them exactly. |
-| **"Every filter keeps scope: global"** | The most dangerous default here. `once` masks the first match and leaves the rest of a list — and the first record is the one in every screenshot. |
-| **"tell me in one sentence what log-data-mask does NOT do"** | Forces the distinction into the agent's own words. It is the thing readers get wrong, and it is cheaper to catch in an explanation than in production. |
-| **"Skip validate_route — use dry_run_deploy"** | Verified: `validate_route` fails on this build whatever you put in it — the tool posts `{"route": …}` and the control plane requires `{"routeSpec": [ … ]}`. |
-| **"Set only the fields you need"** | Verified on another package: an agent volunteering `regex_uri: [null, null]` and `headers: {}` had two dry-runs rejected before removing them. |
+- **`scope: global` on every filter.** The most dangerous default here. `once`
+  masks the first match and leaves the rest of the list — and the first record is
+  the one in every screenshot.
+- **The patterns verbatim.** Asked to invent them, the agent produced a replacement
+  containing a literal `[^"]*`, which would have written that text into every
+  response. Given them, it reproduced them exactly.
+- **`regex_uri`, not `uri`, on the single-record route.** A fixed `uri` sends every
+  request to the same record, and an agent that has just written one fixed rewrite
+  writes a second one.
+- **"What does `log-data-mask` NOT do."** Forces the distinction into the agent's
+  own words. It changes only what a *logger* writes, does nothing without a logger
+  on the route, and never changes the response — and that is the thing readers get
+  wrong.
+- **Read the revision back, every step.** Nested plugins on a live route are
+  silently discarded: the write reports success, the dry-run passes, and the routes
+  deploy with no masking. The read-back is the only thing that catches it.
 
 ## Tweak knobs
 
 **Also mask the logs for real**
 ```text
 Add http-logger to both routes pointing at <<https://my-log-sink.example/ingest>>,
-with include_resp_body true and batch_max_size 1 so it flushes immediately. Then
-tell me how to compare the logged entry with and without log-data-mask, because
-that comparison is the only way to know the log mask is working.
+include_resp_body true, batch_max_size 1 so it flushes immediately. Then tell me
+how to compare the logged entry with and without log-data-mask — that comparison is
+the only way to know the log mask works.
 ```
 
 **My payload names the fields differently**
 ```text
-My records use contactEmail, mobileNumber and homeLat/homeLng. Rewrite every
-filter and every log-data-mask entry for those names, and remind me what happens
-to a copy of the same value stored under another key.
+My records use contactEmail, mobileNumber and homeLat/homeLng. Rewrite every filter
+and every log-data-mask entry for those names, and remind me what happens to a copy
+of the same value stored under another key.
 ```
 
 **Mask by role rather than for everyone**
@@ -167,32 +149,18 @@ exactly as it is — masking is not access control.
 ```
 (That's [solution 08](../08-api-key/).)
 
-## Known failure modes when running this prompt
+## When it goes wrong
 
-- **`stream closed with reason: error` after `update_route_spec`.** The agent
-  appended a stray bracket to its tool arguments — a serialisation defect that
-  becomes reliable once the route spec passes about a kilobyte. Nothing was
-  written. Retry once; if it repeats, import
-  [`gateway/api-spec.yaml`](gateway/api-spec.yaml) for the remaining step.
-- **The write succeeds and the routes have no plugins.** The agent nested them
-  under `x-helix-gateway`. Reply: `put the plugins in a flat plugins map on each
-  route object, then read the revision back and show me.`
-- **Only the first record is masked.** A filter is missing `scope: global`.
-- **Nothing is masked.** The pattern does not match the serialised body — check key
-  spelling and whitespace, and whether something on the route converts the format
-  first.
-- **A field nobody asked about is mangled.** An over-broad pattern; anchor it to
-  its key.
-- **The agent claims the logs are masked after adding only `log-data-mask`.**
-  Reply: `there is no logger on this route, so that plugin has no effect — and it
-  never changes the response.`
-- **The single-record route 404s.** `regex_uri` is wrong or missing. Routing, not
-  masking.
-- **`validate_route` errors and the agent stalls.** Not your config — the tool is
-  broken against this control plane. Reply: `skip validate_route, run
-  dry_run_deploy instead.`
-- **Deploy fails with `Only INACTIVE revisions can be updated`.** Clone the
-  revision or undeploy, then apply.
+| Symptom | Cause |
+|---|---|
+| `stream closed with reason: error` after `update_route_spec` | The serialisation defect above. Nothing was written. Retry once; if it repeats, import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) for the rest. |
+| The write succeeds and the routes have no plugins | They were nested under `x-helix-gateway`. Ask for a flat `plugins` map and read the revision back. |
+| Only the first record is masked | A filter is missing `scope: global`. |
+| Nothing is masked | The pattern doesn't match the serialised body — check key spelling and whitespace, and whether something on the route converts the format first. |
+| A field nobody asked about is mangled | An over-broad pattern. Anchor it to its key. |
+| The agent says the logs are masked after adding only `log-data-mask` | There's no logger on the route, so it has no effect — and it never changes the response. |
+| The single-record route 404s | `regex_uri` is wrong or missing. Routing, not masking. |
+| Deploy fails: `Only INACTIVE revisions can be updated` | Clone the revision or undeploy, then apply. |
 
 ## Related
 

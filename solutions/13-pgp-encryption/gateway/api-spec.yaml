@@ -165,7 +165,7 @@ paths:
 # Note what is NOT here: authentication. Encrypting a response to a partner's key
 # does not establish that the caller IS that partner — anyone who can reach the
 # route gets a document they cannot read, which is not the same as being refused.
-# Put solution 08 or solution 01 in front of this before it carries anything real.
+# Put solution 08 or solution 02 in front of this before it carries anything real.
 x-helix-gateway:
   plugins:
     # Correlation id. Crypto failures are deliberately opaque to the caller, so the

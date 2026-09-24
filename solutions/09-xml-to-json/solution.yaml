@@ -37,7 +37,7 @@ implementation:
     - cors                               # browser clients; accept must be allowed or they cannot ask for JSON
   custom_code_required: false
   notes: >-
-    This is NOT the SOAP solution. Solution 02 builds an envelope and targets one
+    This is NOT the SOAP solution. Solution 03 builds an envelope and targets one
     handler path; this one mediates plain XML over ordinary REST paths. Using
     either in the other's situation produces a document the backend rejects.
     Two switches decide whether anything happens: the response transform fires only

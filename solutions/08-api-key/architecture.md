@@ -70,7 +70,7 @@ rather than an omission.
 
 - **The caller can run a token exchange.** Then it should — a credential that
   expires on its own is strictly better where it is available.
-  [Solution 01](../01-oauth-jwt/).
+  [Solution 02](../02-oauth-jwt/).
 - **An external IdP already issues tokens.** The gateway must be a verifier, not a
   second issuer. [Solution 05](../05-okta-jwt/).
 - **The body's integrity is the point.** A key authenticates the sender and says

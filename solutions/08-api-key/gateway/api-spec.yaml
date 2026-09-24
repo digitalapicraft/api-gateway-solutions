@@ -137,7 +137,7 @@ paths:
 #
 # Note what is NOT here. There is no cors block: these callers are embedded
 # devices, not browsers, and a wildcard CORS policy on a fleet API grants browser
-# origins an access path the fleet itself never needs. Solution 01 carries cors
+# origins an access path the fleet itself never needs. Solution 02 carries cors
 # because its callers include browser clients; this one deliberately does not.
 #
 # helix-auth is applied per route rather than at the document root only because

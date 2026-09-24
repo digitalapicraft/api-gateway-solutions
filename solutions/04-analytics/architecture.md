@@ -64,7 +64,7 @@ built decide how useful its rows are:
 - **Identity → attribution.** An API that resolves the caller (`helix-auth`)
   produces rows carrying `app_name` / `developer` / `product_name`. An anonymous API
   attributes to a source-address bucket ("unattributed"). Adding identity is
-  [solution 01](../01-oauth-jwt/) / [solution 03](../03-api-products/) — a decision
+  [solution 02](../02-oauth-jwt/) / [solution 01](../01-api-products/) — a decision
   about the API, not about analytics.
 - **Templating → one row per route.** Group by `route_id` and a templated route
   (`/orders/{id}`) is one row; group by `api_path` and it fragments into one row per

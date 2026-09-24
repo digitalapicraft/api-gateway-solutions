@@ -48,7 +48,7 @@ stays open because the secure option was unimplementable, which is the actual
 status quo being described.
 
 Where the caller *can* run an exchange, it should — see
-[solution 01](../01-oauth-jwt/). The two are not competing designs; they are the
+[solution 02](../02-oauth-jwt/). The two are not competing designs; they are the
 same decision made about different callers.
 
 ## The business outcome
@@ -65,7 +65,7 @@ Two second-order effects usually decide whether the work gets funded:
 
 - **Attribution becomes possible at all.** Per-app analytics and per-app quotas
   need an app to attribute to. This solution is the step that creates one — which
-  is why [solution 03](../03-api-products/) and [solution 04](../04-analytics/)
+  is why [solution 01](../01-api-products/) and [solution 04](../04-analytics/)
   both depend on something like it having happened first.
 - **The backend is not in the change.** No handler is touched, no release train
   is joined, and the team that owns the service does not need a slot in its
