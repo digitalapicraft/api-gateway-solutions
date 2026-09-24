@@ -1,0 +1,6 @@
+# grpcurl -H "X-Unit-Key: {{key}}" -protoset svc.protoset \
+#   -d '{"hello":{"unit_id":"verify","event_id":"verify","earliest_seq":0,"latest_seq":0}}' \
+#   {{gateway}}:443 timing.TimingUnit.Status
+POST https://{{gateway}}/timing.TimingUnit/Status
+content-type: application/grpc
+X-Unit-Key: {{key}}

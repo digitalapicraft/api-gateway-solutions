@@ -1,0 +1,5 @@
+# grpcurl -H "X-Unit-Key: {{key}}" -protoset svc.protoset \
+#   -d '{"from":"verify"}' {{gateway}}:443 timing.TimingUnit.Ping
+POST https://{{gateway}}/timing.TimingUnit/Ping
+content-type: application/grpc
+X-Unit-Key: {{key}}

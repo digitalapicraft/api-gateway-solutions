@@ -1,0 +1,174 @@
+# =============================================================================
+# 15-grpc-proxy — the gateway in front of a bidirectional-streaming gRPC
+# service: authentication at connection initiation, concurrency caps per
+# caller, and connection telemetry, without touching the service.
+#
+# READ THIS FIRST — THIS PACKAGE IS SHAPED DIFFERENTLY FROM EVERY OTHER ONE.
+#
+# The OpenAPI document does NOT describe the gRPC-ness of this API. It cannot:
+# OpenAPI has no way to say "this upstream speaks gRPC". That lives on the
+# UPSTREAM object in the control plane, which is a separate resource bound to a
+# revision per environment:
+#
+#   POST /api/orgs/{orgId}/envs/{envId}/upstreams
+#   {"name":"timing-grpc","specification":{
+#      "scheme":"grpc",                       <-- or grpcs for TLS
+#      "type":"roundrobin","pass_host":"node",
+#      "nodes":[{"host":"<GRPC_UPSTREAM_HOST>","port":<GRPC_UPSTREAM_PORT>,
+#                "weight":1,"priority":1}]}}
+#
+# So this file is only half the configuration, and the README says so plainly.
+#
+# GOTCHA: changing an upstream's `scheme` does NOT propagate to an already
+# deployed revision. Editing the upstream and redeploying is not enough — you
+# must UNDEPLOY and DEPLOY again. Nothing warns you; the route keeps its old
+# behaviour.
+#
+# ROUTE PATHS ARE gRPC METHOD PATHS: /<package>.<Service>/<Method>, always POST.
+# They are not a design choice; they are what a gRPC client puts on the wire.
+#
+# ONE STREAM IS ONE REQUEST. Every access-phase plugin evaluates exactly once,
+# at stream initiation — which is what makes "authenticate the connection" work
+# at all. It also means a product quota counts STREAMS, NOT MESSAGES: one
+# long-lived connection carrying a million messages consumes one unit. Verified
+# with a limit-count of 1, which allowed five messages on one stream and then
+# rejected the next stream.
+#
+# DO NOT ADD A BODY-TOUCHING PLUGIN TO THESE ROUTES. Anything that buffers or
+# rewrites a body — response-rewrite, xml-to-json, request-validation,
+# pgp-crypto, mocking — assumes a request that ends. A stream does not, and the
+# plugin will break it.
+#
+# NO SECRETS ARE IN THIS FILE. The caller's key is provisioned by the control
+# plane onto an app credential and never appears in a spec.
+# =============================================================================
+
+openapi: 3.0.3
+
+info:
+  title: Timing Unit Stream API
+  version: 1.0.0
+  description: >-
+    A bidirectional-streaming gRPC service exposed through the gateway. Timing
+    units hold a connection open for hours; the gateway authenticates each one as
+    it connects, caps how many a single caller may hold, and records how long
+    each stayed open — none of which the service has to implement.
+
+paths:
+  /timing.TimingUnit/Ping:
+    post:
+      summary: Unary health probe
+      description: >-
+        Unary, so it is the cheapest way to prove the path works end to end
+        before you debug a stream. If this returns cleanly and a streaming method
+        does not, the problem is specific to streaming, not to routing.
+      responses:
+        '200': { description: gRPC response }
+        '401': { description: Missing or invalid API key, rejected before the upstream is contacted }
+      x-helix-gateway:
+        plugins:
+          helix-auth:
+            mode: validate
+            validate_auth_type: key-auth
+            apikey:
+              source: header
+              key: X-Unit-Key
+
+  /timing.TimingUnit/Status:
+    post:
+      summary: Bidirectional status stream
+      description: >-
+        Long-lived. The unit sends hardware status; the server acknowledges and
+        pushes back. Authentication happens once, when the stream opens.
+      responses:
+        '200': { description: gRPC bidirectional stream }
+        '401': { description: Missing or invalid API key }
+      x-helix-gateway:
+        plugins:
+          helix-auth:
+            mode: validate
+            validate_auth_type: key-auth
+            apikey:
+              source: header
+              key: X-Unit-Key
+
+
+  /timing.TimingUnit/Commands:
+    post:
+      summary: Bidirectional command channel
+      description: >-
+        The server pushes commands down an open stream. Same policy as Status —
+        authenticated once at initiation, and counted against the same
+        concurrency cap.
+      responses:
+        '200': { description: gRPC bidirectional stream }
+        '401': { description: Missing or invalid API key }
+      x-helix-gateway:
+        plugins:
+          helix-auth:
+            mode: validate
+            validate_auth_type: key-auth
+            apikey:
+              source: header
+              key: X-Unit-Key
+
+
+  /grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo:
+    post:
+      summary: gRPC server reflection (v1alpha)
+      description: >-
+        Lets a client discover this service's schema over the connection itself,
+        so integrators need no .proto file from you and Postman lists the methods
+        on its own. Authenticated like every other route, so discovery needs a
+        credential rather than being open to anyone who finds the host.
+
+        ROUTE BOTH REFLECTION VERSIONS. A client asks for v1 first and falls back
+        to v1alpha, and that fallback only happens if the v1 call gets a clean
+        gRPC answer. Route v1alpha alone and the v1 attempt lands on no route at
+        all, which returns an HTTP 404 the client cannot read as gRPC — so it
+        gives up instead of falling back, and discovery fails even though this
+        route works perfectly.
+      responses:
+        '200': { description: The service descriptors, as a gRPC stream }
+        '401': { description: Missing or invalid API key }
+      x-helix-gateway:
+        plugins:
+          helix-auth:
+            mode: validate
+            validate_auth_type: key-auth
+            apikey:
+              source: header
+              key: X-Unit-Key
+
+
+  /grpc.reflection.v1.ServerReflection/ServerReflectionInfo:
+    post:
+      summary: gRPC server reflection (v1)
+      description: >-
+        The version a client tries FIRST. Present so that negotiation resolves
+        cleanly: the backend answers UNIMPLEMENTED here, the client falls back to
+        v1alpha, and discovery succeeds. Without this route the same attempt hits
+        an HTTP 404 that is not valid gRPC and the client stops there.
+      responses:
+        '200': { description: The service descriptors, as a gRPC stream }
+        '401': { description: Missing or invalid API key }
+      x-helix-gateway:
+        plugins:
+          helix-auth:
+            mode: validate
+            validate_auth_type: key-auth
+            apikey:
+              source: header
+              key: X-Unit-Key
+
+
+# API-wide. request-id gives you a handle for a caller reporting a dropped
+# stream; it is the only way to correlate one connection across the telemetry.
+#
+# Deliberately NOT here: any body-touching plugin, and any CORS block — a gRPC
+# client is not a browser, and grpc-web is a different solution.
+x-helix-gateway:
+  plugins:
+    request-id:
+      algorithm: uuid
+      header_name: X-Request-Id

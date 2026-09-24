@@ -1,0 +1,5 @@
+# Hold stdin open so the stream stays open:
+#   (echo '{"hello":{...}}'; sleep 20) | grpcurl -d @ ... timing.TimingUnit.Commands
+POST https://{{gateway}}/timing.TimingUnit/Commands
+content-type: application/grpc
+X-Unit-Key: {{key}}

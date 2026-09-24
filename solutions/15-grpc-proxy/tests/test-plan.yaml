@@ -1,0 +1,126 @@
+# Test plan — a bidirectional-streaming gRPC service fronted by the gateway.
+#
+# All five cases are executed in order by ../gateway/verify.sh, which exits 0
+# only if every one of them holds.
+#
+# Substitute your own values:
+#   {{gateway}}   gateway host, no scheme, e.g. gw.example.com
+#   {{key}}       the app credential key
+#
+# The two negative cases are ordinary HTTP POSTs, on purpose: a gateway
+# rejection never becomes a valid gRPC response, so asserting it with a gRPC
+# client tells you less than asserting the HTTP status directly.
+
+meta:
+  solution: 15-grpc-proxy
+  version: 1.0.0
+  executor: gateway/verify.sh
+  note: >-
+    Requires grpcurl. No descriptor file is needed: this package routes gRPC
+    reflection, so the schema is discovered over the connection. Set PROTOSET
+    only if you chose not to route reflection.
+  status: >-
+    EXECUTED against live deployments on two environments, 6/6 passing on both.
+    See validation/gateway-validation.yaml.
+
+cases:
+  - id: no-key
+    type: negative
+    intent: >-
+      helix-auth refuses a stream that carries no credential, at initiation,
+      before the upstream is contacted.
+    request: requests/no-key.http
+    expected: expected/no-key-401.json
+    expected_status: 401
+    response_notes: >-
+      Asserted as an HTTP status because that is what the gateway actually emits:
+      401 with a text/plain body rather than a gRPC response. A client shows this
+      as `Unauthenticated` wrapped in a transport complaint, or as an opaque
+      internal error — neither of which names the real problem to the caller.
+
+  - id: invalid-key
+    type: negative
+    intent: >-
+      An unknown key is refused, proving the credential is resolved rather than
+      merely required to be present.
+    request: requests/invalid-key.http
+    expected: expected/invalid-key-401.json
+    expected_status: 401
+    response_notes: >-
+      Same shape as no-key. The distinction matters operationally — the gateway
+      logs differentiate "missing" from "invalid" even though the caller cannot.
+
+  - id: unary
+    type: positive
+    intent: >-
+      An authenticated unary call succeeds end to end. This is the cheapest proof
+      that routing, the gRPC upstream scheme and auth are all correct.
+    request: requests/unary.http
+    expected: expected/unary-200.json
+    expected_status: 200
+    response_notes: >-
+      Run this first when debugging. If unary succeeds, routing, the gRPC
+      upstream scheme and auth are all correct, and anything still failing is
+      specific to streaming.
+    notes: >-
+      The body in the fixture is illustrative; it is whatever your service
+      returns. verify.sh asserts the ABSENCE of an error, not the payload.
+
+  - id: bidi-stream
+    type: positive
+    intent: >-
+      An authenticated bidirectional stream completes and ends with a grpc-status,
+      so the client can tell success from failure rather than only receiving bytes.
+    request: requests/bidi-stream.http
+    expected: expected/bidi-stream-200.json
+    expected_status: 200
+    response_notes: >-
+      Asserting the status, not just the payload, is the point of this case. A
+      stream that delivers every byte but ends without a grpc-status leaves the
+      client unable to distinguish success from failure, and that is the failure
+      this case catches.
+
+  - id: held-stream
+    type: boundary
+    intent: >-
+      A stream held open survives, carries server-pushed messages, and still
+      closes cleanly — the actual shape of the use case, which is long-lived
+      connections rather than short calls.
+    request: requests/held-stream.http
+    expected: expected/held-stream-200.json
+    expected_status: 200
+    response_notes: >-
+      Held for 20s by default. Raise HOLD_SECONDS past the longest idle gap you
+      expect, and keep it below the route's read timeout unless your upstream
+      heartbeats. Server-pushed messages arriving during the hold prove the
+      downstream half of the stream is alive, not just the upstream half.
+    notes: >-
+      20s is a smoke test, not a soak. Before committing to hours-long
+      connections, hold one for longer than your longest idle gap and watch.
+
+  - id: reflection
+    type: positive
+    intent: >-
+      A client discovers the service over the connection — listing it, describing
+      it and invoking a method — with no descriptor file, so integrators need
+      nothing from you but a host and a credential.
+    request: requests/reflection.http
+    expected: expected/reflection-200.json
+    expected_status: 200
+    response_notes: >-
+      This passes only when BOTH reflection versions are routed. A client asks for
+      grpc.reflection.v1 first and falls back to v1alpha, and the fallback happens
+      only if the v1 call gets a clean gRPC answer. Route v1alpha alone and the v1
+      attempt lands on no route, returns an HTTP 404 that is not valid gRPC, and
+      the client stops there.
+    notes: >-
+      Reflection exposes the full service schema, so it carries the same
+      helix-auth block as every other route — discovery needs a credential.
+
+coverage:
+  positive: unary, bidi-stream, reflection
+  negative: no-key, invalid-key
+  boundary: held-stream
+  failure: >-
+    Covered as assertions inside bidi-stream and held-stream — each fails if the
+    stream ends without a grpc-status — rather than as a separate case.

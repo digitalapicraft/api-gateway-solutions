@@ -1,0 +1,52 @@
+# Local validation — structural checks performed before any gateway contact.
+# Evidence only — no dates, and no record of who ran it.
+
+local_validation:
+  status: PASS
+
+  checks:
+    openapi:               PASS   # OpenAPI 3.0.3, parses, every path carries a POST operation and responses
+    route_paths:           PASS   # every path is a gRPC method path, /<package>.<Service>/<Method>, POST only
+    reflection_routes:     PASS   # both grpc.reflection.v1 and v1alpha are routed, each carrying the same auth
+    plugin_fields:         PASS   # every helix-auth field is drawn from the live plugin schema in the target org
+    plugin_scope:          PASS   # helix-auth is route-scoped; request-id is document-root
+    ordering:              PASS   # helix-auth (2450) is the only access-phase plugin on each route; nothing depends on ordering
+    no_body_plugins:       PASS   # no plugin on any route buffers or rewrites a body, which would break streaming
+    secrets:               PASS   # no credentials in the spec; the key is provisioned onto an app credential
+    tests_match_spec:      PASS   # every test case addresses a path and header that exists in the spec
+    fixtures:              PASS   # every expected/ fixture is referenced by a case and carries a status
+
+  warnings:
+    - >-
+      THE SPEC IS ONLY HALF THE CONFIGURATION. The gRPC upstream is a separate
+      control-plane object and cannot be expressed in OpenAPI. A reader who
+      imports this document alone gets routes that proxy over HTTP and a service
+      that does not work.
+    - >-
+      Changing an upstream's scheme does NOT propagate to a deployed revision.
+      Undeploy and deploy again; editing the upstream and redeploying is not
+      enough, and nothing warns you.
+    - >-
+      A gateway rejection is never a valid gRPC response. 401 arrives as an HTTP
+      status with a text/plain body and no grpc-status trailer, so clients
+      surface it as a transport error rather than as an auth failure.
+    - >-
+      Authentication is evaluated ONCE, at stream initiation. A credential
+      revoked while a stream is open stays effective until that stream ends.
+    - >-
+      Schema discovery needs BOTH reflection versions routed. A client tries v1
+      first and falls back to v1alpha only if the v1 call answers cleanly; routing
+      v1alpha alone leaves the v1 attempt on no route and the client stops there.
+
+  assumptions:
+    - The caller presents its credential in gRPC metadata as X-Unit-Key. Metadata
+      travels as HTTP/2 headers, which is why a header-sourced key works at all.
+    - The service, package and method names in the paths are illustrative.
+      Replace them with your own; they must match the wire paths exactly.
+    - The upstream speaks plaintext gRPC on its own port. A TLS backend uses
+      scheme grpcs and its TLS port; nothing else in the package changes.
+
+  not_established_here:
+    - Behaviour of streams held open for hours rather than minutes. verify.sh
+      takes HOLD_SECONDS so you can extend it to your own longest idle gap.
+    - mTLS to the upstream, and client-certificate identity.

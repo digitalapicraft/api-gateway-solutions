@@ -1,0 +1,97 @@
+# Gateway validation — what actually ran against a live gateway.
+# Statuses use the library's vocabulary: Configuration generated, Locally
+# validated, Gateway dry-run passed, Gateway deployed, Functional test passed are
+# five DIFFERENT statuses.
+
+gateway_validation:
+  target: an API imported from gateway/api-spec.yaml, bound to a scheme grpc upstream
+  environment: >-
+    A development organisation, and separately a second environment with
+    different fronting infrastructure. The package deploys unmodified on both.
+  dry_run_status: PASS
+  errors: []
+  warnings:
+    - >-
+      An upstream scheme change did not reach the deployed revision until the
+      revision was undeployed and deployed again. Editing the upstream and
+      redeploying was not sufficient.
+
+  resource_changes:
+    - One gRPC upstream created (scheme grpc, plaintext, to the streaming backend).
+    - One API created by spec import, bound and deployed ACTIVE.
+    - One product, and one app credential under an existing developer.
+
+deployment:
+  status: DEPLOYED
+  note: Deployed ACTIVE to a development environment in order to execute the tests below.
+
+functional_tests:
+  executor: gateway/verify.sh
+  result: 6/6 PASS
+  cases:
+    - id: no-key
+      result: PASS
+      detail: A stream with no credential was refused with 401 before the upstream was contacted.
+    - id: invalid-key
+      result: PASS
+      detail: An unknown key was refused with 401, so the credential is resolved rather than merely required.
+    - id: unary
+      result: PASS
+      detail: An authenticated unary call returned the service's response cleanly.
+    - id: bidi-stream
+      result: PASS
+      detail: >-
+        An authenticated bidirectional stream completed and ended with a
+        grpc-status.
+    - id: held-stream
+      result: PASS
+      detail: >-
+        A stream held open received server-pushed messages and closed cleanly.
+        No idle timeout intervened.
+    - id: reflection
+      result: PASS
+      detail: >-
+        A client listed the services, described the schema and invoked a method
+        with NO descriptor file, discovering everything over the connection.
+        Both reflection versions are routed, which is what makes the client's
+        v1 to v1alpha fallback resolve.
+
+verified_environments:
+  - name: "development"
+    result: verify.sh 6/6
+  - name: "a second environment, different fronting infrastructure"
+    result: >-
+      verify.sh 6/6, including bidirectional streams and a 30s held-open stream
+      receiving server-pushed keepalives every 10s. The package deploys
+      unmodified on both.
+
+findings:
+  - >-
+    ONE STREAM IS ONE REQUEST. Every access-phase plugin evaluates exactly once,
+    at stream initiation — which is what makes authenticating a connection work.
+    It also means a product quota counts STREAMS, NOT MESSAGES: measured with a
+    limit-count of 1, which allowed five messages on a single stream and then
+    rejected the next stream.
+  - >-
+    THE ANALYTICS API REPORTS STREAMS AS FIRST-CLASS REQUESTS, which answers both
+    questions asked of long-lived connections with no extra configuration.
+    requests-count returns one row per stream, grouped by api_path or app_name;
+    response-time with aggregation MAX returns the stream's LIFETIME. Measured
+    against a stream held open for ~25s:
+    /timing.TimingUnit/Commands -> requests-count 1, response-time 24235 ms,
+    and grouped by app_name the same traffic attributed 26 requests and a 24521 ms
+    maximum to the calling app. A stream's row appears when the stream closes,
+    which is when its duration becomes a fact.
+  - >-
+    SCHEMA DISCOVERY NEEDS BOTH REFLECTION VERSIONS ROUTED. With only
+    grpc.reflection.v1alpha routed, a client's first attempt at
+    grpc.reflection.v1 reached no route and received an HTTP 404, which is not a
+    valid gRPC response, so the client stopped rather than falling back. Routing
+    both makes discovery resolve: the v1 call is answered cleanly, the client
+    falls back, and v1alpha serves the descriptors. Verified by listing,
+    describing and invoking with no descriptor file present.
+
+not_established_here:
+  - Streams held open for hours rather than minutes. verify.sh takes HOLD_SECONDS
+    so the hold can be extended to your own longest idle gap.
+  - mTLS and client-certificate identity.

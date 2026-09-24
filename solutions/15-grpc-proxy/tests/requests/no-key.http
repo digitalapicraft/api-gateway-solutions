@@ -1,0 +1,2 @@
+POST https://{{gateway}}/timing.TimingUnit/Ping
+content-type: application/grpc

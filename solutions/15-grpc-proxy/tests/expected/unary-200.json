@@ -1,0 +1,4 @@
+{
+  "status": 200,
+  "body": { "served_by": "grpc-ingest", "connected_units": 17 }
+}

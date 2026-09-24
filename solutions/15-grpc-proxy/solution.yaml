@@ -1,0 +1,94 @@
+# Solution manifest — the traceability spine for this package.
+# Every artifact below corresponds to this one solution version.
+
+solution:
+  name: A bidirectional gRPC stream, authenticated at the edge
+  slug: 15-grpc-proxy
+  version: 1.0.0
+  category:
+    - Security & Access
+    - Protocols & Mediation
+  tags: [grpc, bidirectional-streaming, http2, long-lived-connections, helix-auth, key-auth, reflection]
+
+problem:
+  statement: >-
+    Platform teams need identity and admission control on a bidirectional-streaming
+    gRPC service whose clients hold connections open for hours, because today every
+    such service implements its own credential check and the connections are
+    invisible to the platform, without modifying the service or interrupting the
+    stream.
+
+business_need:
+  summary: >-
+    Move authentication for streaming services to the edge, where it happens once
+    as the connection opens, so a streaming service gains auth as configuration
+    rather than as code, cutting off a client becomes an administrative act rather
+    than a deploy, and per-connection duration becomes attributable to a caller in
+    telemetry the service does not produce.
+
+implementation:
+  gateway_capabilities:
+    - helix-auth (mode validate, key-auth)  # resolves the credential from gRPC metadata, ONCE, at stream initiation
+    - request-id                            # correlation handle for a caller reporting a dropped stream
+    - gRPC reflection routes (v1 + v1alpha) # clients discover the schema over the connection; no .proto to distribute
+    - upstream scheme grpc                  # a CONTROL-PLANE object, not part of this document
+  custom_code_required: false
+  notes: >-
+    This package is shaped differently from every other one in the library: the
+    OpenAPI document is only half the configuration. OpenAPI cannot express "this
+    upstream speaks gRPC", so that lives on the upstream object in the control
+    plane and is bound to the revision per environment. Importing the document
+    alone produces routes that proxy over HTTP to a gRPC port.
+
+    One stream is one request. Every access-phase plugin evaluates exactly once,
+    at stream initiation — which is what makes authenticating a connection
+    possible, and which also means product quota counts STREAMS, NOT MESSAGES.
+    Measured, not assumed.
+
+
+validation:
+  local: PASS
+  gateway_dry_run: PASS
+  deployment: DEPLOYED
+  functional_test: PASS
+  record: validation/
+
+artifacts:
+  documentation: [README.md, architecture.md, business-need.md]
+  source_code: [gateway/api-spec.yaml, gateway/verify.sh]
+  agent_prompt: helix-agent-prompt.md
+  diagrams: [README.md]
+  tests: [tests/test-plan.yaml, tests/requests/, tests/expected/]
+  validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
+
+assumptions:
+  - The service, package and method names in the paths are illustrative. Replace
+    them with yours; they must match the gRPC wire paths exactly.
+  - The credential arrives in gRPC metadata as X-Unit-Key. Metadata travels as
+    HTTP/2 headers, which is why a header-sourced key works.
+  - The upstream speaks plaintext gRPC on its own port. For a TLS backend, set the
+    upstream scheme to grpcs and its TLS port; nothing else changes.
+  - Clients discover the schema through the routed reflection endpoints.
+
+limitations:
+  - The gRPC upstream is a separate control-plane object. This document alone is
+    not a working configuration.
+  - Changing an upstream's scheme does not propagate to a deployed revision — you
+    must undeploy and deploy again, and nothing warns you.
+  - Product quota counts streams, not messages. One connection carrying a million
+    messages consumes one unit.
+  - Authentication is evaluated once, at initiation. A credential revoked while a
+    stream is open remains effective until that stream ends.
+  - Gateway rejections are not valid gRPC responses — 401 arrives as an HTTP
+    status with a text/plain body rather than a gRPC response, so the caller sees
+    an opaque transport error rather than "your key is missing".
+  - A stream's telemetry is recorded when it closes, which is when its duration
+    becomes known. Counts over a recent window answer "how many are open" for
+    every practical purpose.
+  - No plugin that reads or rewrites a body can sit on these routes.
+  - >-
+    Both reflection versions must be routed for schema discovery to work. A client
+    tries v1 first and only falls back to v1alpha if that attempt answers cleanly.
+  - mTLS and client-certificate identity are out of scope.
+
+status: READY   # verify.sh passes 6/6 against a live deployment
