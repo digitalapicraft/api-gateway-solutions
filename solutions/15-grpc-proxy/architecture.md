@@ -12,7 +12,7 @@ Timing unit                Gateway                         gRPC service
     │                  helix-auth (2450, access)                │
     │                  resolves the credential ONCE             │
     │                         │                                 │
-    │        401 ◀────────────┤ (no grpc-status trailer)        │
+    │        401 ◀────────────┤ (an HTTP response, not gRPC)    │
     │                         │                                 │
     │                         │  upstream scheme: grpc          │
     │                         ├────────────────────────────────▶│
@@ -82,29 +82,6 @@ Grouped by `app_name`, the same traffic attributes its connections and their
 durations to the calling app — which is the thing the service would otherwise
 have had to report itself.
 
-## Why trailers decide everything
-
-gRPC carries its result — `grpc-status` — in **HTTP/2 trailers**, sent after the
-body. A client that receives every message but no trailer treats the call as
-failed, because it has no way to know it succeeded.
-
-HTTP/1.1 has no trailers. So any hop between the client and the data plane that
-speaks HTTP/1.1 silently converts a working stream into a broken one, while
-leaving the payload perfectly intact. This is invisible to every tool that
-measures bodies and status codes.
-
-```
-client ──h2──▶ [ HTTP/1.1 proxy ] ──h1──▶ gateway ──grpc──▶ service
-                       ▲
-             trailers are dropped here
-```
-
-Detection is a real gRPC call that asserts the trailers — `verify.sh` case 4. A
-`via` header is not a substitute: a load balancer can announce itself with
-`via: 1.1 <name>` and preserve trailers perfectly. The remedy, where they are
-being dropped, is an HTTP/2 backend protocol on that proxy — an infrastructure
-change, outside anything this package controls.
-
 ## Native vs custom
 
 Nothing is built. One configured plugin and an upstream do the whole job.
@@ -123,7 +100,6 @@ anything that must act on a connection already open.
 | No credential | 401 at initiation, upstream never contacted. Not a valid gRPC response. |
 | Invalid credential | 401, same shape. Logs distinguish it from missing; the caller cannot. |
 | Credential revoked mid-stream | **Nothing.** The open stream continues until it ends. |
-| HTTP/1.1 hop in the path | Payload arrives without a status. Point that proxy at an HTTP/2 backend protocol. |
 | Body-touching plugin on the route | The stream breaks. Do not add one. |
 | Upstream scheme changed | No effect until the revision is undeployed and deployed again. |
 
@@ -131,7 +107,6 @@ anything that must act on a connection already open.
 
 - A gRPC backend reachable from the data plane.
 - An upstream with `scheme: grpc` (or `grpcs`), bound per environment.
-- **Trailer-preserving hops** in front of the data plane, which is what HTTP/2
-  end to end gives you. `verify.sh` case 4 confirms it against your own path.
+- **HTTP/2 to the gateway**, which every gRPC client speaks by default.
 - Nothing on the client side — the routed reflection endpoints let it discover
   the schema over the connection.

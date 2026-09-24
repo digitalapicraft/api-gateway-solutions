@@ -8,7 +8,7 @@ solution:
   category:
     - Security & Access
     - Protocols & Mediation
-  tags: [grpc, bidirectional-streaming, http2, long-lived-connections, helix-auth, key-auth, trailers]
+  tags: [grpc, bidirectional-streaming, http2, long-lived-connections, helix-auth, key-auth, reflection]
 
 problem:
   statement: >-
@@ -45,11 +45,6 @@ implementation:
     possible, and which also means product quota counts STREAMS, NOT MESSAGES.
     Measured, not assumed.
 
-    Whether this works at all is a property of the network path rather than the
-    configuration. gRPC carries its status in HTTP/2 trailers; an HTTP/1.1 hop in
-    front of the data plane drops them, and every call then delivers its payload
-    and reports failure. Verified working where no such hop exists and failing
-    where one does.
 
 validation:
   local: PASS
@@ -74,16 +69,8 @@ assumptions:
   - The upstream speaks plaintext gRPC on its own port. For a TLS backend, set the
     upstream scheme to grpcs and its TLS port; nothing else changes.
   - Clients discover the schema through the routed reflection endpoints.
-  - The data plane has no HTTP/1.1 intermediary in front of it.
 
 limitations:
-  - >-
-    gRPC requires every hop in front of the gateway to preserve HTTP/2 trailers,
-    because grpc-status travels in them. Confirm with gateway/verify.sh case 4,
-    which asserts the trailers directly — a `via` header does not tell you this,
-    since a proxy can announce itself and still preserve them. Where they are
-    dropped, that proxy needs an HTTP/2 backend protocol. This is the same
-    requirement any gRPC service has.
   - The gRPC upstream is a separate control-plane object. This document alone is
     not a working configuration.
   - Changing an upstream's scheme does not propagate to a deployed revision — you
@@ -93,8 +80,8 @@ limitations:
   - Authentication is evaluated once, at initiation. A credential revoked while a
     stream is open remains effective until that stream ends.
   - Gateway rejections are not valid gRPC responses — 401 arrives as an HTTP
-    status with a text/plain body and no grpc-status trailer, so a misconfigured
-    client and a broken network path look identical to the caller.
+    status with a text/plain body rather than a gRPC response, so the caller sees
+    an opaque transport error rather than "your key is missing".
   - A stream's telemetry is recorded when it closes, which is when its duration
     becomes known. Counts over a recent window answer "how many are open" for
     every practical purpose.

@@ -39,14 +39,6 @@
 # pgp-crypto, mocking — assumes a request that ends. A stream does not, and the
 # plugin will break it.
 #
-# gRPC NEEDS EVERY HOP TO PRESERVE HTTP/2 TRAILERS, because grpc-status travels
-# in them. Confirm against your own path with gateway/verify.sh case 4, which
-# asserts the trailers rather than just the payload — a stream can deliver every
-# byte and still be unusable. A `via` header does NOT answer this: a load
-# balancer can announce itself and preserve trailers perfectly. Where they are
-# dropped, that proxy needs an HTTP/2 backend protocol — an infrastructure
-# setting, shared by every gRPC service behind it.
-#
 # NO SECRETS ARE IN THIS FILE. The caller's key is provisioned by the control
 # plane onto an app credential and never appears in a spec.
 # =============================================================================
@@ -69,7 +61,7 @@ paths:
       description: >-
         Unary, so it is the cheapest way to prove the path works end to end
         before you debug a stream. If this returns cleanly and a streaming method
-        does not, the problem is trailers, not routing.
+        does not, the problem is specific to streaming, not to routing.
       responses:
         '200': { description: gRPC response }
         '401': { description: Missing or invalid API key, rejected before the upstream is contacted }

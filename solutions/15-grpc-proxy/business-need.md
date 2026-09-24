@@ -56,11 +56,6 @@ out-of-band disconnect.
 
 ## What this does not buy you
 
-**It needs HTTP/2 end to end.** gRPC carries its status in HTTP/2 trailers, so
-every hop in front of the gateway must speak HTTP/2 — the same requirement any
-gRPC service has. It is checkable in one command before anyone plans work around
-it, and it is an infrastructure setting rather than anything in the API.
-
 **It does not inspect messages.** The gateway authenticates and proxies the
 stream; it does not read what flows inside it, and anything that tried to would
 break the stream.

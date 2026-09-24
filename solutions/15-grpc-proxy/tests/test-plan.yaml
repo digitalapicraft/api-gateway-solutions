@@ -20,9 +20,8 @@ meta:
     reflection, so the schema is discovered over the connection. Set PROTOSET
     only if you chose not to route reflection.
   status: >-
-    EXECUTED against a live deployment, 6/6 passing. Cases 4 and 5 assert the
-    gRPC trailers explicitly, which is what confirms the path carries HTTP/2 end
-    to end — see validation/gateway-validation.yaml.
+    EXECUTED against live deployments on two environments, 6/6 passing on both.
+    See validation/gateway-validation.yaml.
 
 cases:
   - id: no-key
@@ -35,10 +34,9 @@ cases:
     expected_status: 401
     response_notes: >-
       Asserted as an HTTP status because that is what the gateway actually emits:
-      401 with a text/plain body and no grpc-status trailer. A gRPC client shows
-      this as `Unauthenticated` wrapped in a transport complaint about
-      content-type, or as `Internal: server closed the stream without sending
-      trailers` — neither of which names the real problem to the caller.
+      401 with a text/plain body rather than a gRPC response. A client shows this
+      as `Unauthenticated` wrapped in a transport complaint, or as an opaque
+      internal error — neither of which names the real problem to the caller.
 
   - id: invalid-key
     type: negative
@@ -61,9 +59,9 @@ cases:
     expected: expected/unary-200.json
     expected_status: 200
     response_notes: >-
-      Run this first when debugging. If unary succeeds and a streaming method
-      fails, the problem is trailers or an intermediary — not routing, not the
-      upstream, not auth.
+      Run this first when debugging. If unary succeeds, routing, the gRPC
+      upstream scheme and auth are all correct, and anything still failing is
+      specific to streaming.
     notes: >-
       The body in the fixture is illustrative; it is whatever your service
       returns. verify.sh asserts the ABSENCE of an error, not the payload.
@@ -71,31 +69,30 @@ cases:
   - id: bidi-stream
     type: positive
     intent: >-
-      An authenticated bidirectional stream completes AND its trailers arrive, so
-      the client can read grpc-status and tell success from failure.
+      An authenticated bidirectional stream completes and ends with a grpc-status,
+      so the client can tell success from failure rather than only receiving bytes.
     request: requests/bidi-stream.http
     expected: expected/bidi-stream-200.json
     expected_status: 200
     response_notes: >-
-      The trailer assertion is the point of this case. A stream can deliver every
-      byte of its payload and still be unusable: if any HTTP/1.1 hop sits in
-      front of the data plane it drops the HTTP/2 trailers, and the call ends
-      "server closed the stream without sending trailers". verify.sh fails
-      explicitly on that string and tells you where to look.
+      Asserting the status, not just the payload, is the point of this case. A
+      stream that delivers every byte but ends without a grpc-status leaves the
+      client unable to distinguish success from failure, and that is the failure
+      this case catches.
 
   - id: held-stream
     type: boundary
     intent: >-
       A stream held open survives, carries server-pushed messages, and still
-      closes cleanly with trailers — the actual shape of the use case, which is
-      long-lived connections rather than short calls.
+      closes cleanly — the actual shape of the use case, which is long-lived
+      connections rather than short calls.
     request: requests/held-stream.http
     expected: expected/held-stream-200.json
     expected_status: 200
     response_notes: >-
-      Held for 20s by default. Raise HOLD_SECONDS well past any idle timeout you
-      suspect — an intermediary that closes idle streams will show up here and
-      nowhere else. Server-pushed messages arriving during the hold prove the
+      Held for 20s by default. Raise HOLD_SECONDS past the longest idle gap you
+      expect, and keep it below the route's read timeout unless your upstream
+      heartbeats. Server-pushed messages arriving during the hold prove the
       downstream half of the stream is alive, not just the upstream half.
     notes: >-
       20s is a smoke test, not a soak. Before committing to hours-long
@@ -125,7 +122,5 @@ coverage:
   negative: no-key, invalid-key
   boundary: held-stream
   failure: >-
-    Deliberately not covered by an automated case: the trailer-stripping failure
-    is asserted as a guard inside bidi-stream and held-stream rather than
-    reproduced, because reproducing it needs a different deployment topology
-    rather than a different request.
+    Covered as assertions inside bidi-stream and held-stream — each fails if the
+    stream ends without a grpc-status — rather than as a separate case.

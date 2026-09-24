@@ -7,15 +7,13 @@
 #   1. No key           → the gateway rejects with 401 before the upstream
 #   2. Invalid key      → 401 (the key is actually checked)
 #   3. Valid key, unary → a clean gRPC response
-#   4. Valid key, bidi  → a clean bidirectional stream WITH TRAILERS
-#   5. Held-open stream → survives, and still closes cleanly with trailers
+#   4. Valid key, bidi  → a clean bidirectional stream that ends with a status
+#   5. Held-open stream → survives, and still closes cleanly
 #   6. Reflection      → a client discovers the schema over the connection
 #
-# Cases 4 and 5 are the ones that matter, and specifically the TRAILER check.
-# A gRPC call can deliver every byte of its payload and still be unusable: if an
-# HTTP/1.1 hop sits anywhere in front of the data plane it silently drops the
-# HTTP/2 trailers that carry grpc-status, and the client cannot tell success
-# from failure. That failure looks like success in a browser and in curl.
+# Cases 4 and 5 are the ones that matter. They assert that the stream ENDS WITH A
+# grpc-status, not merely that the payload arrived — a gRPC call can deliver every
+# byte and still leave the client unable to tell success from failure.
 #
 # Requires: grpcurl (brew install grpcurl), and a descriptor for your service.
 #
@@ -103,22 +101,21 @@ out="$(grpcurl -max-time 25 -H "${KEY_HEADER}: ${UNIT_KEY}" ${SCHEMA[@]+"${SCHEM
         -d "$BIDI_BODY" "${GATEWAY}:443" "$BIDI_METHOD" 2>&1)"
 case "$out" in
   *"without sending trailers"*)
-    fail "the stream lost its trailers. A hop in front of the data plane is dropping
-      the HTTP/2 trailers that carry grpc-status. That proxy needs an HTTP/2 (or
-      gRPC) backend protocol — see the README's 'Check your path first'." ;;
+    fail "the stream ended without a grpc-status, so the client cannot tell success
+      from failure. Every hop between the client and the gateway must speak HTTP/2." ;;
   *ERROR*) fail "authenticated bidi call failed: $(printf '%s' "$out" | head -3 | tr '\n' ' ')" ;;
 esac
-pass "4. an authenticated bidirectional stream completes, trailers intact"
+pass "4. an authenticated bidirectional stream completes with a grpc-status"
 
 # 5 -----------------------------------------------------------------------------
 out="$( (printf '%s\n' "$BIDI_BODY"; sleep "$HOLD_SECONDS") \
         | grpcurl -max-time $((HOLD_SECONDS + 40)) -H "${KEY_HEADER}: ${UNIT_KEY}" \
             ${SCHEMA[@]+"${SCHEMA[@]}"} -d @ "${GATEWAY}:443" "$HOLD_METHOD" 2>&1 )"
 case "$out" in
-  *"without sending trailers"*) fail "the held-open stream lost its trailers" ;;
+  *"without sending trailers"*) fail "the held-open stream ended without a grpc-status" ;;
   *ERROR*) fail "the held-open stream failed: $(printf '%s' "$out" | head -3 | tr '\n' ' ')" ;;
 esac
-pass "5. a stream held open for ${HOLD_SECONDS}s closed cleanly, trailers intact"
+pass "5. a stream held open for ${HOLD_SECONDS}s closed cleanly"
 
 # 6 -----------------------------------------------------------------------------
 # Both reflection versions must be routed: a client asks for v1 first and only

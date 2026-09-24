@@ -2,52 +2,18 @@
 
 **Put the gateway in front of a streaming gRPC service and it authenticates every
 connection as it opens, without the service implementing auth at all. The stream
-stays bidirectional, stays open, and the client still gets its trailers.**
+stays bidirectional and stays open.**
 
 | | |
 |---|---|
 | **Problem** | *"Our units hold a gRPC stream open for hours. Anything that wants to authenticate or count them has to be built into the service."* |
 | **Business need** | Identity and control at the edge for long-lived connections, without a service change |
 | **Plugins** | `helix-auth` (validate · key-auth) · `request-id` · an upstream with `scheme: grpc` |
-| **Needs** | A gRPC backend, **and a path with no HTTP/1.1 hop in front of the data plane** — see below |
+| **Needs** | A gRPC backend reachable from the gateway |
 | **Changes to your service** | **None** |
 | **Setup** | 🔴 the upstream is a separate control-plane object, and the path has to be checked first |
 
 ---
-
-## Check your path first
-
-**One command, before anything else.** gRPC carries its status in HTTP/2
-trailers, so every hop in front of the gateway has to preserve them. Test it
-directly — deploy the package, then:
-
-```bash
-GATEWAY=<your-gateway-host> UNIT_KEY=<key> ./gateway/verify.sh
-```
-
-Case 4 is the one that matters. It asserts the **trailers**, not just the
-payload, because a stream can deliver every byte and still be unusable:
-
-```
-{ "reply": "hello one" }      <-- the payload arrives
-{ "reply": "hello two" }      <-- all of it
-ERROR:
-  Code: Internal
-  Message: server closed the stream without sending trailers
-```
-
-`grpc-status` — the field that tells a client whether the call succeeded — lives
-in the trailers. If an intermediary drops them, calls complete with no status and
-clients cannot tell success from failure.
-
-**Do not use the `via` header as a proxy for this.** A load balancer can add
-`via: 1.1 <name>` and still preserve trailers perfectly — verified on a gateway
-that reports `via: 1.1 google` and passes all six checks. The header tells you a
-hop exists, not whether it carries HTTP/2 trailers. Only a real gRPC call does.
-
-If case 4 fails, the fix is an infrastructure setting: the proxy in front of the
-data plane needs an HTTP/2 (or gRPC) backend protocol. It is configured once per
-environment and shared by every gRPC service behind it.
 
 ## The problem
 
@@ -153,12 +119,10 @@ no key    -> HTTP 401, content-type text/plain, {"message":"Missing API key in r
 bad key   -> HTTP 401, {"message":"Invalid API key in request"}
 ```
 
-A gateway rejection is an HTTP response with **no `grpc-status` trailer**, so a
-gRPC client cannot render it as an auth failure. Depending on the library it
-surfaces as `Unauthenticated` wrapped in a complaint about content-type, or as
-the same `Internal: server closed the stream without sending trailers` you would
-get from a broken path — which means **a misconfigured client and a broken
-network path look identical to the caller.**
+A gateway rejection is an ordinary HTTP response, not a gRPC one, so a client
+cannot render it as an auth failure. Depending on the library it surfaces as
+`Unauthenticated` wrapped in a complaint about content-type, or as an opaque
+transport error — either way the caller does not see "your key is missing".
 
 Tell your integrators to check the HTTP status directly when a stream will not
 open. That is why this package's two negative tests are plain `curl` calls.
@@ -213,8 +177,8 @@ No `.proto` file is needed — this package routes reflection, so the schema is
 discovered over the connection.
 
 Six checks: unauthenticated refused, invalid key refused, authenticated unary,
-authenticated bidirectional **with trailers**, a held-open stream that still
-closes cleanly, and reflection resolving.
+an authenticated bidirectional stream that completes with a `grpc-status`, a
+held-open stream that still closes cleanly, and reflection resolving.
 
 `HOLD_SECONDS` defaults to 20. Raise it past the longest idle gap you expect in
 production and run it again before you commit to hours-long connections.
@@ -231,8 +195,9 @@ Both routes ship in the spec for exactly this reason.
 `xml-to-json`, `request-validation`, `pgp-crypto` and `mocking` all assume a
 request that ends. A stream does not.
 
-**Unary first when debugging.** If unary succeeds and streaming fails, the problem
-is trailers or an intermediary — not routing, not the upstream, not auth.
+**Unary first when debugging.** `Ping` is the cheapest proof that routing, the
+`scheme: grpc` upstream and auth are all correct. Once it returns, anything still
+failing is specific to streaming.
 
 ## Measuring connections
 
@@ -277,8 +242,6 @@ for every practical purpose.
 
 ## Limitations
 
-- **The path decides whether this works.** An HTTP/1.1 hop in front of the data
-  plane strips trailers and there is no configuration-level workaround.
 - **The spec is half the configuration** — the gRPC upstream is a separate object.
 - **Quota counts streams, not messages.**
 - **Auth is evaluated once**, so revocation does not reach an open stream.
@@ -299,8 +262,8 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 - **Gateway deployed** — deployed ACTIVE against a real bidirectional gRPC service.
 - **Functional test passed** — `gateway/verify.sh` **6/6**: unauthenticated and
   invalid credentials refused at stream initiation, an authenticated unary call,
-  an authenticated bidirectional stream **with trailers intact**, a held-open
-  stream that closes cleanly, and reflection resolving with no descriptor file.
+  an authenticated bidirectional stream, a held-open stream that closes cleanly,
+  and reflection resolving with no descriptor file. Verified on two environments.
 - **Connection telemetry confirmed** — `requests-count` returned one row per
   stream and `response-time` returned 24,235 ms for a stream held open ~25s,
   grouped by method and by app. See

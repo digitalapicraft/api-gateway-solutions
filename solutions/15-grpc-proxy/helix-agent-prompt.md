@@ -2,13 +2,6 @@
 
 A standalone, reusable prompt, plus the reasoning behind its shape.
 
-## Before you start
-
-**Check the path** by running `gateway/verify.sh` once the routes exist. Case 4
-asserts the gRPC trailers, which is the only reliable test — a `via` header does
-not tell you whether an intermediary preserves them. See the
-[README](README.md#check-your-path-first).
-
 ## Step 1 — the upstream (this is not in the spec)
 
 ```text
@@ -100,7 +93,6 @@ catches them.
 
 | Symptom | Cause |
 |---|---|
-| Payload arrives, then `Internal: server closed the stream without sending trailers` | An HTTP/1.1 hop in front of the data plane strips HTTP/2 trailers. Infrastructure, not config. |
 | Every call 502s | The upstream scheme is `http`, or it was changed without an undeploy/deploy cycle. A scheme edit does not reach a deployed revision. |
 | Route never matches | The gRPC method path was normalised. Restore the dot and the single slash. |
 | `Unauthenticated` with a content-type complaint | Working as designed — a gateway 401 is not a valid gRPC response. Check the HTTP status directly. |
