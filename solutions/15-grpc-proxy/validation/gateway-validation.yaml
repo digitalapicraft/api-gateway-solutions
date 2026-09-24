@@ -56,24 +56,36 @@ functional_tests:
         Both reflection versions are routed, which is what makes the client's
         v1 to v1alpha fallback resolve.
 
-prerequisite_http2_end_to_end:
+prerequisite_trailer_preserving_path:
   requirement: >-
     gRPC carries grpc-status in HTTP/2 trailers, so every hop between the client
-    and the data plane must speak HTTP/2. This is a property of gRPC itself, not
-    of this gateway or this package — the same requirement applies to any gRPC
-    service behind any proxy.
+    and the data plane must preserve them. This is a property of gRPC itself, not
+    of this gateway — the same requirement applies to any gRPC service behind any
+    proxy.
   how_to_confirm: >-
-    curl -sI https://<gateway-host>/ | grep -i '^via:'
-    No `via` header naming HTTP/1.1 means the path carries trailers and gRPC works.
+    gateway/verify.sh case 4, which asserts the trailers rather than the payload.
+    A `via` header is NOT a valid test: a load balancer can announce itself with
+    `via: 1.1 <name>` and preserve trailers perfectly. Verified on a gateway that
+    reports `via: 1.1 google` and passes all six checks.
   if_it_is_not_met: >-
-    A proxy that terminates HTTP/2 and forwards HTTP/1.1 delivers the payload and
-    drops the trailers, so calls complete without a status. Point that proxy at an
-    HTTP/2 backend protocol; it is an infrastructure setting, configured once per
-    environment and shared by every gRPC service behind it.
+    Calls deliver their payload and end without a status, so a client cannot tell
+    success from failure. The proxy dropping them needs an HTTP/2 or gRPC backend
+    protocol; it is configured once per environment and shared by every gRPC
+    service behind it.
   covered_by_tests: >-
     verify.sh cases 4 and 5 assert the trailers explicitly, so the check runs on
     every environment the package is deployed to rather than being a note someone
     has to remember.
+
+verified_environments:
+  - name: "a data-plane reached without an intervening L7 proxy"
+    result: verify.sh 6/6
+  - name: "a data-plane behind a cloud load balancer reporting a `via` header"
+    result: >-
+      verify.sh 6/6, including bidirectional streams with trailers intact and a
+      30s held-open stream receiving server-pushed keepalives every 10s. This is
+      the environment that established the `via` header is not a usable proxy for
+      trailer support.
 
 findings:
   - >-

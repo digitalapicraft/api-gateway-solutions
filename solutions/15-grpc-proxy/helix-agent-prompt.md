@@ -4,9 +4,10 @@ A standalone, reusable prompt, plus the reasoning behind its shape.
 
 ## Before you start
 
-**Check the path.** If `curl -sI https://<gateway-host>/ | grep -i '^via:'` shows
-an HTTP/1.1 proxy, stop — gRPC cannot work through it, and no amount of agent
-prompting changes that. See the [README](README.md#check-your-path-first).
+**Check the path** by running `gateway/verify.sh` once the routes exist. Case 4
+asserts the gRPC trailers, which is the only reliable test — a `via` header does
+not tell you whether an intermediary preserves them. See the
+[README](README.md#check-your-path-first).
 
 ## Step 1 — the upstream (this is not in the spec)
 

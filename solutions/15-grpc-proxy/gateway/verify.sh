@@ -103,9 +103,9 @@ out="$(grpcurl -max-time 25 -H "${KEY_HEADER}: ${UNIT_KEY}" ${SCHEMA[@]+"${SCHEM
         -d "$BIDI_BODY" "${GATEWAY}:443" "$BIDI_METHOD" 2>&1)"
 case "$out" in
   *"without sending trailers"*)
-    fail "the stream lost its trailers. An HTTP/1.1 hop in front of the data plane drops
-      the HTTP/2 trailers that carry grpc-status. Check for 'via: 1.1 ...' on a
-      plain response from this host, and see the README's 'Check your path first'." ;;
+    fail "the stream lost its trailers. A hop in front of the data plane is dropping
+      the HTTP/2 trailers that carry grpc-status. That proxy needs an HTTP/2 (or
+      gRPC) backend protocol — see the README's 'Check your path first'." ;;
   *ERROR*) fail "authenticated bidi call failed: $(printf '%s' "$out" | head -3 | tr '\n' ' ')" ;;
 esac
 pass "4. an authenticated bidirectional stream completes, trailers intact"

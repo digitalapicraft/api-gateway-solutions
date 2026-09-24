@@ -78,11 +78,12 @@ assumptions:
 
 limitations:
   - >-
-    gRPC requires HTTP/2 on every hop in front of the gateway, because grpc-status
-    travels in HTTP/2 trailers. Confirm with `curl -sI <host> | grep -i '^via:'`
-    before deploying; a `via` header naming HTTP/1.1 means that proxy needs an
-    HTTP/2 backend protocol first. This is the same requirement any gRPC service
-    has.
+    gRPC requires every hop in front of the gateway to preserve HTTP/2 trailers,
+    because grpc-status travels in them. Confirm with gateway/verify.sh case 4,
+    which asserts the trailers directly — a `via` header does not tell you this,
+    since a proxy can announce itself and still preserve them. Where they are
+    dropped, that proxy needs an HTTP/2 backend protocol. This is the same
+    requirement any gRPC service has.
   - The gRPC upstream is a separate control-plane object. This document alone is
     not a working configuration.
   - Changing an upstream's scheme does not propagate to a deployed revision — you

@@ -99,8 +99,10 @@ client ──h2──▶ [ HTTP/1.1 proxy ] ──h1──▶ gateway ──grpc
              trailers are dropped here
 ```
 
-Detection is one header: `via: 1.1 <name>` on any ordinary response from the
-host. The remedy is an HTTP/2 backend protocol on that proxy — an infrastructure
+Detection is a real gRPC call that asserts the trailers — `verify.sh` case 4. A
+`via` header is not a substitute: a load balancer can announce itself with
+`via: 1.1 <name>` and preserve trailers perfectly. The remedy, where they are
+being dropped, is an HTTP/2 backend protocol on that proxy — an infrastructure
 change, outside anything this package controls.
 
 ## Native vs custom
@@ -129,7 +131,7 @@ anything that must act on a connection already open.
 
 - A gRPC backend reachable from the data plane.
 - An upstream with `scheme: grpc` (or `grpcs`), bound per environment.
-- **HTTP/2 on every hop** in front of the data plane, which is what carries the
-  trailers. One command confirms it: `curl -sI <host> | grep -i '^via:'`.
+- **Trailer-preserving hops** in front of the data plane, which is what HTTP/2
+  end to end gives you. `verify.sh` case 4 confirms it against your own path.
 - Nothing on the client side — the routed reflection endpoints let it discover
   the schema over the connection.

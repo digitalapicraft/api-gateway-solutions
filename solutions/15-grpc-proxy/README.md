@@ -17,21 +17,18 @@ stays bidirectional, stays open, and the client still gets its trailers.**
 
 ## Check your path first
 
-**Do this before anything else. It takes one command and it decides whether this
-solution can work for you at all.**
+**One command, before anything else.** gRPC carries its status in HTTP/2
+trailers, so every hop in front of the gateway has to preserve them. Test it
+directly — deploy the package, then:
 
 ```bash
-curl -sI https://<your-gateway-host>/anything | grep -i '^via:'
+GATEWAY=<your-gateway-host> UNIT_KEY=<key> ./gateway/verify.sh
 ```
 
-If that prints something like `via: 1.1 google`, an HTTP/1.1 proxy sits in front
-of your data plane, and **gRPC will not work through it** — not because of the
-gateway, and not because of anything in this package.
-
-Here is what that failure looks like, and why it is so easy to misread:
+Case 4 is the one that matters. It asserts the **trailers**, not just the
+payload, because a stream can deliver every byte and still be unusable:
 
 ```
-$ grpcurl ... BidiHello
 { "reply": "hello one" }      <-- the payload arrives
 { "reply": "hello two" }      <-- all of it
 ERROR:
@@ -39,18 +36,18 @@ ERROR:
   Message: server closed the stream without sending trailers
 ```
 
-Every byte is delivered and the call still fails. `grpc-status` — the field that
-tells a client whether the call succeeded — travels in **HTTP/2 trailers**, and
-HTTP/1.1 has no way to carry them. The body survives the downgrade; the status
-does not.
+`grpc-status` — the field that tells a client whether the call succeeded — lives
+in the trailers. If an intermediary drops them, calls complete with no status and
+clients cannot tell success from failure.
 
-The fix is infrastructure, not configuration: the backend service in front of the
-data plane has to speak HTTP/2. No spec, plugin or control-plane setting can work
-around it. `gateway/verify.sh` case 4 fails loudly and names this cause.
+**Do not use the `via` header as a proxy for this.** A load balancer can add
+`via: 1.1 <name>` and still preserve trailers perfectly — verified on a gateway
+that reports `via: 1.1 google` and passes all six checks. The header tells you a
+hop exists, not whether it carries HTTP/2 trailers. Only a real gRPC call does.
 
-**Verified both ways.** This package passes 5/5 on a deployment with no such hop,
-and fails cases 4 and 5 on one that has a load balancer in front — same config,
-same spec.
+If case 4 fails, the fix is an infrastructure setting: the proxy in front of the
+data plane needs an HTTP/2 (or gRPC) backend protocol. It is configured once per
+environment and shared by every gRPC service behind it.
 
 ## The problem
 
