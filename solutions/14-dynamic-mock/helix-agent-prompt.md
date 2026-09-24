@@ -1,15 +1,12 @@
 # Agent-mode prompt — build the per-caller sandbox
 
-A standalone, reusable prompt for building this solution with the Helix Agent,
-plus the reasoning behind its shape and what to do when a step misbehaves.
+Four bounded steps: create the API, the registration route, the read route, then
+read the revision back. One ask per step is not stylistic — a monolithic prompt
+pushes the default agent model into an oversized tool call, and the failure is not
+a clean error but a write that reports success and stores nothing.
 
-## Use it in bounded steps, not as one block
-
-The paste-in prompt below mirrors the step-by-step blocks in the
-[README](README.md#build-it-with-the-helix-agent). One bounded ask per step is
-not stylistic: a single monolithic prompt pushes the default agent model into an
-oversized tool call, and the failure is not a clean error — it is a write that
-reports success and stores nothing.
+[AGENT-GUIDE.md](../../AGENT-GUIDE.md) carries the standing rules these prompts
+assume.
 
 ---
 
@@ -73,13 +70,12 @@ stored on each route, so I can confirm both routes carry key-value-map AND
 mocking under their own plugin names.
 ```
 
-**This step is not optional.** Three of the four known agent-mode defects report
-success at every step the agent shows you. Reading the revision back is the only
-thing that catches them.
+**Not optional.** Three of the four known agent-mode defects report success at
+every step the agent shows you.
 
 ---
 
-## Why the prompt is shaped this way
+## Why it's shaped this way
 
 | Choice | Reason |
 |---|---|
@@ -99,7 +95,7 @@ thing that catches them.
 - **Identity** — `x-partner-id` is a header the caller controls. In a real
   deployment, derive the identity from an authenticated credential instead.
 
-## Known failure modes
+## When it goes wrong
 
 | Symptom | Cause |
 |---|---|

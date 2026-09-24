@@ -142,70 +142,68 @@ xml-to-json:
 
 ## Build it with the Helix Agent
 
-This is the recommended path, and it's the one that stays at the right altitude —
-you describe the outcome and let the agent read the real plugin schema, which
-matters more here than anywhere because `xml-to-json`'s fields vary by build. Full
-prompt: [`helix-agent-prompt.md`](helix-agent-prompt.md).
+The recommended path, and the one that stays at the right altitude — you describe
+the outcome and let the agent read the real plugin schema, which matters more here
+than anywhere because `xml-to-json`'s fields vary by build. Full prompt:
+[`helix-agent-prompt.md`](helix-agent-prompt.md).
 
-Build it in two acts. Act 1, get the mediation working with nothing in the way:
+Two acts. Act 1, get the mediation working with nothing in the way:
 
 ```text
-Create a REST API called "Partner Locations API" that fronts a SOAP backend.
+Create a REST API "<<Partner Locations API>>" fronting a SOAP backend at
+<<SOAP_UPSTREAM_URL>>. POST /locations proxies to the upstream path
+<<SOAP_HANDLER_PATH>>, and a plugin transforms request and response bodies so
+partners send and receive JSON while the backend keeps speaking XML.
 
-POST /locations should proxy to the upstream path <SOAP_HANDLER_PATH>, and a plugin
-should transform the request and response bodies so partners send and receive
-JSON while the backend keeps speaking XML.
+Read get_plugin_config for the transform plugin first — I want the schema this org
+actually has, not field names from another gateway. On this build transform_request
+defaults to false, so set it true explicitly; the response direction only fires
+when the client sends Accept: application/json; and don't set Content-Type in
+proxy-rewrite, which runs first and would hide the JSON body. One plugin handles
+both directions — don't add json-to-xml alongside it.
 
-Upstream: <SOAP_UPSTREAM_URL>
+Plugins go in a top-level "plugins" map on the route object, each under its own
+plugin name. No "x-helix-gateway" wrapper — a live route discards it silently and
+still reports success.
 
-Check get_plugin_config for the transform plugin before writing config — I want
-the schema this org actually has, not field names from another gateway.
+Show me the spec, run dry_run_deploy, then read the revision back so I can see
+which plugins actually landed. Wait before deploying.
 
-We are editing a LIVE route object, not authoring an OpenAPI document — so do not
-follow the spec-generator examples for plugin placement. Each route object in
-routeSpec takes "plugins" as a TOP-LEVEL key, and inside it each plugin is
-keyed by its own NAME:
-  { "name": ..., "uri": ..., "methods": [...], "service_id": ...,
-    "plugins": { "<plugin-name>": { <that plugin's own fields> } } }
-Do not promote a plugin's fields into the plugins map: "plugins":
-{"response_status": 202, "content_type": ...} is four broken plugins, not one
-working one — the plugin name level is mandatory.
-There must be no "x-helix-gateway" key anywhere in a route object: a live route
-silently discards that wrapper, the write still reports success, and the route
-deploys with no plugins at all.
-
-Show me the spec, dry-run it, then call get_revision and show me
-the stored routeSpec so I can see the plugins landed. Wait before deploying.
+Tell me anything in the derived JSON shape I wouldn't have designed by hand, and
+whether my handler needs a SOAPAction header. Ask me rather than guessing the
+handler path or the request field names.
 ```
 
-Deploy that and confirm you get JSON back at all. Then act 2, add the auth layer:
+Deploy that and confirm you get JSON back at all. Then act 2, the auth layer:
 
 ```text
-Now deploy a new revision that adds OAuth 2.0:
+Deploy a NEW REVISION that adds OAuth 2.0:
 
 - POST /oauth/token issues a signed JWT from an app's client id and secret,
-  15-minute lifetime
-- POST /locations requires a valid Bearer token, rejected before the transform runs
+  15-minute lifetime (helix-auth generate)
+- POST /locations requires a valid Bearer token, rejected in the access phase
+  BEFORE the transform runs (helix-auth validate, jwt-auth)
 
-Both must use the same signing secret — a literal value (this build does not
-resolve <ENV:...>). Use helix-auth generate and validate — the gateway is the
-issuer, not an external IdP.
+Both use the SAME signing secret, a literal value — this build does not resolve
+<ENV:...>. Apply validate on /locations only, never API-wide, or /oauth/token
+would be protected and nobody could get a first token. Clone the active revision
+so I keep a rollback, or undeploy first — an ACTIVE revision rejects edits. Tell
+me which you did.
 ```
 
 Then create the app:
 
 ```text
-Create a developer "Partner Integrations" with an app subscribed to this API and
-give me the client id and secret.
+Create a developer "<<Partner Integrations>>" with an app subscribed to this API
+and give me the client id and secret. Then curl commands showing, in order: no
+token → 401; client credentials → 200 with an access_token; that token → 200 with
+a JSON body; a garbage token → 401 — and confirm the 401 never reached the SOAP
+backend.
 ```
 
-**Two acts, not one.** If you ask for mediation and auth in a single prompt and
-something breaks, you don't know whether it's the transform or the token. Split at
-the seam and each act is independently verifiable. An ACTIVE revision won't accept
-edits — tell the agent to clone the revision or undeploy first.
-
-See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the full reasoning on acts, the
-confirm gate, and what to say when the agent adds `json-to-xml` anyway.
+**Two acts, not one.** If mediation and auth go in one prompt and something breaks,
+you don't know which half broke. See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the
+confirm gate and what to say when the agent adds `json-to-xml` anyway.
 
 ## Install it directly
 

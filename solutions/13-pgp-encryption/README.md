@@ -289,28 +289,26 @@ material out of the spec entirely.
 
 ## Build it with the Helix Agent
 
-Full prompt with all the constraints: [`helix-agent-prompt.md`](helix-agent-prompt.md).
+Three steps, and expect to retry one. Full prompt with the reasoning, tweak knobs
+and failure modes: [`helix-agent-prompt.md`](helix-agent-prompt.md).
 
-> **Two steps, and expect to retry one of them.** Verified against the hosted
-> agent: it produces exactly the right configuration when the nested `decrypt` /
-> `encrypt` block is shown literally — and any given attempt has a real chance of
-> ending in `stream closed with reason: error`, which is a tool-argument
-> serialisation defect in the agent rather than anything about your prompt. Nothing
-> is written when it happens. Retry; if the second attempt fails the same way,
-> import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) instead.
+> **Don't paste key material into the agent** — the prompts ask for placeholders,
+> and you put the real armored blocks in yourself. And any route write has a real
+> chance of ending in `stream closed with reason: error`, a tool-argument defect in
+> the agent rather than anything about your prompt; nothing is written when it
+> happens. Retry once, then import [`gateway/api-spec.yaml`](gateway/api-spec.yaml).
 
 **Step 1 — the API and the inbound (decrypt) route**
 
 ```text
-Create a new REST API called "Statements API" with ONE route for now.
+Create a REST API "Statements API" with ONE route for now. Upstream
+https://httpbin.org — reuse it if it already exists as an upstream in this org.
+Its /post echoes what it received, which is the only way to be sure the request
+direction worked. Environment test.
 
-Upstream: https://httpbin.org (reuse it if it already exists in this org as an
-upstream). Deploy to the "test" environment.
-
-Route: POST /statements/inbound -> proxy-rewrite uri /post
-
-On that route add pgp-crypto. Its crypto configuration is NESTED under a "decrypt"
-key — it is not flat. The route object must look exactly like this:
+Route: POST /statements/inbound -> proxy-rewrite uri /post, with pgp-crypto. Its
+crypto configuration is NESTED under a "decrypt" key, not flat. The route object
+must look exactly like this:
 
 {
   "name": "statements-inbound",
@@ -332,15 +330,15 @@ key — it is not flat. The route object must look exactly like this:
   }
 }
 
-Leave <PGP_PRIVATE_KEY> as that literal placeholder — I will supply the real armored
-key myself. Do not generate a key and do not ask me to paste one here.
+Leave <PGP_PRIVATE_KEY> as that literal placeholder — I'll supply the real armored
+key myself. Don't generate a key and don't ask me to paste one here.
 
-Put request-id in the SERVICE spec so it applies API-wide.
+Put request-id in the SERVICE spec so it applies API-wide. No "x-helix-gateway"
+key anywhere in a route object — a live route discards it silently and deploys
+with no crypto at all.
 
-There must be no "x-helix-gateway" key anywhere in a route object: a live route
-silently discards that wrapper and deploys with no plugins. Skip validate_route —
-use dry_run_deploy. Bind the upstream, run dry_run_deploy, then call get_revision
-and show me the stored routeSpec. Wait before deploying.
+Bind the upstream, run dry_run_deploy, then read the revision back. Wait before
+deploying.
 ```
 
 **Step 2 — the outbound (encrypt) route**
@@ -350,7 +348,7 @@ Add a second route, keeping the first exactly as it is:
 
   GET /statements/{statementId} -> proxy-rewrite uri /json
 
-with pgp-crypto whose crypto configuration is NESTED under an "encrypt" key:
+with pgp-crypto nested under an "encrypt" key:
 
   "pgp-crypto": {
     "encrypt": {
@@ -365,17 +363,17 @@ with pgp-crypto whose crypto configuration is NESTED under an "encrypt" key:
 Do NOT set "field" on the encrypt block — it makes the response only that field's
 ciphertext and discards the rest of the document.
 
-Send the routeSpec as a JSON array of both route objects. Then call get_revision,
-show me the stored routeSpec, and run dry_run_deploy.
+Send routeSpec as a JSON array of both route objects, then read the revision back
+and run dry_run_deploy.
 ```
 
 **Step 3 — the integration note for the counterparty**
 
 ```text
-Now write me the integration note I should send the partner. It must say that both
+Now write me the integration note to send the partner. It must say that both
 directions use BASE64 of the ASCII-armored message, not the armor itself — a raw
-armored body is rejected — and it must include a worked example of encrypting a
-file and base64-encoding it before the POST.
+armored body is rejected — and include a worked example of encrypting a file and
+base64-encoding it before the POST.
 ```
 
 ## Install it directly

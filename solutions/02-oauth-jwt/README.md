@@ -107,58 +107,49 @@ database doesn't see it, and it doesn't consume a connection from your pool.
 
 ## Build it with the Helix Agent
 
-Recommended path, and it works on a **fresh org** — the agent *creates* the API
-(nothing to find yet) on a public upstream so you get real data immediately. Full
-prompt with all the constraints: [`helix-agent-prompt.md`](helix-agent-prompt.md).
+Recommended path, and it works on a **fresh org** — the agent creates the API on a
+public upstream so you get real data immediately. Two steps; confirm between them.
+Full prompt with the reasoning, tweak knobs and failure modes:
+[`helix-agent-prompt.md`](helix-agent-prompt.md).
 
 ```text
-Create a new REST API called "Posts API" and protect it with OAuth 2.0
-client-credentials authentication. This is a fresh org — I have no existing API.
+Create a REST API "<<Posts API>>" on upstream https://jsonplaceholder.typicode.com,
+environment test, with routes GET /posts, GET /posts/{postId} and POST /posts
+proxied straight through. Fresh org — nothing exists yet.
 
-Upstream: https://jsonplaceholder.typicode.com (public, so it returns real data;
-I'll swap in my own later). Deploy to the "test" environment.
+Add POST /oauth/token using helix-auth in generate mode: it verifies an app's
+client id and secret and issues a signed JWT with a 15-minute lifetime — long
+enough to be usable, short enough that a leaked one expires before it's useful.
 
-Routes (paths match the upstream, so no path rewrite): GET /posts,
-GET /posts/{postId}, POST /posts.
+Protect the /posts routes with helix-auth validate, jwt-auth, referencing the SAME
+signing secret. Apply validate PER ROUTE, not API-wide — API-wide would protect
+/oauth/token and nobody could get a first token.
 
-Add POST /oauth/token using helix-auth generate — it verifies an app's client id
-and secret and issues a signed JWT, 15-minute lifetime. Protect the /posts routes
-with helix-auth validate, validate_auth_type jwt-auth, referencing the SAME
-signing secret. Apply validate per route, not API-wide (or /oauth/token would be
-protected and nobody could get a first token).
+The signing secret is a literal on this build: no <ENV:...> resolution, so put one
+real high-entropy value in both places and remind me not to commit it.
 
-The signing secret is a LITERAL on this build — no <ENV:...> resolution — so use
-one real, high-entropy value in both places and don't commit it. jwt-auth is a
-validate_auth_type of helix-auth, not a standalone plugin.
+Plugins go in a top-level "plugins" map on the route object, each under its own
+plugin name. No "x-helix-gateway" wrapper — a live route discards it silently and
+still reports success.
 
-We are editing a LIVE route object, not authoring an OpenAPI document — so do not
-follow the spec-generator examples for plugin placement. Each route object in
-routeSpec takes "plugins" as a TOP-LEVEL key, and inside it each plugin is
-keyed by its own NAME:
-  { "name": ..., "uri": ..., "methods": [...], "service_id": ...,
-    "plugins": { "<plugin-name>": { <that plugin's own fields> } } }
-Do not promote a plugin's fields into the plugins map: "plugins":
-{"response_status": 202, "content_type": ...} is four broken plugins, not one
-working one — the plugin name level is mandatory.
-There must be no "x-helix-gateway" key anywhere in a route object: a live route
-silently discards that wrapper, the write still reports success, and the route
-deploys with no plugins at all.
-
-Show me the spec, skip validate_route (it fails on this build whatever you put
-in it) and run dry_run_deploy, then call get_revision and show me
-the stored routeSpec so I can see the plugins landed. Wait before deploying.
+Show me the spec, run dry_run_deploy, then read the revision back so I can see
+which plugins actually landed. Wait before deploying.
 ```
 
 Then, in the same session:
 
 ```text
-Create a developer "Partner Integrations" with an app subscribed to this API,
-and give me the client id and secret so I can test the token exchange.
+Create a developer "<<Partner Integrations>>" with an app subscribed to this API,
+and give me the client id and secret.
+
+Then give me curl commands showing, in order: no token → 401; client credentials
+→ 200 with an access_token; that token → 200 on /posts with real data; a garbage
+token → 401; and the CORRECT client id with a WRONG secret → 401.
 ```
 
-The agent creates the API, fetches the real `helix-auth` schema from your org,
-proposes the spec, and stops. See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for why
-the prompt is shaped this way and what to do when the agent takes a wrong turn.
+The agent fetches the real `helix-auth` schema from your org, proposes the spec,
+and stops. See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for what to do when it takes
+a wrong turn.
 
 ## Install it directly
 

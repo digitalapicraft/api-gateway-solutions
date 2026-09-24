@@ -204,19 +204,18 @@ so the key can be keyed on that instead of on a header.
 
 ## Build it with the Helix Agent
 
-Full prompt with all the constraints: [`helix-agent-prompt.md`](helix-agent-prompt.md).
+Two steps. Full prompt with the reasoning, tweak knobs and failure modes:
+[`helix-agent-prompt.md`](helix-agent-prompt.md).
 
 **Step 1 — the registration route**
 
 ```text
-Create a new REST API called "Partner Documents API" with ONE route for now.
+Create a REST API "Partner Documents API" with ONE route for now. Upstream
+https://httpbin.org — reuse it if it already exists as an upstream in this org;
+the org's upstream limit is low. Environment test.
 
-Upstream: https://httpbin.org (reuse it if it already exists in this org as an
-upstream). Deploy to the "test" environment.
-
-Route: POST /partners/keys -> proxy-rewrite uri /post
-
-On that route add key-value-map. The route object must look exactly like this:
+Route: POST /partners/keys -> proxy-rewrite uri /post, with key-value-map. The
+route object must look exactly like this:
 
 {
   "name": "partners-keys",
@@ -235,14 +234,15 @@ On that route add key-value-map. The route object must look exactly like this:
 }
 
 Those $ references are key-value-map templates, not shell variables — leave them
-exactly as written. It is "headers" plural; the singular resolves to nothing.
+exactly as written, don't substitute values. It is "headers" plural; the singular
+resolves to nothing, silently.
 
-Put request-id in the SERVICE spec so it applies API-wide.
+Put request-id in the SERVICE spec so it applies API-wide. No "x-helix-gateway"
+key anywhere in a route object — a live route discards it silently and deploys
+with no plugins.
 
-There must be no "x-helix-gateway" key anywhere in a route object: a live route
-silently discards that wrapper and deploys with no plugins. Skip validate_route —
-use dry_run_deploy. Bind the upstream, run dry_run_deploy, then call get_revision
-and show me the stored routeSpec. Wait before deploying.
+Bind the upstream, run dry_run_deploy, then read the revision back. Wait before
+deploying.
 ```
 
 **Step 2 — the document route**
@@ -253,7 +253,8 @@ Add a second route, keeping the first exactly as it is:
   GET /partners/documents -> proxy-rewrite uri /json
 
 with two plugins. key-value-map FETCHES the same reference the other route writes,
-and pgp-crypto resolves that same reference against what it fetched:
+and pgp-crypto resolves that same reference against what it fetched — they agree
+only because the template is identical, so don't paraphrase either one:
 
   "key-value-map": {
     "fail_action": "close",
@@ -271,13 +272,12 @@ and pgp-crypto resolves that same reference against what it fetched:
     }
   }
 
-The crypto config is NESTED under "encrypt" — it is not flat. Send the routeSpec as
-a JSON array of both routes, then call get_revision, show me the stored routeSpec,
-and run dry_run_deploy.
+The crypto config is NESTED under "encrypt", not flat. Send routeSpec as a JSON
+array of both routes, then read the revision back and run dry_run_deploy.
 ```
 
-> If a step ends in `stream closed with reason: error`, nothing was written — that
-> is a tool-argument defect in the agent, not your prompt. Retry once, then import
+> If a step ends in `stream closed with reason: error`, nothing was written — a
+> tool-argument defect in the agent, not your prompt. Retry once, then import
 > [`gateway/api-spec.yaml`](gateway/api-spec.yaml) for the remaining step.
 
 ## Install it directly

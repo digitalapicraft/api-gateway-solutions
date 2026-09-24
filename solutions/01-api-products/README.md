@@ -125,59 +125,47 @@ Better, but still worth knowing.
 
 ## Build it with the Helix Agent
 
-Recommended path, and it works on a **fresh org** — the agent *creates* the API on
-a public upstream, then rate-limits it with a product quota. Full prompt:
-[`helix-agent-prompt.md`](helix-agent-prompt.md).
+Recommended path, and it works on a **fresh org**. Two steps — paste the first,
+confirm, then the second. Full prompt with the reasoning, tweak knobs and failure
+modes: [`helix-agent-prompt.md`](helix-agent-prompt.md).
 
 ```text
-Create a new REST API called "Posts API" and rate-limit it per app with a product
-quota. This is a fresh org — I have no existing API.
+Create a REST API "<<Posts API>>" on upstream https://jsonplaceholder.typicode.com,
+environment test, with routes GET /posts and GET /posts/{postId} proxied straight
+through. Fresh org — nothing exists yet. Confirm the route has a service_id.
 
-Upstream: https://jsonplaceholder.typicode.com (public, returns real data).
-Environment: test. Routes: GET /posts, GET /posts/{postId} (paths match the
-upstream, no rewrite). Confirm the route has a service_id.
+Identify the caller with helix-auth in validate mode, key-auth, reading the key
+from an "apikey" header. I need the app's product subscription resolved, so don't
+substitute a bare key check.
 
-Identify the caller with helix-auth validate, validate_auth_type key-auth, reading
-the credential key from the "apikey" header (key-auth is a value of helix-auth,
-not a standalone plugin — I want the product subscription resolved).
+Create two products, each with a quota — Free 5/min and Pro 1000/min — and deploy
+both to test. A product with no quota object is a 403, not "unlimited".
 
-Create two products, each with a quota: Free 5/min and Pro 1000/min. Every product
-must carry a quota object (a product without one is a 403, not "unlimited"). Deploy
-both to test. Add api-product-enforcer with error_policy fail_close — the product
-quota IS the rate limiter; do not add any other limiter or key anything on
-consumer_name. Do not put Redis settings in the enforcer.
+Put api-product-enforcer on the routes with error_policy fail_close. The product
+quota IS the rate limiter: no second limiter, nothing keyed on consumer_name, and
+no Redis settings on the enforcer.
 
-We are editing a LIVE route object, not authoring an OpenAPI document — so do not
-follow the spec-generator examples for plugin placement. Each route object in
-routeSpec takes "plugins" as a TOP-LEVEL key, and inside it each plugin is
-keyed by its own NAME:
-  { "name": ..., "uri": ..., "methods": [...], "service_id": ...,
-    "plugins": { "<plugin-name>": { <that plugin's own fields> } } }
-Do not promote a plugin's fields into the plugins map: "plugins":
-{"response_status": 202, "content_type": ...} is four broken plugins, not one
-working one — the plugin name level is mandatory.
-There must be no "x-helix-gateway" key anywhere in a route object: a live route
-silently discards that wrapper, the write still reports success, and the route
-deploys with no plugins at all.
+Plugins go in a top-level "plugins" map on the route object, each under its own
+plugin name. No "x-helix-gateway" wrapper — a live route discards it silently and
+still reports success.
 
-Show me the spec, dry-run it, then call get_revision and show me
-the stored routeSpec so I can see the plugins landed. Wait before deploying.
+Show me the spec, run dry_run_deploy, then read the revision back so I can see
+which plugins actually landed. Wait before deploying.
 ```
 
-Then, and this part is what makes it demonstrable:
+Then the part that makes it demonstrable:
 
 ```text
-Create a test developer with TWO SEPARATE APPS — one subscribed to Free, one to Pro
-— and give me both keys. They must be different apps: two keys on the same app
-share one quota bucket and would not prove isolation.
+Create a developer with TWO SEPARATE apps, one subscribed to Free and one to Pro,
+and give me both keys. Two keys on one app share a bucket and would prove nothing.
 
 Then give me a curl loop showing the Free app getting 429 after 5 requests while
-the Pro app still gets 200s with real data in the same window.
+the Pro app still gets 200s in the same window.
 ```
 
-The agent creates the API and products, proposes the spec, and stops. See
-[AGENT-GUIDE.md](../../AGENT-GUIDE.md) for what to say if the agent reaches for a
-`limit-count` on `consumer_name` — the generic reflex this platform doesn't use.
+See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for what to say if the agent reaches
+for a `limit-count` on `consumer_name` — the generic reflex this platform doesn't
+use.
 
 ## Install it directly
 

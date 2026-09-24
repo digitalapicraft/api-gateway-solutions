@@ -153,15 +153,14 @@ in the context.
 
 ## Build it with the Helix Agent
 
-Full prompt with all the constraints: [`helix-agent-prompt.md`](helix-agent-prompt.md).
+Two steps; confirm between them. Full prompt with the reasoning, tweak knobs and
+failure modes: [`helix-agent-prompt.md`](helix-agent-prompt.md).
 
 ```text
-Create a new REST API called "Storefront API" whose backend needs the calling
-tenant's profile on every request. This is a fresh org — I have no existing API.
-
-Upstream: https://httpbin.org (public; its /headers endpoint echoes request
-headers back, so I can see what the backend received). Deploy to the "test"
-environment.
+Create a REST API "Storefront API" whose backend needs the calling tenant's profile
+on every request. Upstream https://httpbin.org — its /headers endpoint echoes
+request headers back, so I can see what the backend received. Environment test.
+Fresh org — nothing exists yet.
 
 Route: GET /storefront/orders -> proxy-rewrite uri /headers
 
@@ -174,41 +173,36 @@ Add service-callout on that route:
 
 phase MUST be rewrite. proxy-rewrite runs in the rewrite phase, so an access-phase
 callout produces its values after the injection has already happened and the
-headers arrive empty.
+headers arrive empty, with a 200 and no error.
 
-Then have proxy-rewrite SET these headers — set, not add, so a client cannot send
-its own:
+Then have proxy-rewrite SET these headers — set, not add, so a client cannot assert
+its own tenant plan:
   X-Tenant-Plan: ${ctx.helix.service_callout.tenant_plan}
   X-Tenant-Contact: ${ctx.helix.service_callout.tenant_contact}
   X-Profile-Status: ${ctx.helix.service_callout.profile_status}
-Those variable names are literal — the dots are part of the name.
+Those variable names are literal — the dots are part of the name, not a path
+expression. Don't "correct" them into a nested lookup.
 
-Put request-id in the SERVICE spec so it applies API-wide.
+Put request-id in the SERVICE spec so it applies API-wide. Set only the fields you
+need — an empty headers {} or a regex_uri of nulls is rejected at dry-run.
 
-We are editing a LIVE route object, not authoring an OpenAPI document — so do not
-follow the spec-generator examples for plugin placement. Each route object in
-routeSpec takes "plugins" as a TOP-LEVEL key, and inside it each plugin is
-keyed by its own NAME:
-  { "name": ..., "uri": ..., "methods": [...], "service_id": ...,
-    "plugins": { "<plugin-name>": { <that plugin's own fields> } } }
-Do not promote a plugin's fields into the plugins map: "plugins":
-{"response_status": 202, "content_type": ...} is four broken plugins, not one
-working one — the plugin name level is mandatory.
-There must be no "x-helix-gateway" key anywhere in a route object: a live route
-silently discards that wrapper, the write still reports success, and the route
-deploys with no plugins at all. Set only the fields you need.
-Skip validate_route — use dry_run_deploy. Bind the upstream, run dry_run_deploy,
-then call get_revision and show me the stored routeSpec. Wait before deploying.
+Plugins go in a top-level "plugins" map on the route object, each under its own
+plugin name. No "x-helix-gateway" wrapper — a live route discards it silently and
+still reports success.
+
+Bind the upstream, run dry_run_deploy, then read the revision back. Wait before
+deploying.
 ```
 
 Then, in the same session:
 
 ```text
-Now add a second route, POST /storefront/checkout -> proxy-rewrite uri /post, with
-the same callout but error_handling policy fail-close and the message "tenant
-profile unavailable" — on a write path we would rather fail than act without the
-answer. Send the routeSpec as a JSON array of both routes, then show me the stored
-routeSpec and a curl that proves a client cannot spoof X-Tenant-Plan.
+Add a second route, POST /storefront/checkout -> proxy-rewrite uri /post, with the
+same callout but error_handling policy fail-close and the message "tenant profile
+unavailable" — on a write path we would rather fail than act without the answer.
+
+Send routeSpec as a JSON array of both routes, then show me the stored routeSpec
+and a curl that proves a client cannot spoof X-Tenant-Plan.
 ```
 
 ## Install it directly

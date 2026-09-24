@@ -1,30 +1,25 @@
 # Agent-mode prompt — per-partner key material, fetched at request time
 
-Paste these into **Helix Agent Mode**. They work from a **fresh, empty org**: the
-agent *creates* the API, the registration route and the document route, and stops
-at the dry-run. No key material is involved at any point — which is the property
+Two steps, from a **fresh, empty org** to a registration route that stores a
+partner's public key and a document route that fetches it per request. No key
+material passes through the configuration at any point — which is the property
 this package exists to have.
 
-Replace the `<<...>>` values. Everything else is deliberate — the table below
-says why each block earns its place. Read [AGENT-GUIDE.md](../../AGENT-GUIDE.md)
-first if you haven't, and [solution 13](../13-pgp-encryption/helix-agent-prompt.md)
-before this one.
+Read [solution 13](../13-pgp-encryption/helix-agent-prompt.md) first; it is the
+same crypto with the key in the route. [AGENT-GUIDE.md](../../AGENT-GUIDE.md)
+carries the standing rules these prompts assume.
 
 ---
 
-## The prompt
-
-**Step 1 — the registration route**
+## Step 1 — the registration route
 
 ```text
-Create a new REST API called "Partner Documents API" with ONE route for now.
+Create a REST API "Partner Documents API" with ONE route for now. Upstream
+https://httpbin.org — reuse it if it already exists as an upstream in this org;
+the org's upstream limit is low. Environment test.
 
-Upstream: https://httpbin.org (reuse it if it already exists in this org as an
-upstream). Deploy to the "test" environment.
-
-Route: POST /partners/keys -> proxy-rewrite uri /post
-
-On that route add key-value-map. The route object must look exactly like this:
+Route: POST /partners/keys -> proxy-rewrite uri /post, with key-value-map. The
+route object must look exactly like this:
 
 {
   "name": "partners-keys",
@@ -43,17 +38,18 @@ On that route add key-value-map. The route object must look exactly like this:
 }
 
 Those $ references are key-value-map templates, not shell variables — leave them
-exactly as written. It is "headers" plural; the singular resolves to nothing.
+exactly as written, don't substitute values. It is "headers" plural; the singular
+resolves to nothing, silently.
 
-Put request-id in the SERVICE spec so it applies API-wide.
+Put request-id in the SERVICE spec so it applies API-wide. No "x-helix-gateway"
+key anywhere in a route object — a live route discards it silently and deploys
+with no plugins.
 
-There must be no "x-helix-gateway" key anywhere in a route object: a live route
-silently discards that wrapper and deploys with no plugins. Skip validate_route —
-use dry_run_deploy. Bind the upstream, run dry_run_deploy, then call get_revision
-and show me the stored routeSpec. Wait before deploying.
+Bind the upstream, run dry_run_deploy, then read the revision back. Wait before
+deploying.
 ```
 
-**Step 2 — the document route**
+## Step 2 — the document route
 
 ```text
 Add a second route, keeping the first exactly as it is:
@@ -61,7 +57,8 @@ Add a second route, keeping the first exactly as it is:
   GET /partners/documents -> proxy-rewrite uri /json
 
 with two plugins. key-value-map FETCHES the same reference the other route writes,
-and pgp-crypto resolves that same reference against what it fetched:
+and pgp-crypto resolves that same reference against what it fetched — they agree
+only because the template is identical, so don't paraphrase either one:
 
   "key-value-map": {
     "fail_action": "close",
@@ -79,33 +76,30 @@ and pgp-crypto resolves that same reference against what it fetched:
     }
   }
 
-The crypto config is NESTED under "encrypt" — it is not flat. Send the routeSpec as
-a JSON array of both routes, then call get_revision, show me the stored routeSpec,
-and run dry_run_deploy.
+The crypto config is NESTED under "encrypt", not flat. Send routeSpec as a JSON
+array of both routes, then read the revision back and run dry_run_deploy.
 ```
 
-> If a step ends in `stream closed with reason: error`, nothing was written — that
-> is a tool-argument defect in the agent, not your prompt. Retry once, then import
+> If a step ends in `stream closed with reason: error`, nothing was written — a
+> tool-argument defect in the agent, not your prompt. Retry once, then import
 > [`gateway/api-spec.yaml`](gateway/api-spec.yaml) for the remaining step.
-
 
 ---
 
-## Why the prompt is shaped this way
+## Why it's shaped this way
 
-| Block | Why it's there |
-|---|---|
-| **Two steps, not one** | Verified across this set: a route write much past a kilobyte has a real chance of ending in a tool-argument serialisation defect. Smaller writes survive it more often. |
-| **"This is a fresh org — create one"** | On a new free-trial org there is no API to "find". The agent must create it, or it stalls. |
-| **"reuse it if it already exists"** | The org's upstream limit is low, and an agent that cannot create one stops rather than looking for the one already there. |
-| **The literal JSON route object** | Verified: given prose, the agent flattens nested plugin blocks and invents field names. Given the JSON, it reproduces it exactly. |
-| **"Those $ references are key-value-map templates, not shell variables"** | An agent that treats them as placeholders substitutes a value, and the route then serves one partner forever. |
-| **"It is `headers` plural"** | The singular resolves to nothing, silently, and the symptom is indistinguishable from "no key registered". |
-| **"the same reference the other route writes"** | The fetch and the crypto plugin agree only because the template is identical. Said once, an agent will paraphrase one of them. |
-| **"The crypto config is NESTED under `encrypt`"** | Verified: asked in prose, the agent wrote `pgp-crypto: { target, source, public_key }` — flat, with no wrapper, which the schema rejects. |
-| **"no `x-helix-gateway` key anywhere in a route object"** | Verified across this set: nested plugins on a live route are **silently discarded** — the write reports success, the dry-run passes, and the route deploys with nothing on it. |
-| **"call get_revision and show me the stored routeSpec"** | The only check in the toolchain that catches that silent drop. |
-| **"Skip validate_route — use dry_run_deploy"** | Verified: `validate_route` fails on this build whatever you put in it — the tool posts `{"route": …}` and the control plane requires `{"routeSpec": [ … ]}`. |
+- **Literal JSON, not prose.** Verified: given prose, the agent flattens nested
+  plugin blocks and invents field names. Given the JSON, it reproduces it exactly.
+- **The `$` references stay verbatim.** An agent that treats them as placeholders
+  substitutes a value, and the route then serves one partner forever.
+- **`headers`, plural.** The singular resolves to nothing, and the symptom is
+  indistinguishable from "no key registered".
+- **`encrypt` is a wrapper.** Verified: asked in prose, the agent wrote
+  `pgp-crypto: { target, source, public_key }` flat, which the schema rejects.
+- **Two steps.** A route write much past a kilobyte has a real chance of ending in
+  the tool-argument serialisation defect. Smaller writes survive it more often.
+- **Read the revision back.** Nested plugins on a live route are silently
+  discarded: the write reports success and the dry-run passes.
 
 ## Tweak knobs
 
@@ -139,32 +133,18 @@ protect.
 ```
 (That's [solution 13](../13-pgp-encryption/).)
 
-## Known failure modes when running this prompt
+## When it goes wrong
 
-- **`stream closed with reason: error` after a route write.** A serialisation
-  defect in the agent: the arguments arrive as a string with a stray bracket
-  appended and nothing is written. Retry once; then import
-  `gateway/api-spec.yaml` for the remaining step.
-- **Every partner gets the fail-close error.** The reference resolves to nothing.
-  Check `headers` plural, and that the client actually sends the id header.
-- **One partner works and the rest fail.** A fixed string was written where a
-  reference belongs.
-- **The agent substitutes a value for `$request.headers.x-partner-id`.** Reply:
-  `leave the $ references exactly as written — they are resolved by the plugin at
-  request time, not by you.`
-- **The agent writes `pgp-crypto` flat, with no `encrypt` wrapper.** Reply: `the
-  crypto config is nested under encrypt — show me the route object as JSON before
-  you send it.`
-- **The write succeeds and the routes have no plugins.** The agent nested them
-  under `x-helix-gateway`. Read the revision back and rewrite with a top-level
-  `plugins` key.
-- **The document comes back readable.** `fail_policy` is `fail-open` on the
-  consuming plugin. That returns the backend's document in the clear.
-- **`validate_route` errors and the agent stalls.** Not your config — the tool is
-  broken against this control plane. Reply: `skip validate_route, run
-  dry_run_deploy instead.`
-- **Deploy fails with `Only INACTIVE revisions can be updated`.** Clone the
-  revision or undeploy, then apply.
+| Symptom | Cause |
+|---|---|
+| `stream closed with reason: error` after a route write | The agent's arguments arrived with a stray bracket appended; nothing was written. Retry once, then import the spec for the rest. |
+| Every partner gets the fail-close error | The reference resolves to nothing. Check `headers` plural, and that the client sends the id header. |
+| One partner works and the rest fail | A fixed string was written where a reference belongs. |
+| The agent substitutes a value for `$request.headers.x-partner-id` | Reply: leave the `$` references as written — the plugin resolves them at request time, not you. |
+| The agent writes `pgp-crypto` flat | Reply: the crypto config is nested under `encrypt` — show me the route object as JSON before sending. |
+| The write succeeds and the routes have no plugins | Nested under `x-helix-gateway`. Read the revision back and rewrite with a top-level `plugins` key. |
+| The document comes back readable | `fail_policy` is `fail-open` on the consuming plugin, which returns the backend's document in the clear. |
+| Deploy fails: `Only INACTIVE revisions can be updated` | Clone the revision or undeploy, then apply. |
 
 ## Related
 

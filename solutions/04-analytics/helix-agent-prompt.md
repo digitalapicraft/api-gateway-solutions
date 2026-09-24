@@ -6,9 +6,8 @@ metrics tool for you (`get_analytics_metadata` to learn your org's real
 metric/dimension names, then `get_metrics`). Nothing is added to your APIs; this is
 read-only.
 
-The prompts below stay inside what the analytics API actually supports. Read
-[AGENT-GUIDE.md](../../AGENT-GUIDE.md) if you haven't; the catalogue with the raw
-request bodies is [`charts.md`](charts.md).
+The prompts below stay inside what the analytics API actually supports. The
+catalogue with the raw request bodies is [`charts.md`](charts.md).
 
 ---
 
@@ -88,7 +87,7 @@ anonymous traffic shows up unattributed.
 3. `Now show average and max response time side by side for those APIs.`
 4. `Which apps sent the most requests to that API this week?`
 
-## Known failure modes
+## When it goes wrong
 
 - **You ask for p95/p99.** The agent can only return AVG/MIN/MAX. Ask for max as the
   tail signal, or use a tracing/metrics stack for true percentiles.
