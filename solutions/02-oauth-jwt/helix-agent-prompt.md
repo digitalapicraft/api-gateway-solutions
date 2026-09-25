@@ -1,18 +1,15 @@
 # Agent-mode prompt — OAuth 2.0 with gateway-issued JWTs
 
-Three steps, from a **fresh, empty org** to an API behind a token exchange. The
-agent creates the API and the protected routes, adds the token endpoint in a
-second write, then hands you an app's credentials to test with.
-
-**The token route is its own step on purpose.** Asking for all four routes in one
-write puts two different `helix-auth` configurations in a single route array, and
-that is deep enough to trip the agent's argument-serialisation defect: the run
-ends `stream closed with reason: error` and nothing is written. Verified twice
-against a clean org. Two smaller writes both land.
-
-Paste one step at a time and confirm between them. Replace the `<<...>>` values.
+Three steps to an API behind a token exchange: the protected routes, then the
+token endpoint, then an app to test with. Replace the `<<...>>` values.
 [AGENT-GUIDE.md](../../AGENT-GUIDE.md) carries the standing rules these prompts
 assume.
+
+**The token route is its own step on purpose.** All four routes in one write puts
+two `helix-auth` configurations in a single route array, which is deep enough to
+trip the agent's argument-serialisation defect: the run ends `stream closed with
+reason: error` and nothing is written. Verified twice against a clean org; two
+smaller writes both land.
 
 ---
 
@@ -20,57 +17,47 @@ assume.
 
 ```text
 Create a REST API "<<Posts API>>" on upstream https://jsonplaceholder.typicode.com,
-environment test, with routes GET /posts, GET /posts/{postId} and POST /posts
-proxied straight through. Fresh org — nothing exists yet.
+environment test. Routes GET /posts, GET /posts/{postId} and POST /posts, proxied
+straight through.
 
-Protect all three with helix-auth validate, jwt-auth, using this signing secret
-verbatim: <<JWT_SIGNING_SECRET>>. It is a literal on this build — no <ENV:...>
-resolution — so remind me not to commit it.
+Protect all three with helix-auth validate, jwt-auth, signing_secret
+<<JWT_SIGNING_SECRET>> verbatim.
 
-Apply the plugin PER ROUTE, not API-wide. I am adding a token endpoint next and
-an API-wide block would protect it, leaving nobody able to get a first token.
+Put helix-auth on each route and NOT in the service spec. A service-spec block
+applies to every route including the token endpoint I add next, and a caller with
+no token could then never get one.
 
 Plugins go in a top-level "plugins" map on the route object, each under its own
-plugin name. No "x-helix-gateway" wrapper — a live route discards it silently and
-still reports success.
+plugin name, with no "x-helix-gateway" wrapper.
 
-Show me the spec, run dry_run_deploy, then read the revision back so I can see
-which plugins actually landed. Wait before deploying.
+Show me the spec and the stored revision. Do not deploy.
 ```
 
 ## Step 2 — the token endpoint
 
 ```text
-On the "<<Posts API>>" API — find it with list_apis, and if more than one matches,
-ask me before changing anything — add ONE more route, keeping its existing three
-routes exactly as they are:
+On the "<<Posts API>>" API, add POST /oauth/token with helix-auth generate,
+token_ttl 900, signing_secret <<JWT_SIGNING_SECRET>> — the same value the other
+routes use. generate only, no validate block on this route.
 
-POST /oauth/token with helix-auth in generate mode — it verifies an app's client
-id and secret and issues a signed JWT, token_ttl 900: long enough to be usable,
-short enough that a leaked one expires before it's useful. Use the SAME signing
-secret as the other routes; a mismatch rejects every token the moment it is
-issued, and neither side's config hints the value is shared.
+Leave the three existing routes unchanged.
 
-This route takes helix-auth generate ONLY — no validate block on it, or a caller
-with no token could never get one.
-
-Send routeSpec as a JSON array of all four routes, then read the revision back and
-run dry_run_deploy.
+Show me the stored revision. Do not deploy.
 ```
 
-## Step 3 — an app, and the five calls that prove it
+## Step 3 — an app to test with
 
 ```text
 Create a developer "<<Partner Integrations>>" with an app subscribed to the
 "<<Posts API>>" API, and give me the client id and secret.
 
-Then give me curl commands showing, in order: no token → 401; client credentials
-→ 200 with an access_token; that token → 200 on /posts with real data; a garbage
-token → 401; and the CORRECT client id with a WRONG secret → 401.
+Then curl commands showing, in order: no token -> 401; client credentials -> 200
+with an access_token; that token -> 200 on /posts; a garbage token -> 401; and the
+CORRECT client id with a WRONG secret -> 401.
 ```
 
-That last call is the one people skip, and it is the only one that proves the
-secret is verified rather than decorative.
+That last call is the one people skip, and the only one that proves the secret is
+verified rather than decorative.
 
 ---
 
@@ -81,8 +68,14 @@ secret is verified rather than decorative.
   this gateway signed". An external issuer is [solution 05](../05-okta-jwt/).
 - **Every step names the API.** A step that says "the routes you just wrote"
   depends on conversation context; resumed in a session whose active API is
-  something else, the agent will happily edit that one instead. Naming it, plus
-  "ask me if more than one matches", costs a line and removes the whole class.
+  something else, the agent edits that one instead. Naming it is enough — the
+  agent finds it and asks when the name is ambiguous, unprompted.
+- **"NOT in the service spec", not "not API-wide".** The abstract phrasing was
+  tested and failed: told "per route, not API-wide", the agent wrote the routes
+  correctly *and* added `helix-auth` validate to the service spec, which covers
+  the token endpoint and locks everyone out. Naming the artifact, with the
+  consequence, is what holds. It is the one piece of reasoning in this prompt
+  that earns its line.
 - **The token route is written second.** Four routes and two `helix-auth`
   configurations in one write trips the serialisation defect reproducibly — two
   clean-org runs, `stream closed with reason: error`, nothing written. Split, both
