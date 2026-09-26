@@ -1,5 +1,9 @@
 # Business need — OAuth 2.0 with JWT at the gateway
 
+[Overview](readme.md) · **Business need** · [How it works](how-it-works.md) · [Install](install.md) · [Configuration](configuration.md) · [Test & verify](testing.md) · [Changelog](changelog.md)
+
+---
+
 ## The situation
 
 An API that partners depend on is protected by a static key, or by nothing at

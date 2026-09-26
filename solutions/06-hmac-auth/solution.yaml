@@ -1,92 +1,151 @@
-# Solution manifest — the traceability spine for this package.
-# Every artifact below corresponds to this one solution version. If the gateway
-# config changes, bump `version` and re-derive the docs and diagrams from it
-# — never the other way round.
+# Solution manifest — nav, metadata and traceability spine.
+# `nav` drives the tab strip and the gate's required-file list;
+# `implementation.plugins` must match gateway/api-spec.yaml exactly.
 
+layout: v2
 solution:
   name: Signed requests — prove who is calling without sending a secret
   slug: 06-hmac-auth
-  version: 1.0.0
-  category:
-    - Security & Access
-  tags: [hmac, request-signing, message-integrity, webhooks, partner-api, hmac-auth, replay]
-
+  title: Signed requests, without sending the secret
+  summary: A partner, device fleet or webhook sender holds a credential that travels on every
+    request — so any copy of one request is a copy of the credential — and that credential says
+    nothing about the payload it arrived with, so a body altered in transit is indistinguishable
+    from a legit
+  version: 1.1.0
+  released: '2026-09-16'
+  updated: '2026-09-25'
+  category: Security & Access
+  categories:
+  - Security & Access
+  tags:
+  - hmac
+  - request-signing
+  - message-integrity
+  - webhooks
+  - partner-api
+  - hmac-auth
+  - replay
+facts:
+  setup_time: ~20 minutes
+  difficulty: Beginner
+  needs:
+  - An org whose build includes `hmac-auth`
+  - one upstream. The upstream here is the public jsonplaceholder, so no backend of your own
+  plugins:
+  - hmac-auth
+  - request-id
+  build_with:
+  - agent
+  - openapi-import
+nav:
+- tab: Overview
+  file: readme.md
+- tab: Business need
+  file: business-need.md
+- tab: How it works
+  file: how-it-works.md
+- tab: Install
+  file: install.md
+- tab: Configuration
+  file: configuration.md
+- tab: Test & verify
+  file: testing.md
+- tab: Changelog
+  file: changelog.md
 problem:
-  statement: >-
-    A partner, device fleet or webhook sender holds a credential that travels on
-    every request — so any copy of one request is a copy of the credential — and
-    that credential says nothing about the payload it arrived with, so a body
-    altered in transit is indistinguishable from a legitimate one.
-
+  statement: A partner, device fleet or webhook sender holds a credential that travels on every
+    request — so any copy of one request is a copy of the credential — and that credential says
+    nothing about the payload it arrived with, so a body altered in transit is indistinguishable
+    from a legitimate one.
 business_need:
-  summary: >-
-    Authenticate inbound traffic in a way that survives the credential being
-    observed, and detect a payload altered in transit, without a client-side
-    release to rotate anything and without the backend learning about
-    authentication. A captured request becomes worth one request for at most
-    clock_skew seconds, instead of granting indefinite impersonation.
-
+  summary: Authenticate inbound traffic in a way that survives the credential being observed,
+    and detect a payload altered in transit, without a client-side release to rotate anything
+    and without the backend learning about authentication. A captured request becomes worth one
+    request for at most clock_skew seconds, instead of granting indefinite impersonation.
 implementation:
   gateway_capabilities:
-    - hmac-auth (POST route)   # signed_headers @request-target/date/digest, validate_request_body true
-    - hmac-auth (GET route)    # signed_headers @request-target/date, no body to bind
-    - request-id               # correlation across an intentionally opaque 401
+  - hmac-auth (POST route)
+  - hmac-auth (GET route)
+  - request-id
   custom_code_required: false
-  notes: >-
-    hmac-auth is applied PER ROUTE, not at the document root, because the two
-    routes need different signed sets: POST has a body the signature must cover,
-    GET does not, and requiring a digest of the empty string is ceremony rather
-    than security. The cost is that a route added later without an
-    x-helix-gateway block is unauthenticated; the fail-safe alternative is a
-    root-level block carrying the POST configuration.
-    signed_headers is the field that makes this configuration secure and it is
-    NOT in the plugin's defaults. Without it the client chooses what its own
-    signature covers, and a signature over nothing but the keyId replays against
-    any body and any path indefinitely. validate_request_body does not close that
-    gap, because with digest outside the signed set the caller supplies both the
-    body and the matching Digest.
-    NO SECRET APPEARS IN THE SPEC AND NONE CAN — hmac-auth's route schema has no
-    secret field. key_id and secret_key live on the app credential, which the
-    control plane generates and returns once. This is the structural difference
-    from solution 02, whose signing_secret is a literal in the spec.
-    request-validation CANNOT share a route with validate_request_body: it runs
-    earlier in the same phase (2800 vs 2530) and re-encodes the body, so the
-    digest comparison fails on key order and whitespace.
-
+  notes: 'hmac-auth is applied PER ROUTE, not at the document root, because the two routes need
+    different signed sets: POST has a body the signature must cover, GET does not, and requiring
+    a digest of the empty string is ceremony rather than security. The cost is that a route added
+    later without an x-helix-gateway block is unauthenticated; the fail-safe alternative is a
+    root-level block carrying the POST configuration. signed_headers is the field that makes this
+    configuration secure and it is NOT in the plugin''s defaults. Without it the client chooses
+    what its own signature covers, and a signature over nothing but the keyId replays against
+    any body and any path indefinitely. validate_request_body does not close that gap, because
+    with digest outside the signed set the caller supplies both the body and the matching Digest.
+    NO SECRET APPEARS IN THE SPEC AND NONE CAN — hmac-auth''s route schema has no secret field.
+    key_id and secret_key live on the app credential, which the control plane generates and returns
+    once. This is the structural difference from solution 02, whose signing_secret is a literal
+    in the spec. request-validation CANNOT share a route with validate_request_body: it runs earlier
+    in the same phase (2800 vs 2530) and re-encodes the body, so the digest comparison fails on
+    key order and whitespace.'
+  plugins:
+  - name: hmac-auth
+    scope: route
+    at: POST /posts · GET /posts/{postId}
+    role: Configured on this solution's routes.
+  - name: request-id
+    scope: document
+    role: Configured on this solution's routes.
+relations:
+  pairs_with:
+  - 01-api-products
+  alternative_to:
+  - 02-oauth-jwt
+  - 05-okta-jwt
+  - 08-api-key
+  prerequisite_for: []
+  guides:
+  - platform-model
+  - vocabulary
+  - placeholders
+answers: who-is-calling
 validation:
-  # Stage statuses only. What was checked and what happened is in validation/.
   local: PASS
   gateway_dry_run: PASS
   deployment: DEPLOYED
   functional_test: PASS
   record: validation/
-
-artifacts:
-  documentation: [README.md, architecture.md, business-need.md]
-  source_code: [gateway/api-spec.yaml, gateway/products.json, gateway/verify.sh]
-  agent_prompt: helix-agent-prompt.md
-  diagrams: [README.md, architecture.md]   # mermaid blocks, rendered inline by GitHub
-  tests: [tests/test-plan.yaml, tests/requests/, tests/expected/]
-  validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
-
 assumptions:
-  - API name is "Partner Events API" and the signed paths are POST /posts and GET /posts/{postId} (illustrative — replace with yours).
-  - The caller is a server, device or partner backend that can hold a long-lived secret and run signing code. A browser or mobile app cannot, and needs a token flow instead.
-  - Caller clocks are accurate to within clock_skew (300s here). A fleet without NTP produces 401s that look like credential failures.
-  - One app per integration, so a compromised secret is rotated for one partner rather than all of them.
-  - The upstream is bound on the service at import/bind time, not in the OpenAPI paths.
-  - No intermediary between the caller and the gateway normalises, reorders or appends query parameters — @request-target covers the query string, so any such rewrite invalidates every signature.
-
+- API name is "Partner Events API" and the signed paths are POST /posts and GET /posts/{postId}
+  (illustrative — replace with yours).
+- The caller is a server, device or partner backend that can hold a long-lived secret and run
+  signing code. A browser or mobile app cannot, and needs a token flow instead.
+- Caller clocks are accurate to within clock_skew (300s here). A fleet without NTP produces 401s
+  that look like credential failures.
+- One app per integration, so a compromised secret is rotated for one partner rather than all
+  of them.
+- The upstream is bound on the service at import/bind time, not in the OpenAPI paths.
+- No intermediary between the caller and the gateway normalises, reorders or appends query parameters
+  — @request-target covers the query string, so any such rewrite invalidates every signature.
 limitations:
-  - Authentication and message integrity, not authorization. The signature proves who called and that the message is intact; it carries no scopes and no per-route permissions.
-  - No replay protection inside clock_skew. The plugin schema has no nonce field and there is no replay cache — a captured request is valid until its Date ages out. Closing it needs idempotency upstream plus the smallest clock_skew your callers tolerate. Demonstrated as test case 7 rather than asserted.
-  - Symmetric secrets, so no non-repudiation. The gateway can forge a caller's signature as easily as verify it; the signature proves the message came from someone holding the secret, not which end.
-  - No expiry on a credential. A secret_key is valid until somebody rotates it — nothing bounds it the way a token TTL does.
-  - Rotation is a cutover, not a rolling change. Rotating regenerates key_id and secret_key together and the old pair stops working immediately; there is no previous-secret grace period.
-  - The integration cost lands on the caller, who must get canonicalisation byte-exact. Off-the-shelf draft-cavage libraries do NOT interoperate — the keyId line, the trailing newline and the @request-target form each differ.
-  - Not usable from browser JavaScript. Date is a forbidden header for fetch and XHR, and a secret shipped to a user's device is not a secret.
-  - request-validation cannot be added to a signed route. It re-encodes the body ahead of the digest check.
-  - Metering is not included here, but it does compose: api-product-enforcer added to a signed route meters per app exactly as solution 01 describes (tested — a 3/minute quota gave three 201s then 429 "quota exceeded"). This is a scope decision, not a limitation of signing.
-  - hmac-auth's exact schema varies by build. Confirm with get_plugin_config in your org before deploying rather than trusting the field names in this spec.
-
-status: READY   # deployed to a temporary test API and verified: verify.sh exit 0, 8/8
+- Authentication and message integrity, not authorization. The signature proves who called and
+  that the message is intact; it carries no scopes and no per-route permissions.
+- No replay protection inside clock_skew. The plugin schema has no nonce field and there is no
+  replay cache — a captured request is valid until its Date ages out. Closing it needs idempotency
+  upstream plus the smallest clock_skew your callers tolerate. Demonstrated as test case 7 rather
+  than asserted.
+- Symmetric secrets, so no non-repudiation. The gateway can forge a caller's signature as easily
+  as verify it; the signature proves the message came from someone holding the secret, not which
+  end.
+- No expiry on a credential. A secret_key is valid until somebody rotates it — nothing bounds
+  it the way a token TTL does.
+- Rotation is a cutover, not a rolling change. Rotating regenerates key_id and secret_key together
+  and the old pair stops working immediately; there is no previous-secret grace period.
+- The integration cost lands on the caller, who must get canonicalisation byte-exact. Off-the-shelf
+  draft-cavage libraries do NOT interoperate — the keyId line, the trailing newline and the @request-target
+  form each differ.
+- Not usable from browser JavaScript. Date is a forbidden header for fetch and XHR, and a secret
+  shipped to a user's device is not a secret.
+- request-validation cannot be added to a signed route. It re-encodes the body ahead of the digest
+  check.
+- Metering is not included here, but it does compose: api-product-enforcer added to a signed route
+    meters per app exactly as solution 01 describes (tested — a 3/minute quota gave three 201s
+    then 429 "quota exceeded"). This is a scope decision, not a limitation of signing.
+- hmac-auth's exact schema varies by build. Confirm with get_plugin_config in your org before
+  deploying rather than trusting the field names in this spec.
+status: READY

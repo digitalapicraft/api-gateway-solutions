@@ -1,5 +1,9 @@
 # Business need — answers from the data you already have
 
+[Overview](readme.md) · **Business need** · [How it works](how-it-works.md) · [Install](install.md) · [Query catalogue](charts.md) · [Changelog](changelog.md)
+
+---
+
 ## The situation
 
 The gateway has been recording every request since the day it went in. Nothing is

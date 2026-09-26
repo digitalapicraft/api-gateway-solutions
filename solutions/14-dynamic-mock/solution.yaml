@@ -1,109 +1,152 @@
-# Solution manifest — the traceability spine for this package.
-# Every artifact below corresponds to this one solution version. If the gateway
-# config changes, bump `version` and re-derive the docs and diagrams from it
-# — never the other way round.
+# Solution manifest — nav, metadata and traceability spine.
+# `nav` drives the tab strip and the gate's required-file list;
+# `implementation.plugins` must match gateway/api-spec.yaml exactly.
 
+layout: v2
 solution:
   name: A sandbox that answers every partner with that partner's own values
   slug: 14-dynamic-mock
-  version: 1.0.0
-  category:
-    - Developer Experience
-    - Mediation & Mocking
-  tags: [mocking, key-value-map, sandbox, per-caller, ctx, no-backend, dynamic-mock]
-
+  title: A sandbox that answers each partner with their data
+  summary: Integration teams need a sandbox that answers each partner with that partner's own
+    values, because a single canned response lets partner-specific integration bugs through to
+    production, without standing up and operating a service behind the endpoint or shipping a
+    release every ti
+  version: 1.1.0
+  released: '2026-09-23'
+  updated: '2026-09-25'
+  category: Integration
+  categories:
+  - Integration
+  tags:
+  - mocking
+  - key-value-map
+  - sandbox
+  - per-caller
+  - ctx
+  - no-backend
+  - dynamic-mock
+facts:
+  setup_time: ~20 minutes
+  difficulty: Intermediate
+  needs:
+  - A gateway environment with the key-value store provisioned. No backend service, no crypto,
+    no Enterprise plan
+  plugins:
+  - cors
+  - key-value-map
+  - mocking
+  - request-id
+  build_with:
+  - agent
+  - openapi-import
+nav:
+- tab: Overview
+  file: readme.md
+- tab: Business need
+  file: business-need.md
+- tab: How it works
+  file: how-it-works.md
+- tab: Install
+  file: install.md
+- tab: Configuration
+  file: configuration.md
+- tab: Test & verify
+  file: testing.md
+- tab: Changelog
+  file: changelog.md
 problem:
-  statement: >-
-    Integration teams need a sandbox that answers each partner with that partner's
-    own values, because a single canned response lets partner-specific integration
-    bugs through to production, without standing up and operating a service behind
-    the endpoint or shipping a release every time a partner's data changes.
-
+  statement: Integration teams need a sandbox that answers each partner with that partner's own
+    values, because a single canned response lets partner-specific integration bugs through to
+    production, without standing up and operating a service behind the endpoint or shipping a
+    release every time a partner's data changes.
 business_need:
-  summary: >-
-    Turn sandbox data into data. Onboarding a partner becomes a request rather
-    than a release, correcting a value takes seconds rather than a deploy cycle,
-    and the endpoint has no service behind it to run, patch or page anyone about.
-    The integration bugs that used to surface in production surface in the
-    sandbox, because the sandbox finally differs per partner.
-
+  summary: Turn sandbox data into data. Onboarding a partner becomes a request rather than a release,
+    correcting a value takes seconds rather than a deploy cycle, and the endpoint has no service
+    behind it to run, patch or page anyone about. The integration bugs that used to surface in
+    production surface in the sandbox, because the sandbox finally differs per partner.
 implementation:
   gateway_capabilities:
-    - key-value-map (inserts)      # administrative route — stores per-partner values under a key built from the caller's id
-    - key-value-map (fetch+alias)  # read route — resolves the caller's own values, alias makes a dynamic key referenceable
-    - mocking                      # reads ctx.helix.key_value_map and answers; short-circuits, so no upstream is contacted
-    - request-id                   # correlation for "my sandbox says bronze" reports
-    - cors                         # browser-based partner tooling
+  - key-value-map (inserts)
+  - key-value-map (fetch+alias)
+  - mocking
+  - request-id
+  - cors
   custom_code_required: false
-  notes: >-
-    This package exists because a claim in solution 12 was wrong. That package
-    states pgp-crypto is the only way to observe a key-value-map value on a
-    free-trial org. It is not: mocking reads ctx.helix.key_value_map directly.
-    The distinction that survives, and the reason 12 keeps pgp-crypto, is that
-    mocking SHORT-CIRCUITS — it can show a stored value but never hand one to an
-    upstream. Observing and using are different jobs with different consumer sets.
+  notes: 'This package exists because a claim in solution 12 was wrong. That package states pgp-crypto
+    is the only way to observe a key-value-map value on a free-trial org. It is not: mocking reads
+    ctx.helix.key_value_map directly. The distinction that survives, and the reason 12 keeps pgp-crypto,
+    is that mocking SHORT-CIRCUITS — it can show a stored value but never hand one to an upstream.
+    Observing and using are different jobs with different consumer sets.
 
-    Two things make this work and both are counter-intuitive. There are TWO
-    substitution grammars: ${ctx.helix.<ns>.<field>} looks the whole dotted string
-    up as one variable NAME in a flat table that only service-callout writes to,
-    and returns empty here; $ctx.<dotted.path> walks the real request context and
-    reaches the store. On this build only mocking resolves the second form. And
-    alias RENAMES the published field, which is the only way to reference a value
-    fetched under a dynamic key — without it the field is named after whatever the
-    caller sent.
-
+    Two things make this work and both are counter-intuitive. There are TWO substitution grammars:
+    ${ctx.helix.<ns>.<field>} looks the whole dotted string up as one variable NAME in a flat
+    table that only service-callout writes to, and returns empty here; $ctx.<dotted.path> walks
+    the real request context and reaches the store. On this build only mocking resolves the second
+    form. And alias RENAMES the published field, which is the only way to reference a value fetched
+    under a dynamic key — without it the field is named after whatever the caller sent.'
+  plugins:
+  - name: cors
+    scope: document
+    role: Configured on this solution's routes.
+  - name: key-value-map
+    scope: route
+    at: POST /sandbox/partners · GET /sandbox/profile · GET /sandbox/diagnostics
+    role: Configured on this solution's routes.
+  - name: mocking
+    scope: route
+    at: POST /sandbox/partners · GET /sandbox/profile · GET /sandbox/diagnostics
+    role: Configured on this solution's routes.
+  - name: request-id
+    scope: document
+    role: Configured on this solution's routes.
+relations:
+  pairs_with:
+  - 12-key-value-map
+  - 11-service-callout
+  alternative_to: []
+  prerequisite_for: []
+  guides:
+  - platform-model
+  - vocabulary
+  - placeholders
+answers: what-else-must-happen
 validation:
-  # Stage statuses only. What was checked and what happened is in validation/.
   local: PASS
   gateway_dry_run: PASS
   deployment: DEPLOYED
   functional_test: PASS
   record: validation/
-
-artifacts:
-  documentation: [README.md, architecture.md, business-need.md]
-  source_code: [gateway/api-spec.yaml, gateway/verify.sh]
-  agent_prompt: helix-agent-prompt.md
-  diagrams: [README.md]   # mermaid blocks, rendered inline by GitHub
-  tests: [tests/test-plan.yaml, tests/requests/, tests/expected/]
-  validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
-
 assumptions:
-  - The caller's identity arrives in x-partner-id. Illustrative — in a real
-    deployment derive it from an authenticated credential rather than trusting a
-    header the caller sets.
-  - Paths are /sandbox/partners, /sandbox/profile and /sandbox/diagnostics.
-    Illustrative; any paths work.
-  - Values are stored with a 86400s TTL. A deliberate choice, not a platform
-    default — pick it for how often your partners' data changes.
-  - Partner ids contain no colon, which is the separator used in the key template.
-  - The key-value store is provisioned on the target environment; it is
-    infrastructure this spec consumes rather than creates.
-  - The upstream binding exists so the revision can deploy. It is never contacted.
-
+- The caller's identity arrives in x-partner-id. Illustrative — in a real deployment derive it
+  from an authenticated credential rather than trusting a header the caller sets.
+- Paths are /sandbox/partners, /sandbox/profile and /sandbox/diagnostics. Illustrative; any paths
+  work.
+- Values are stored with a 86400s TTL. A deliberate choice, not a platform default — pick it for
+  how often your partners' data changes.
+- Partner ids contain no colon, which is the separator used in the key template.
+- The key-value store is provisioned on the target environment; it is infrastructure this spec
+  consumes rather than creates.
+- The upstream binding exists so the revision can deploy. It is never contacted.
 limitations:
-  - The registration route ships UNAUTHENTICATED. Anyone who can reach it can
-    rewrite any partner's sandbox values. Protecting it is part of adopting this
-    package, not a later refinement.
-  - A store miss and a stored empty string are indistinguishable — both render as
-    "". Store a sentinel if you need to tell them apart.
-  - fail_action close governs store ERRORS, not misses. Nothing here fails closed
-    on an unknown partner; an unregistered caller gets a 200 with empty values.
-  - The registration route's 202 acknowledges that the insert was configured, not
-    that a value was written. Read it back to confirm a write.
-  - mocking SHORT-CIRCUITS, so this pattern can never hand a stored value to a
-    real backend. For that you need pgp-crypto or lua-callout — see solution 12.
-  - A $ctx path segment cannot contain a hyphen. A hyphen silently ends the
-    reference and the remainder passes through as a literal, so a key named
-    partner-tier can be stored but never referenced. Underscores only.
-  - $request.headers.<name> is key-value-map's grammar and does NOT resolve inside
-    mocking. Use $ctx.<path> or an ordinary gateway variable such as
-    $http_x_partner_id.
-  - A ctx reference to a table expands to a JSON object, so it must not sit inside
-    quotes in a JSON body. Quoting it yields invalid JSON with a 200 and no error.
-  - This is a sandbox pattern. It has no schema validation, no persistence
-    guarantees beyond the TTL, and no audit trail of who changed a value.
-  - Every value is visible to anyone who can call the read route with the right
-    partner id, which is a header. Do not store anything confidential.
-
-status: READY   # validated on a gateway; verify.sh passes 6/6
+- The registration route ships UNAUTHENTICATED. Anyone who can reach it can rewrite any partner's
+  sandbox values. Protecting it is part of adopting this package, not a later refinement.
+- A store miss and a stored empty string are indistinguishable — both render as "". Store a sentinel
+  if you need to tell them apart.
+- fail_action close governs store ERRORS, not misses. Nothing here fails closed on an unknown
+  partner; an unregistered caller gets a 200 with empty values.
+- The registration route's 202 acknowledges that the insert was configured, not that a value was
+  written. Read it back to confirm a write.
+- mocking SHORT-CIRCUITS, so this pattern can never hand a stored value to a real backend. For
+  that you need pgp-crypto or lua-callout — see solution 12.
+- A $ctx path segment cannot contain a hyphen. A hyphen silently ends the reference and the remainder
+  passes through as a literal, so a key named partner-tier can be stored but never referenced.
+  Underscores only.
+- $request.headers.<name> is key-value-map's grammar and does NOT resolve inside mocking. Use
+  $ctx.<path> or an ordinary gateway variable such as $http_x_partner_id.
+- A ctx reference to a table expands to a JSON object, so it must not sit inside quotes in a JSON
+  body. Quoting it yields invalid JSON with a 200 and no error.
+- This is a sandbox pattern. It has no schema validation, no persistence guarantees beyond the
+  TTL, and no audit trail of who changed a value.
+- Every value is visible to anyone who can call the read route with the right partner id, which
+  is a header. Do not store anything confidential.
+status: READY

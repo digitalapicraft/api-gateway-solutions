@@ -1,5 +1,9 @@
 # Business need — stop paying a release for every partner's key
 
+[Overview](readme.md) · **Business need** · [How it works](how-it-works.md) · [Install](install.md) · [Configuration](configuration.md) · [Test & verify](testing.md) · [Changelog](changelog.md)
+
+---
+
 ## The risk today
 
 Key material in a route works for the first counterparty and degrades from there,

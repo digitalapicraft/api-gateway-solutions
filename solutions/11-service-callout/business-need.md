@@ -1,5 +1,9 @@
 # Business need — one lookup, one cache, one failure policy
 
+[Overview](readme.md) · **Business need** · [How it works](how-it-works.md) · [Install](install.md) · [Configuration](configuration.md) · [Test & verify](testing.md) · [Changelog](changelog.md)
+
+---
+
 ## The risk today
 
 A shared lookup implemented N times is not N copies of the same code. It is N

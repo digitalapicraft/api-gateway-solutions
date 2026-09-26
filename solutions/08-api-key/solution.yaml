@@ -1,98 +1,146 @@
-# Solution manifest — the traceability spine for this package.
-# Every artifact below corresponds to this one solution version. If the gateway
-# config changes, bump `version` and re-derive the docs and diagrams from it
-# — never the other way round.
+# Solution manifest — nav, metadata and traceability spine.
+# `nav` drives the tab strip and the gate's required-file list;
+# `implementation.plugins` must match gateway/api-spec.yaml exactly.
 
+layout: v2
 solution:
   name: API keys for callers that can't run a token exchange
   slug: 08-api-key
-  version: 1.0.0
-  category:
-    - Security & Access
-  tags: [api-key, key-auth, helix-auth, device-fleet, m2m, revocation, credentials]
-
+  title: API keys for callers that can't do a token exchange
+  summary: An endpoint serving thousands of constrained callers — field devices, legacy middleware,
+    a partner's scheduled job — is protected only by an unpublished URL, because those callers
+    cannot run an OAuth token exchange and cannot be redeployed on the timescale an incident needs.
+    The
+  version: 1.1.0
+  released: '2026-09-21'
+  updated: '2026-09-25'
+  category: Security & Access
+  categories:
+  - Security & Access
+  tags:
+  - api-key
+  - key-auth
+  - helix-auth
+  - device-fleet
+  - m2m
+  - revocation
+  - credentials
+facts:
+  setup_time: ~15 minutes
+  difficulty: Beginner
+  needs:
+  - A fresh org (its default test environment)
+  - one product covering this API
+  - one app per caller. The upstream is public jsonplaceholder, so no backend of your own
+  plugins:
+  - helix-auth
+  - proxy-rewrite
+  - request-id
+  build_with:
+  - agent
+  - openapi-import
+nav:
+- tab: Overview
+  file: readme.md
+- tab: Business need
+  file: business-need.md
+- tab: How it works
+  file: how-it-works.md
+- tab: Install
+  file: install.md
+- tab: Configuration
+  file: configuration.md
+- tab: Test & verify
+  file: testing.md
+- tab: Changelog
+  file: changelog.md
 problem:
-  statement: >-
-    An endpoint serving thousands of constrained callers — field devices, legacy
-    middleware, a partner's scheduled job — is protected only by an unpublished
-    URL, because those callers cannot run an OAuth token exchange and cannot be
-    redeployed on the timescale an incident needs. The operator cannot tell which
-    caller is which, and cannot stop one without stopping all of them.
-
+  statement: An endpoint serving thousands of constrained callers — field devices, legacy middleware,
+    a partner's scheduled job — is protected only by an unpublished URL, because those callers
+    cannot run an OAuth token exchange and cannot be redeployed on the timescale an incident needs.
+    The operator cannot tell which caller is which, and cannot stop one without stopping all of
+    them.
 business_need:
-  summary: >-
-    Give every caller its own credential so that identity is resolved at the edge
-    and revocation becomes a control-plane action taken in seconds rather than a
-    deployment. The credential is long-lived and travels on every request; that is
-    the explicit trade, and fast per-caller revocation is what pays for it.
-    Resolving the app is also the prerequisite for per-app metering and per-app
+  summary: Give every caller its own credential so that identity is resolved at the edge and revocation
+    becomes a control-plane action taken in seconds rather than a deployment. The credential is
+    long-lived and travels on every request; that is the explicit trade, and fast per-caller revocation
+    is what pays for it. Resolving the app is also the prerequisite for per-app metering and per-app
     analytics.
-
 implementation:
   gateway_capabilities:
-    - helix-auth (mode validate, validate_auth_type key-auth)   # resolves the header value to an app credential, access phase
-    - proxy-rewrite                                             # published route paths differ from the upstream's
-    - request-id                                                # correlation across a rejection and the calls that got through
+  - helix-auth (mode validate, validate_auth_type key-auth)
+  - proxy-rewrite
+  - request-id
   custom_code_required: false
-  notes: >-
-    key-auth is a validate_auth_type VALUE of helix-auth, not a standalone plugin
-    on this build. `apikey` with `source` is required in practice: the published
-    JSON schema marks it optional and the plugin's own check_schema rejects the
-    config without it at dry-run.
-    No key or secret appears in the spec — the route names only the header the key
-    arrives in, and the credential is provisioned on the app by the control plane.
-    This is structurally unlike helix-auth generate (solution 02), whose
-    signing_secret IS a literal in the document.
-    secret_validation is deliberately absent: per the plugin's own schema it makes
-    the credential secret an ALTERNATIVE credential accepted when the key is
-    absent, which widens what authenticates rather than requiring more.
-    No cors block: the callers are devices, not browsers.
-
+  notes: 'key-auth is a validate_auth_type VALUE of helix-auth, not a standalone plugin on this
+    build. `apikey` with `source` is required in practice: the published JSON schema marks it
+    optional and the plugin''s own check_schema rejects the config without it at dry-run. No key
+    or secret appears in the spec — the route names only the header the key arrives in, and the
+    credential is provisioned on the app by the control plane. This is structurally unlike helix-auth
+    generate (solution 02), whose signing_secret IS a literal in the document. secret_validation
+    is deliberately absent: per the plugin''s own schema it makes the credential secret an ALTERNATIVE
+    credential accepted when the key is absent, which widens what authenticates rather than requiring
+    more. No cors block: the callers are devices, not browsers.'
+  plugins:
+  - name: helix-auth
+    scope: route
+    at: GET /fleet/price-list · POST /fleet/takings
+    role: Configured on this solution's routes.
+  - name: proxy-rewrite
+    scope: route
+    at: GET /fleet/price-list · POST /fleet/takings
+    role: Configured on this solution's routes.
+  - name: request-id
+    scope: document
+    role: Configured on this solution's routes.
+relations:
+  pairs_with:
+  - 01-api-products
+  alternative_to:
+  - 02-oauth-jwt
+  - 05-okta-jwt
+  - 06-hmac-auth
+  prerequisite_for: []
+  guides:
+  - platform-model
+  - vocabulary
+  - placeholders
+answers: who-is-calling
 validation:
-  # Stage statuses only. What was checked and what happened is in validation/.
   local: PASS
   gateway_dry_run: PASS
   deployment: DEPLOYED
   functional_test: PASS
   record: validation/
-
-artifacts:
-  documentation: [README.md, architecture.md, business-need.md]
-  source_code: [gateway/api-spec.yaml, gateway/verify.sh]
-  agent_prompt: helix-agent-prompt.md
-  diagrams: [README.md]   # mermaid blocks, rendered inline by GitHub
-  tests: [tests/test-plan.yaml, tests/requests/, tests/expected/]
-  validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
-
 assumptions:
-  - API name is "Terminal API" with routes /fleet/price-list and /fleet/takings (illustrative — replace with yours).
-  - The header carrying the key is X-Device-Key. Any name works; the name is part of the contract you publish to callers.
-  - One app per caller. Fewer apps than callers trades away exactly the identity this solution exists to create.
-  - A product containing this API exists and the app is subscribed to it, otherwise a resolved key still yields 403.
-  - The upstream is bound on the service at import/bind time, not expressed in the OpenAPI paths.
-
+- API name is "Terminal API" with routes /fleet/price-list and /fleet/takings (illustrative —
+  replace with yours).
+- The header carrying the key is X-Device-Key. Any name works; the name is part of the contract
+  you publish to callers.
+- One app per caller. Fewer apps than callers trades away exactly the identity this solution exists
+  to create.
+- A product containing this API exists and the app is subscribed to it, otherwise a resolved key
+  still yields 403.
+- The upstream is bound on the service at import/bind time, not expressed in the OpenAPI paths.
 limitations:
-  - The credential travels on every request. Anything able to observe the request —
-    a proxy, a TLS-terminating middlebox, a log with headers enabled — can replay
-    it. Fast revocation is the mitigation; it is not a fix.
-  - An API key has no expiry. There is no equivalent of token_ttl, so a credential
-    is valid until somebody removes the app. Time does not clean up after you.
-  - This is authentication, not authorization. The key proves which app is calling
-    and carries no permissions.
-  - Identity is the APPLICATION, never an end user. No consent and no delegation.
-  - Revocation latency equals the gateway's credential cache interval. Measure it in
-    your own environment and publish that as the SLA rather than quoting a number.
-  - There is no zero-downtime rotation of a single app's credential — rotating in
-    place invalidates the old key the moment the new one is live. Two apps with an
-    overlap is the only zero-downtime path, which matters for fleets that update
-    over weeks.
-  - apikey.source supports `query`, and using it puts the credential into every
-    access log, proxy log, referrer header and browser history the request passes
-    through. The test plan asserts a query-string key is rejected in this package.
-  - >-
-    Setting secret_validation to true does not add a factor. It accepts the
-    credential's secret as an alternative credential when the key is absent.
-  - helix-auth's exact schema varies by build. Confirm with get_plugin_config before
-    deploying rather than trusting the field names in this spec.
-
-status: READY   # validated on a gateway; verify.sh passes 7/7
+- The credential travels on every request. Anything able to observe the request — a proxy, a TLS-terminating
+  middlebox, a log with headers enabled — can replay it. Fast revocation is the mitigation; it
+  is not a fix.
+- An API key has no expiry. There is no equivalent of token_ttl, so a credential is valid until
+  somebody removes the app. Time does not clean up after you.
+- This is authentication, not authorization. The key proves which app is calling and carries no
+  permissions.
+- Identity is the APPLICATION, never an end user. No consent and no delegation.
+- Revocation latency equals the gateway's credential cache interval. Measure it in your own environment
+  and publish that as the SLA rather than quoting a number.
+- There is no zero-downtime rotation of a single app's credential — rotating in place invalidates
+  the old key the moment the new one is live. Two apps with an overlap is the only zero-downtime
+  path, which matters for fleets that update over weeks.
+- apikey.source supports `query`, and using it puts the credential into every access log, proxy
+  log, referrer header and browser history the request passes through. The test plan asserts a
+  query-string key is rejected in this package.
+- Setting secret_validation to true does not add a factor. It accepts the credential's secret
+  as an alternative credential when the key is absent.
+- helix-auth's exact schema varies by build. Confirm with get_plugin_config before deploying rather
+  than trusting the field names in this spec.
+status: READY

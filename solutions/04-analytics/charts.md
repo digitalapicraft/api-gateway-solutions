@@ -1,6 +1,6 @@
 # Analytics query catalogue — read what your gateway already captured
 
-Analytics is captured for **every** request through **every** API, automatically —
+[Overview](readme.md) · [Business need](business-need.md) · [How it works](how-it-works.md) · [Install](install.md) · **Query catalogue** · [Changelog](changelog.md)
 you add nothing to your APIs. This file is the practical part: the queries that
 answer the common questions, each one a real request against the analytics metrics
 API, plus what the API can and cannot do.
