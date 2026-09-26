@@ -1,5 +1,9 @@
 # Business need — a sandbox that differs per partner
 
+[Overview](readme.md) · **Business need** · [How it works](how-it-works.md) · [Install](install.md) · [Configuration](configuration.md) · [Test & verify](testing.md) · [Changelog](changelog.md)
+
+---
+
 ## The situation
 
 You run a partner sandbox. Every partner integrating against your API points at

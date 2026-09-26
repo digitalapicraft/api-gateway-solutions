@@ -1,0 +1,31 @@
+---
+// Renders the solution tab strip above the page title.
+// The source markdown carries the same strip as plain links so the files read
+// correctly on GitHub; hydrate.mjs removes it and passes `tabs` in frontmatter,
+// and this draws the real thing.
+import Default from '@astrojs/starlight/components/PageTitle.astro'
+
+const fm = Astro.locals.starlightRoute.entry.data as Record<string, unknown>
+const tabs = (fm.tabs as string[] | undefined) ?? []
+const slug = fm.slugName as string | undefined
+
+const here = Astro.url.pathname.replace(/\/$/, '')
+const base = import.meta.env.BASE_URL.replace(/\/$/, '')
+const hrefFor = (file: string) =>
+  file.toLowerCase() === 'readme.md'
+    ? `${base}/solutions/${slug}/`
+    : `${base}/solutions/${slug}/${file.replace(/\.md$/, '')}`
+const isCurrent = (file: string) => hrefFor(file).replace(/\/$/, '') === here
+---
+
+{tabs.length > 1 && slug && (
+  <nav class="soln-tabs" aria-label="Solution sections">
+    {tabs.map((t) => {
+      const [label, file] = t.split('|')
+      return isCurrent(file)
+        ? <span class="soln-tab current" aria-current="page">{label}</span>
+        : <a class="soln-tab" href={hrefFor(file)}>{label}</a>
+    })}
+  </nav>
+)}
+<Default><slot /></Default>

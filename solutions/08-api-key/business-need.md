@@ -1,5 +1,9 @@
 # Business need — API keys for callers that can't run a token exchange
 
+[Overview](readme.md) · **Business need** · [How it works](how-it-works.md) · [Install](install.md) · [Configuration](configuration.md) · [Test & verify](testing.md) · [Changelog](changelog.md)
+
+---
+
 ## The risk today
 
 An endpoint whose only protection is an unpublished URL is unprotected. That is

@@ -1,5 +1,9 @@
 # Business need — serving a SOAP backend as REST/JSON
 
+[Overview](readme.md) · **Business need** · [How it works](how-it-works.md) · [Install](install.md) · [Configuration](configuration.md) · [Test & verify](testing.md) · [Changelog](changelog.md)
+
+---
+
 ## The situation
 
 You have a system of record that speaks SOAP. It was built in 2004, or 2007, and

@@ -1,0 +1,430 @@
+{
+  "_note": "Name, category and a link to the published reference. Nothing else, on purpose \u2014 this index links out rather than restating a reference it does not own.",
+  "plugin_count": 106,
+  "plugins": {
+    "ai": {
+      "category": "Miscellaneous",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-miscellaneous#ai"
+    },
+    "ai-aliyun-content-moderation": {
+      "category": "AI",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-ai#ai-aliyun-content-moderation"
+    },
+    "ai-aws-content-moderation": {
+      "category": "AI",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-ai#ai-aws-content-moderation"
+    },
+    "ai-prompt-decorator": {
+      "category": "AI",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-ai#ai-prompt-decorator"
+    },
+    "ai-prompt-guard": {
+      "category": "AI",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-ai#ai-prompt-guard"
+    },
+    "ai-prompt-template": {
+      "category": "AI",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-ai#ai-prompt-template"
+    },
+    "ai-proxy": {
+      "category": "AI",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-ai#ai-proxy"
+    },
+    "ai-proxy-multi": {
+      "category": "AI",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-ai#ai-proxy-multi"
+    },
+    "ai-rag": {
+      "category": "AI",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-ai#ai-rag"
+    },
+    "ai-rate-limiting": {
+      "category": "AI",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-ai#ai-rate-limiting"
+    },
+    "ai-request-rewrite": {
+      "category": "AI",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-ai#ai-request-rewrite"
+    },
+    "api-breaker": {
+      "category": "Traffic",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-traffic#api-breaker"
+    },
+    "api-product-enforcer": {
+      "category": "Traffic",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-traffic#api-product-enforcer"
+    },
+    "attach-consumer-label": {
+      "category": "Transformation",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-transformation#attach-consumer-label"
+    },
+    "authz-casbin": {
+      "category": "Authentication",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-authentication#authz-casbin"
+    },
+    "authz-casdoor": {
+      "category": "Authentication",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-authentication#authz-casdoor"
+    },
+    "authz-keycloak": {
+      "category": "Authentication",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-authentication#authz-keycloak"
+    },
+    "aws-lambda": {
+      "category": "Serverless",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-serverless#aws-lambda"
+    },
+    "azure-functions": {
+      "category": "Serverless",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-serverless#azure-functions"
+    },
+    "basic-auth": {
+      "category": "Authentication",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-authentication#basic-auth"
+    },
+    "body-transformer": {
+      "category": "Transformation",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-transformation#body-transformer"
+    },
+    "cas-auth": {
+      "category": "Authentication",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-authentication#cas-auth"
+    },
+    "chaitin-waf": {
+      "category": "Security",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-security#chaitin-waf"
+    },
+    "clickhouse-logger": {
+      "category": "Observability",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-observability#clickhouse-logger"
+    },
+    "client-control": {
+      "category": "Traffic",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-traffic#client-control"
+    },
+    "consumer-restriction": {
+      "category": "Security",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-security#consumer-restriction"
+    },
+    "cors": {
+      "category": "Security",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-security#cors"
+    },
+    "csrf": {
+      "category": "Security",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-security#csrf"
+    },
+    "datadog": {
+      "category": "Observability",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-observability#datadog"
+    },
+    "degraphql": {
+      "category": "Transformation",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-transformation#degraphql"
+    },
+    "echo": {
+      "category": "General",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-general#echo"
+    },
+    "elasticsearch-logger": {
+      "category": "Observability",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-observability#elasticsearch-logger"
+    },
+    "example-plugin": {
+      "category": "Miscellaneous",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-miscellaneous#example-plugin"
+    },
+    "ext-plugin-post-req": {
+      "category": "General",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-general#ext-plugin-post-req"
+    },
+    "ext-plugin-post-resp": {
+      "category": "General",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-general#ext-plugin-post-resp"
+    },
+    "ext-plugin-pre-req": {
+      "category": "General",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-general#ext-plugin-pre-req"
+    },
+    "fault-injection": {
+      "category": "Transformation",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-transformation#fault-injection"
+    },
+    "file-logger": {
+      "category": "Observability",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-observability#file-logger"
+    },
+    "forward-auth": {
+      "category": "Authentication",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-authentication#forward-auth"
+    },
+    "google-cloud-logging": {
+      "category": "Observability",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-observability#google-cloud-logging"
+    },
+    "grpc-transcode": {
+      "category": "Transformation",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-transformation#grpc-transcode"
+    },
+    "grpc-web": {
+      "category": "Transformation",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-transformation#grpc-web"
+    },
+    "gzip": {
+      "category": "General",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-general#gzip"
+    },
+    "helix-analytics": {
+      "category": "Observability",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-observability#helix-analytics"
+    },
+    "helix-auth": {
+      "category": "Authentication",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-authentication#helix-auth"
+    },
+    "hmac-auth": {
+      "category": "Authentication",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-authentication#hmac-auth"
+    },
+    "http-dubbo": {
+      "category": "Other protocols",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-other-protocols#http-dubbo"
+    },
+    "http-logger": {
+      "category": "Observability",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-observability#http-logger"
+    },
+    "inspect": {
+      "category": "General",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-general#inspect"
+    },
+    "ip-restriction": {
+      "category": "Security",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-security#ip-restriction"
+    },
+    "json-to-xml": {
+      "category": "Transformation",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-transformation#json-to-xml"
+    },
+    "jsonp-wrapper": {
+      "category": "Transformation",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-transformation#jsonp-wrapper"
+    },
+    "jwe-decrypt": {
+      "category": "Authentication",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-authentication#jwe-decrypt"
+    },
+    "jwt-auth": {
+      "category": "Authentication",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-authentication#jwt-auth"
+    },
+    "kafka-logger": {
+      "category": "Observability",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-observability#kafka-logger"
+    },
+    "kafka-proxy": {
+      "category": "Other protocols",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-other-protocols#kafka-proxy"
+    },
+    "key-auth": {
+      "category": "Authentication",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-authentication#key-auth"
+    },
+    "key-value-map": {
+      "category": "General",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-general#key-value-map"
+    },
+    "lago": {
+      "category": "Observability",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-observability#lago"
+    },
+    "ldap-auth": {
+      "category": "Authentication",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-authentication#ldap-auth"
+    },
+    "limit-conn": {
+      "category": "Traffic",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-traffic#limit-conn"
+    },
+    "limit-count": {
+      "category": "Traffic",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-traffic#limit-count"
+    },
+    "limit-req": {
+      "category": "Traffic",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-traffic#limit-req"
+    },
+    "log-data-mask": {
+      "category": "Security",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-security#log-data-mask"
+    },
+    "loggly": {
+      "category": "Observability",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-observability#loggly"
+    },
+    "loki-logger": {
+      "category": "Observability",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-observability#loki-logger"
+    },
+    "lua-callout": {
+      "category": "Serverless",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-serverless#lua-callout"
+    },
+    "mcp-bridge": {
+      "category": "Miscellaneous",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-miscellaneous#mcp-bridge"
+    },
+    "mocking": {
+      "category": "Transformation",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-transformation#mocking"
+    },
+    "multi-auth": {
+      "category": "Authentication",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-authentication#multi-auth"
+    },
+    "opa": {
+      "category": "Authentication",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-authentication#opa"
+    },
+    "openfunction": {
+      "category": "Serverless",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-serverless#openfunction"
+    },
+    "openid-connect": {
+      "category": "Authentication",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-authentication#openid-connect"
+    },
+    "openwhisk": {
+      "category": "Serverless",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-serverless#openwhisk"
+    },
+    "pgp-crypto": {
+      "category": "Transformation",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-transformation#pgp-crypto"
+    },
+    "prometheus": {
+      "category": "Observability",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-observability#prometheus"
+    },
+    "proxy-cache": {
+      "category": "Traffic",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-traffic#proxy-cache"
+    },
+    "proxy-control": {
+      "category": "Traffic",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-traffic#proxy-control"
+    },
+    "proxy-mirror": {
+      "category": "Traffic",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-traffic#proxy-mirror"
+    },
+    "proxy-rewrite": {
+      "category": "Transformation",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-transformation#proxy-rewrite"
+    },
+    "public-api": {
+      "category": "Security",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-security#public-api"
+    },
+    "real-ip": {
+      "category": "General",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-general#real-ip"
+    },
+    "redirect": {
+      "category": "General",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-general#redirect"
+    },
+    "referer-restriction": {
+      "category": "Security",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-security#referer-restriction"
+    },
+    "request-chain": {
+      "category": "General",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-general#request-chain"
+    },
+    "request-id": {
+      "category": "Traffic",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-traffic#request-id"
+    },
+    "request-validation": {
+      "category": "Traffic",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-traffic#request-validation"
+    },
+    "response-rewrite": {
+      "category": "Transformation",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-transformation#response-rewrite"
+    },
+    "rocketmq-logger": {
+      "category": "Observability",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-observability#rocketmq-logger"
+    },
+    "serverless-post-function": {
+      "category": "Miscellaneous",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-miscellaneous#serverless-post-function"
+    },
+    "serverless-pre-function": {
+      "category": "Miscellaneous",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-miscellaneous#serverless-pre-function"
+    },
+    "service-callout": {
+      "category": "General",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-general#service-callout"
+    },
+    "skywalking-logger": {
+      "category": "Observability",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-observability#skywalking-logger"
+    },
+    "sls-logger": {
+      "category": "Observability",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-observability#sls-logger"
+    },
+    "splunk-hec-logging": {
+      "category": "Observability",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-observability#splunk-hec-logging"
+    },
+    "syslog": {
+      "category": "Observability",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-observability#syslog"
+    },
+    "tcp-logger": {
+      "category": "Observability",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-observability#tcp-logger"
+    },
+    "tencent-cloud-cls": {
+      "category": "Observability",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-observability#tencent-cloud-cls"
+    },
+    "traffic-split": {
+      "category": "Traffic",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-traffic#traffic-split"
+    },
+    "ua-restriction": {
+      "category": "Security",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-security#ua-restriction"
+    },
+    "udp-logger": {
+      "category": "Observability",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-observability#udp-logger"
+    },
+    "uri-blocker": {
+      "category": "Security",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-security#uri-blocker"
+    },
+    "wolf-rbac": {
+      "category": "Authentication",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-authentication#wolf-rbac"
+    },
+    "workflow": {
+      "category": "Traffic",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-traffic#workflow"
+    },
+    "xml-to-json": {
+      "category": "Transformation",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-transformation#xml-to-json"
+    },
+    "zipkin": {
+      "category": "Observability",
+      "docs_url": "https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-observability#zipkin"
+    }
+  }
+}

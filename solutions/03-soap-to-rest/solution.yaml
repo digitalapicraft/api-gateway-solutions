@@ -1,106 +1,159 @@
-# Solution manifest — the traceability spine for this package.
-# Every artifact below corresponds to this one solution version. If the gateway
-# config changes, bump `version` and re-derive the docs and diagrams from it
-# — never the other way round.
+# Solution manifest — nav, metadata and traceability spine.
+# `nav` drives the tab strip and the gate's required-file list;
+# `implementation.plugins` must match gateway/api-spec.yaml exactly.
 
+layout: v2
 solution:
   name: Serve a SOAP backend as REST/JSON
   slug: 03-soap-to-rest
-  version: 1.0.0
-  category:
-    - API Transformation
-    - Enterprise & Hybrid
-  tags: [soap, xml, json, protocol-mediation, legacy-modernization, xml-to-json, proxy-rewrite]
-
+  title: Serve a SOAP backend as REST/JSON
+  summary: API teams need to open a SOAP/XML system of record to partners who require REST/JSON
+    because every integration otherwise becomes an adapter service or a rewrite, without modifying
+    a backend that is correct, stable and unsafe to touch.
+  version: 1.1.0
+  released: '2026-08-18'
+  updated: '2026-09-25'
+  category: Mediation & Modernization
+  categories:
+  - Mediation & Modernization
+  tags:
+  - soap
+  - xml
+  - json
+  - protocol-mediation
+  - legacy-modernization
+  - xml-to-json
+  - proxy-rewrite
+facts:
+  setup_time: ~25 minutes
+  difficulty: Intermediate
+  needs:
+  - Your own SOAP endpoint reachable from the gateway (this is a SOAP use case — a REST placeholder
+    like jsonplaceholder can't stand in) and its handler path
+  - a real signing-secret value (literal — see solution 02)
+  - one developer + app
+  - '`xml-to-json` in your org'
+  - a test environment
+  plugins:
+  - cors
+  - helix-auth
+  - proxy-rewrite
+  - request-id
+  - xml-to-json
+  build_with:
+  - agent
+  - openapi-import
+nav:
+- tab: Overview
+  file: readme.md
+- tab: Business need
+  file: business-need.md
+- tab: How it works
+  file: how-it-works.md
+- tab: Install
+  file: install.md
+- tab: Configuration
+  file: configuration.md
+- tab: Test & verify
+  file: testing.md
+- tab: Changelog
+  file: changelog.md
 problem:
-  statement: >-
-    API teams need to open a SOAP/XML system of record to partners who require
-    REST/JSON because every integration otherwise becomes an adapter service or a
-    rewrite, without modifying a backend that is correct, stable and unsafe to
-    touch.
-
+  statement: API teams need to open a SOAP/XML system of record to partners who require REST/JSON
+    because every integration otherwise becomes an adapter service or a rewrite, without modifying
+    a backend that is correct, stable and unsafe to touch.
 business_need:
-  summary: >-
-    Stop the count of services you operate growing with the count of partners you
-    onboard. Integration lead time drops from an adapter project to a
-    configuration change, the system of record leaves the critical path for
-    commercial decisions, and the pressure to rewrite it becomes a technical
-    decision on your own timetable rather than a commercial emergency.
-
+  summary: Stop the count of services you operate growing with the count of partners you onboard.
+    Integration lead time drops from an adapter project to a configuration change, the system
+    of record leaves the critical path for commercial decisions, and the pressure to rewrite it
+    becomes a technical decision on your own timetable rather than a commercial emergency.
 implementation:
   gateway_capabilities:
-    - xml-to-json (transform_request + transform_response)  # request needs transform_request:true (default false); response is content-negotiated on Accept: application/json
-    - proxy-rewrite                         # retarget /locations -> <SOAP_HANDLER_PATH> (path ONLY — no Content-Type override)
-    - helix-auth (mode generate)            # POST /oauth/token — see solution 02
-    - helix-auth (mode validate, jwt-auth)  # POST /locations — rejects in the access phase, BEFORE any transform
-    - request-id                            # correlate the client's JSON with the handler's XML across the hop
-    - cors                                  # browser access; authorization must be in allow_headers
+  - xml-to-json (transform_request + transform_response)
+  - proxy-rewrite
+  - helix-auth (mode generate)
+  - helix-auth (mode validate, jwt-auth)
+  - request-id
+  - cors
   custom_code_required: false
-  notes: >-
-    How this build behaves (the three things that must be set correctly):
-    (1) transform_request DEFAULTS TO false, so an empty xml-to-json block converts
-    the response only; it must be set true. (2) The response transform is
-    content-negotiated — it fires only when the client sends Accept: application/json.
-    (3) proxy-rewrite (prio 1008) setting Content-Type: text/xml runs BEFORE
-    xml-to-json (997) and hides the JSON body from the request transform, so
-    proxy-rewrite must retarget the path ONLY. json-to-xml is NOT the request-side
-    counterpart — it is a separate plugin converting a JSON upstream response to XML
-    for XML-wanting clients. Confirm fields with get_plugin_config. Authentication
-    runs before the transform, deliberately: no point converting a body about to be
-    discarded.
-
+  notes: 'How this build behaves (the three things that must be set correctly): (1) transform_request
+    DEFAULTS TO false, so an empty xml-to-json block converts the response only; it must be set
+    true. (2) The response transform is content-negotiated — it fires only when the client sends
+    Accept: application/json. (3) proxy-rewrite (prio 1008) setting Content-Type: text/xml runs
+    BEFORE xml-to-json (997) and hides the JSON body from the request transform, so proxy-rewrite
+    must retarget the path ONLY. json-to-xml is NOT the request-side counterpart — it is a separate
+    plugin converting a JSON upstream response to XML for XML-wanting clients. Confirm fields
+    with get_plugin_config. Authentication runs before the transform, deliberately: no point converting
+    a body about to be discarded.'
+  plugins:
+  - name: cors
+    scope: document
+    role: Configured on this solution's routes.
+  - name: helix-auth
+    scope: route
+    at: POST /oauth/token · POST /locations
+    role: Configured on this solution's routes.
+  - name: proxy-rewrite
+    scope: route
+    at: POST /locations
+    role: Configured on this solution's routes.
+  - name: request-id
+    scope: document
+    role: Configured on this solution's routes.
+  - name: xml-to-json
+    scope: route
+    at: POST /locations
+    role: Configured on this solution's routes.
+relations:
+  pairs_with:
+  - 02-oauth-jwt
+  alternative_to:
+  - 09-xml-to-json
+  prerequisite_for: []
+  guides:
+  - platform-model
+  - vocabulary
+  - placeholders
+answers: what-shape-is-the-payload
 validation:
-  # Stage statuses only. What was checked and what happened is in validation/.
   local: PASS
   gateway_dry_run: PASS
   deployment: DEPLOYED
   functional_test: PASS
   record: validation/
-
-artifacts:
-  documentation: [README.md, architecture.md, business-need.md]
-  source_code: [gateway/api-spec.yaml, gateway/verify.sh]
-  agent_prompt: helix-agent-prompt.md
-  diagrams: [README.md]   # mermaid blocks, rendered inline by GitHub
-  tests: [tests/test-plan.yaml, tests/requests/, tests/expected/]
-  validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
-
 assumptions:
-  - API name "Partner Locations API"; mediated route POST /locations; SOAP handler path <SOAP_HANDLER_PATH>. All illustrative — replace with yours.
-  - The handler expects content-type text/xml (SOAP 1.1 style). SOAP 1.2 handlers want application/soap+xml.
-  - The handler does NOT require a SOAPAction header. Many classic SOAP 1.1 and .asmx
-    endpoints DO; add it in proxy-rewrite.headers.set if yours is one of them.
-  - The request body's field names match the element names the handler reads.
-  - Authentication is wanted. Remove the helix-auth blocks if this API is internal-only.
-  - token_ttl 900 is a deliberate choice, not a platform default. See solution 02.
-  - The signing secret is a LITERAL value filled into the spec (this build does not resolve <ENV:...>). Replace <YOUR_JWT_SIGNING_SECRET> and keep it out of git.
-  - The upstream is bound on the service at import/bind time, not in the OpenAPI paths.
-
+- API name "Partner Locations API"; mediated route POST /locations; SOAP handler path <SOAP_HANDLER_PATH>.
+  All illustrative — replace with yours.
+- The handler expects content-type text/xml (SOAP 1.1 style). SOAP 1.2 handlers want application/soap+xml.
+- The handler does NOT require a SOAPAction header. Many classic SOAP 1.1 and .asmx endpoints
+  DO; add it in proxy-rewrite.headers.set if yours is one of them.
+- The request body's field names match the element names the handler reads.
+- Authentication is wanted. Remove the helix-auth blocks if this API is internal-only.
+- token_ttl 900 is a deliberate choice, not a platform default. See solution 02.
+- The signing secret is a LITERAL value filled into the spec (this build does not resolve <ENV:...>).
+  Replace <YOUR_JWT_SIGNING_SECRET> and keep it out of git.
+- The upstream is bound on the service at import/bind time, not in the OpenAPI paths.
 limitations:
-  - The JSON shape is DERIVED from the XML, not designed. Element names, casing and
-    vendor prefixes come through as-is, and once partners integrate against them they
-    are part of your public contract — renaming is then a breaking change.
-  - XML has no concept of an array. A collection with one member may transform to an
-    object where two members transform to a list. Partner code written against a
-    multi-result example breaks on the single-result case. Publish BOTH example shapes.
-  - Namespaces and attributes need explicit configuration and may be flattened or
-    dropped by default.
-  - Body translation only. WS-Security, SOAP headers, attachments and MTOM are not
-    addressed.
-  - No validation of the transformed request. A partner can send JSON that converts to
-    XML the handler rejects; the error surfaces as a 500 from the handler rather than a
-    400 from the gateway. Add request-validation for a clean edge rejection.
-  - One inbound call maps to exactly one backend call. Fanning out to several SOAP
-    operations, or merging results, is composition — a different pattern.
-  - Mediation does not make a slow handler fast. If the SOAP system takes eight
-    seconds, so does the mediated API; check the gateway timeout before concluding the
-    upstream is down, because the symptom is a 504 that looks like an outage.
-  - Two conversions per request add latency. Small, but not zero, and it grows with
-    payload size.
-  - A transform that silently fails to run on the response yields a 200 with an XML
-    body and a JSON content-type — success-shaped failure, discovered by the partner's
-    parser. verify.sh case 4 asserts the body has no XML markup — it passes for the corrected config.
-  - xml-to-json's schema varies by build. Confirm with get_plugin_config rather than
-    trusting the field names in this spec.
-
-status: READY   # validated on a gateway against a real SOAP backend; verify.sh passes
+- The JSON shape is DERIVED from the XML, not designed. Element names, casing and vendor prefixes
+  come through as-is, and once partners integrate against them they are part of your public contract
+  — renaming is then a breaking change.
+- XML has no concept of an array. A collection with one member may transform to an object where
+  two members transform to a list. Partner code written against a multi-result example breaks
+  on the single-result case. Publish BOTH example shapes.
+- Namespaces and attributes need explicit configuration and may be flattened or dropped by default.
+- Body translation only. WS-Security, SOAP headers, attachments and MTOM are not addressed.
+- No validation of the transformed request. A partner can send JSON that converts to XML the handler
+  rejects; the error surfaces as a 500 from the handler rather than a 400 from the gateway. Add
+  request-validation for a clean edge rejection.
+- One inbound call maps to exactly one backend call. Fanning out to several SOAP operations, or
+  merging results, is composition — a different pattern.
+- Mediation does not make a slow handler fast. If the SOAP system takes eight seconds, so does
+  the mediated API; check the gateway timeout before concluding the upstream is down, because
+  the symptom is a 504 that looks like an outage.
+- Two conversions per request add latency. Small, but not zero, and it grows with payload size.
+- A transform that silently fails to run on the response yields a 200 with an XML body and a JSON
+  content-type — success-shaped failure, discovered by the partner's parser. verify.sh case 4
+  asserts the body has no XML markup — it passes for the corrected config.
+- xml-to-json's schema varies by build. Confirm with get_plugin_config rather than trusting the
+  field names in this spec.
+status: READY

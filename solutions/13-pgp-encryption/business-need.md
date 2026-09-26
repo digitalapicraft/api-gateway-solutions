@@ -1,5 +1,9 @@
 # Business need — take the keys off the VM nobody owns
 
+[Overview](readme.md) · **Business need** · [How it works](how-it-works.md) · [Install](install.md) · [Configuration](configuration.md) · [Test & verify](testing.md) · [Changelog](changelog.md)
+
+---
+
 ## The risk today
 
 The script in the middle is not a technical debt item. It is an unowned system

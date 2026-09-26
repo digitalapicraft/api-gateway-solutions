@@ -43,7 +43,8 @@ jobs:
           PAT = re.compile("|".join(TERMS), re.I)
           bad = []
           for root, dirs, files in os.walk("."):
-              dirs[:] = [d for d in dirs if d != ".git"]
+              dirs[:] = [d for d in dirs if d not in (".git", "node_modules", "dist", ".astro")
+                         and os.path.join(root, d) not in ("./site/src/content/docs", "./site/src/generated")]
               for name in files:
                   fp = os.path.join(root, name)
                   try:
@@ -77,146 +78,20 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install --quiet pyyaml
 
-      - name: Public gate
+      # One implementation, called from here and from the private build tooling.
+      # It used to be duplicated into this file and kept in step by hand.
+      - name: Content gate
+        run: bash tools/validate.sh
+
+      # The site must build from what was just gated. Catching a broken build
+      # here rather than on the deploy workflow keeps main always publishable.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - name: Site builds
+        working-directory: site
         run: |
-          python - <<'PY'
-          import json, os, re, sys, glob
-          import yaml
-
-          ROOT = "solutions"
-          fails, warns = [], []
-          F = lambda m: fails.append(m)
-          W = lambda m: warns.append(m)
-
-          dirs = sorted(d for d in glob.glob(f"{ROOT}/*") if os.path.isdir(d))
-          if not dirs:
-              print("::error::no solution directories found — refusing a vacuous PASS")
-              sys.exit(1)
-          print(f"solutions present: {len(dirs)}")
-
-          # 1. Layer boundary. These artifacts are not published and must never
-          #    appear in this library.
-          NONPUBLIC = ("blog.md", "video-script.md", "infographic.md",
-                       "marketplace-publish.md", "VERIFICATION.md")
-          for d in dirs:
-              for name in NONPUBLIC:
-                  if os.path.exists(f"{d}/{name}"):
-                      F(f"{d}/{name} is a non-public artifact and must not be published here")
-
-          REQUIRED = ("README.md", "solution.yaml", "architecture.md",
-                      "business-need.md", "helix-agent-prompt.md")
-          SECRET_KEY = re.compile(r'(signing_secret|client_secret|password)\s*[:=]\s*"?([^<{"\s].*)$')
-          TOKEN = re.compile(r'AIza[0-9A-Za-z_-]{30,}'
-                             r'|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{40,}')
-          # Hostname policy. Named internal hosts are deliberately NOT listed:
-          # this repo is public, and a denylist of real infrastructure names
-          # would publish the very thing it exists to keep out. An allowlist
-          # leaks nothing and catches hosts nobody thought to enumerate.
-          URL = re.compile(r'https?://([A-Za-z0-9._<>{}-]+)')
-          # RFC 2606 / RFC 6761 reserved, plus container-network conventions:
-          # these can never resolve to real infrastructure.
-          RESERVED = ('.example', '.invalid', '.test', '.local', '.localhost',
-                      '.internal')
-          # Registrable domains a public package may legitimately cite: the demo
-          # upstream these solutions call, and specification / documentation homes.
-          PUBLIC = ('example.com', 'example.org', 'example.net', 'localhost',
-                    '127.0.0.1', '0.0.0.0', 'jsonplaceholder.typicode.com',
-                    'github.com', 'githubusercontent.com', 'schema.org',
-                    'json-schema.org', 'openapis.org', 'swagger.io', 'w3.org',
-                    'opensource.org', 'apache.org', 'mermaid.js.org',
-                    'httpbin.org', 'creativecommons.org', 'ietf.org',
-                    'rfc-editor.org', 'openid.net', 'oauth.net', 'jwt.io')
-
-          def host_ok(h):
-              h = h.strip('<>{}').lower().rstrip('.')
-              if not h or h.startswith(('<', '{')):
-                  return True              # an explicit placeholder
-              if '.' not in h:
-                  return True              # single label: a container/service name
-              if h.endswith(RESERVED):
-                  return True
-              return any(h == d or h.endswith('.' + d) for d in PUBLIC)
-
-          BRAND = re.compile(r'helix +(api +)?gateway', re.I)
-          KINDS = ('graph', 'flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram',
-                   'erDiagram', 'journey', 'gantt', 'pie', 'gitGraph', 'mindmap', 'timeline',
-                   'quadrantChart', 'requirementDiagram', 'C4Context', 'sankey', 'block-beta')
-
-          for d in dirs:
-              for f in REQUIRED:
-                  if not os.path.exists(f"{d}/{f}"):
-                      F(f"{d}: missing {f}")
-
-              # 2. parse every spec we ship — malformed YAML is an unusable package
-              for rel, kind in (("solution.yaml", "yaml"),
-                                ("gateway/api-spec.yaml", "openapi"),
-                                ("gateway/products.json", "json")):
-                  p = f"{d}/{rel}"
-                  if not os.path.exists(p):
-                      continue
-                  try:
-                      doc = json.load(open(p)) if kind == "json" else yaml.safe_load(open(p))
-                  except Exception as e:
-                      F(f"{p}: parse error: {e}")
-                      continue
-                  if kind == "openapi":
-                      if not str((doc or {}).get("openapi", "")).startswith("3.0"):
-                          F(f"{p}: not an OpenAPI 3.0.x document")
-                      if not (doc or {}).get("paths"):
-                          F(f"{p}: no paths")
-
-              for md in sorted(glob.glob(f"{d}/**/*.md", recursive=True)):
-                  txt = open(md, encoding="utf-8", errors="replace").read()
-
-                  # 3. unbalanced fences render the rest of the page as code
-                  n = len(re.findall(r'(?m)^```', txt))
-                  if n % 2:
-                      F(f"{md}: unbalanced code fences ({n} markers)")
-
-                  # 4. leaked credentials / internal infrastructure
-                  for i, line in enumerate(txt.splitlines(), 1):
-                      if TOKEN.search(line):
-                          F(f"{md}:{i}: API key or JWT")
-                      for h in URL.findall(line):
-                          if not host_ok(h):
-                              F(f"{md}:{i}: non-placeholder hostname {h!r} — public "
-                                f"packages address <UPSTREAM_URL> or example.com")
-
-                  # 5. branding, wrap-tolerant (matches validate.sh's line-joined grep)
-                  for m in BRAND.finditer(re.sub(r'\s+', ' ', txt)):
-                      F(f"{md}: removed branding phrase {m.group(0)!r}")
-                      break
-
-                  # 6. a mermaid block with no diagram type renders as an error
-                  #    box in the reader's browser — worse than no diagram, and
-                  #    it is just as broken in architecture.md as in README.md
-                  for j, b in enumerate(re.findall(r'```mermaid\n(.*?)```', txt, re.S), 1):
-                      first = (b.strip().split("\n") or [""])[0].strip()
-                      if not first.startswith(KINDS):
-                          F(f"{md}: mermaid block {j} declares no diagram type")
-
-              for spec in sorted(glob.glob(f"{d}/gateway/**/*", recursive=True)):
-                  if not os.path.isfile(spec):
-                      continue
-                  for i, line in enumerate(open(spec, encoding="utf-8", errors="replace"), 1):
-                      m = SECRET_KEY.search(line)
-                      if m:
-                          F(f"{spec}:{i}: {m.group(1)} holds a literal, not a placeholder "
-                            f"— the gateway uses it verbatim")
-
-              # 7. the public README is where readers look for the one-glance
-              #    version; type-correctness of every block is checked above
-              rm = f"{d}/README.md"
-              if os.path.exists(rm) and '```mermaid' not in open(rm).read():
-                  W(f"{rm}: no mermaid diagram — public readers get no one-glance version")
-
-          for w in warns:
-              print(f"::warning::{w}")
-          for f in fails:
-              print(f"::error::{f}")
-          print("")
-          if fails:
-              print(f"RESULT: FAIL ({len(fails)} failed, {len(warns)} warnings)")
-              sys.exit(1)
-          print(f"RESULT: PASS ({len(warns)} warnings)" if warns else "RESULT: PASS")
-          PY
+          npm ci
+          npm run build

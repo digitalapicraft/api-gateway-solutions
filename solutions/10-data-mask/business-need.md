@@ -1,5 +1,9 @@
 # Business need — stop handing every consumer the whole record
 
+[Overview](readme.md) · **Business need** · [How it works](how-it-works.md) · [Install](install.md) · [Configuration](configuration.md) · [Test & verify](testing.md) · [Changelog](changelog.md)
+
+---
+
 ## The risk today
 
 An audit finding about PII in a log aggregator is rarely just about logs. It is

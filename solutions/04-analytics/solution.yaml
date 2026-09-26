@@ -1,76 +1,97 @@
-# Solution manifest — the traceability spine for this package.
-# This solution BUILDS NOTHING on your APIs. It is a read-only guide + script for
-# pulling the analytics the gateway already captures.
+# Solution manifest — nav, metadata and traceability spine.
+# `nav` drives the tab strip and the gate's required-file list;
+# `implementation.plugins` must match gateway/api-spec.yaml exactly.
 
+layout: v2
 solution:
-  name: "Analytics: read what your gateway already captured"
+  name: 'Analytics: read what your gateway already captured'
   slug: 04-analytics
-  version: 2.0.0
-  category:
-    - Observability & Operations
-  tags: [analytics, metrics-api, requests, latency, attribution, read-only, reporting]
-
+  title: 'Analytics: read what the gateway already captured'
+  summary: API teams need to see what's happening across their APIs — requests in the last hour
+    by API, product or app; the slowest and fastest APIs; error rates — without standing up their
+    own telemetry and without changing any API. The gateway already captures every request; the
+    gap is kn
+  version: 1.1.0
+  released: '2026-08-18'
+  updated: '2026-09-25'
+  category: Observability
+  categories:
+  - Observability
+  tags:
+  - analytics
+  - metrics-api
+  - requests
+  - latency
+  - attribution
+  - read-only
+  - reporting
+facts:
+  setup_time: ~5 minutes (nothing to deploy)
+  difficulty: Beginner
+  needs:
+  - APIs that already receive traffic
+  - a control-plane bearer token (the portal uses the same one)
+  plugins: []
+  build_with:
+  - agent
+nav:
+- tab: Overview
+  file: readme.md
+- tab: Business need
+  file: business-need.md
+- tab: How it works
+  file: how-it-works.md
+- tab: Install
+  file: install.md
+- tab: Query catalogue
+  file: charts.md
+- tab: Changelog
+  file: changelog.md
 problem:
-  statement: >-
-    API teams need to see what's happening across their APIs — requests in the last
-    hour by API, product or app; the slowest and fastest APIs; error rates — without
-    standing up their own telemetry and without changing any API. The gateway
-    already captures every request; the gap is knowing how to query it.
-
+  statement: API teams need to see what's happening across their APIs — requests in the last hour
+    by API, product or app; the slowest and fastest APIs; error rates — without standing up their
+    own telemetry and without changing any API. The gateway already captures every request; the
+    gap is knowing how to query it.
 business_need:
-  summary: >-
-    Turn always-on capture into answers on demand: per-API / per-product / per-app
-    request volume, latency ranking, and error breakdowns for any window, read
-    straight from the metrics API with no configuration and no risk (read-only).
-
+  summary: 'Turn always-on capture into answers on demand: per-API / per-product / per-app request
+    volume, latency ranking, and error breakdowns for any window, read straight from the metrics
+    API with no configuration and no risk (read-only).'
 implementation:
-  changes_to_apis: none   # analytics is global; nothing is added to any API
-  how_you_read_it: >-
-    Three ways, same data: ask the agent in plain English (it calls its get_metrics
-    tool and renders a chart), run scripts/query-analytics.sh from the CLI, or POST
-    the metrics API directly — /api/orgs/{orgId}/analytics/metrics/{metric} with
-    dimensions, filters and an optional sort. helix-agent-prompt.md has the prompts;
-    charts.md is the raw catalogue.
+  changes_to_apis: none
+  how_you_read_it: 'Three ways, same data: ask the agent in plain English (it calls its get_metrics
+    tool and renders a chart), run scripts/query-analytics.sh from the CLI, or POST the metrics
+    API directly — /api/orgs/{orgId}/analytics/metrics/{metric} with dimensions, filters and an
+    optional sort. helix-agent-prompt.md has the prompts; charts.md is the raw catalogue.'
   capabilities_used:
-    - "metrics: requests-count, requests-per-second, response-time, request-size, response-size, total-transfer-size, upstream-response-time"
-    - "dimensions: env_name, app_id, app_name, product_name, api_name, route_id, route_name, api_path, request_method, response_status_code, upstream_path, developer"
-    - "filter operators: EQ, NEQ, GT, GTE, LT, LTE, IN, LIKE, NOT_LIKE (AND-combined)"
-    - "server-side sort on value (top-N slowest/busiest) and timeUnit bucketing for time series"
+  - 'metrics: requests-count, requests-per-second, response-time, request-size, response-size,
+    total-transfer-size, upstream-response-time'
+  - 'dimensions: env_name, app_id, app_name, product_name, api_name, route_id, route_name, api_path,
+    request_method, response_status_code, upstream_path, developer'
+  - 'filter operators: EQ, NEQ, GT, GTE, LT, LTE, IN, LIKE, NOT_LIKE (AND-combined)'
+  - server-side sort on value (top-N slowest/busiest) and timeUnit bucketing for time series
   custom_code_required: false
-  notes: >-
-    Attribution depends on how each API is ALREADY built, not on anything you add
-    here: per-app / per-developer / per-product rows need the API to resolve
-    identity (helix-auth), or that traffic lands in an unattributed bucket. Group
-    route-level views by route_id (a templated route is one row) rather than
-    api_path (one row per concrete id).
-
-limits:
-  # Real limits of the metrics API — do not promise a report built on these.
-  - No percentiles. response-time supports AVG/MIN/MAX/SUM only. MAX is the tail signal.
-  - No quota-usage metric. 429s can be counted; "percent of a limit used" is not available.
-  - No per-request lookup. X-Request-Id is not a dimension; correlate in your own logs.
-  - No request/response bodies — metadata only, by design.
-
+  notes: 'Attribution depends on how each API is ALREADY built, not on anything you add here:
+    per-app / per-developer / per-product rows need the API to resolve identity (helix-auth),
+    or that traffic lands in an unattributed bucket. Group route-level views by route_id (a templated
+    route is one row) rather than api_path (one row per concrete id).'
+  plugins: []
+relations:
+  pairs_with:
+  - 01-api-products
+  - 02-oauth-jwt
+  alternative_to: []
+  prerequisite_for: []
+  guides:
+  - platform-model
+  - vocabulary
+  - placeholders
+answers: what-do-we-know-about-it
 validation:
-  # Stage statuses only. What was checked and what happened is in validation/.
   local: PASS
   live_queries: VERIFIED
   record: validation/
-
-artifacts:
-  documentation: [README.md, charts.md, architecture.md, business-need.md]
-  agent_prompt: helix-agent-prompt.md
-  script: scripts/query-analytics.sh
-  diagrams: [README.md]   # mermaid blocks, rendered inline by GitHub
-  validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
-  note: >-
-    No gateway/api-spec.yaml and no tests/ — this solution changes no API and builds
-    nothing. helix-agent-prompt.md, charts.md and scripts/query-analytics.sh are the
-    deliverable (agent / raw API / CLI — same data).
-
 assumptions:
-  - Analytics is enabled globally on the platform (it is on this build). Every request is captured.
-  - You have APIs already receiving traffic; the queries read whatever exists.
-  - Reads use a control-plane bearer token (the same one the portal uses).
-
-status: READY   # read-only guide + script; all queries verified against the live analytics API
+- Analytics is enabled globally on the platform (it is on this build). Every request is captured.
+- You have APIs already receiving traffic; the queries read whatever exists.
+- Reads use a control-plane bearer token (the same one the portal uses).
+status: READY

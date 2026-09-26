@@ -1,111 +1,148 @@
-# Solution manifest — the traceability spine for this package.
-# Every artifact below corresponds to this one solution version. If the gateway
-# config changes, bump `version` and re-derive the docs and diagrams from it
-# — never the other way round.
+# Solution manifest — nav, metadata and traceability spine.
+# `nav` drives the tab strip and the gate's required-file list;
+# `implementation.plugins` must match gateway/api-spec.yaml exactly.
 
+layout: v2
 solution:
   name: OpenPGP at the edge, in both directions
   slug: 13-pgp-encryption
-  version: 1.0.0
-  category:
-    - Security & Access
-    - API Transformation
-  tags: [pgp, openpgp, encryption, decryption, partner-integration, pgp-crypto]
-
+  title: PGP at the edge, so the keyring script can go
+  summary: A counterparty's contract requires PGP-encrypted payloads in both directions, so a
+    small script on a VM sits between their endpoint and the backend, decrypting and re-encrypting.
+    It holds the private key, it is in no deployment pipeline and no monitoring, nobody owns it,
+    and it i
+  version: 1.1.0
+  released: '2026-09-21'
+  updated: '2026-09-25'
+  category: Mediation & Modernization
+  categories:
+  - Mediation & Modernization
+  tags:
+  - pgp
+  - openpgp
+  - encryption
+  - decryption
+  - partner-integration
+  - pgp-crypto
+facts:
+  setup_time: ~20 minutes
+  difficulty: Intermediate
+  needs:
+  - A fresh org (its default test environment)
+  - an OpenPGP key pair. The upstream echoes requests, so the decrypted plaintext is visible without
+    a backend of your own
+  plugins:
+  - pgp-crypto
+  - proxy-rewrite
+  - request-id
+  build_with:
+  - agent
+  - openapi-import
+nav:
+- tab: Overview
+  file: readme.md
+- tab: Business need
+  file: business-need.md
+- tab: How it works
+  file: how-it-works.md
+- tab: Install
+  file: install.md
+- tab: Configuration
+  file: configuration.md
+- tab: Test & verify
+  file: testing.md
+- tab: Changelog
+  file: changelog.md
 problem:
-  statement: >-
-    A counterparty's contract requires PGP-encrypted payloads in both directions,
-    so a small script on a VM sits between their endpoint and the backend,
-    decrypting and re-encrypting. It holds the private key, it is in no deployment
-    pipeline and no monitoring, nobody owns it, and it is what pages the team at
-    2am on the last working day of the month.
-
+  statement: A counterparty's contract requires PGP-encrypted payloads in both directions, so
+    a small script on a VM sits between their endpoint and the backend, decrypting and re-encrypting.
+    It holds the private key, it is in no deployment pipeline and no monitoring, nobody owns it,
+    and it is what pages the team at 2am on the last working day of the month.
 business_need:
-  summary: >-
-    Move the crypto onto the path the traffic already takes, so the key material
-    lives in the control plane rather than a home directory on a VM, the change is
-    a reviewable revision, and a failure shows up in the same telemetry as every
-    other route. Neither the backend nor the counterparty changes.
-
+  summary: Move the crypto onto the path the traffic already takes, so the key material lives
+    in the control plane rather than a home directory on a VM, the change is a reviewable revision,
+    and a failure shows up in the same telemetry as every other route. Neither the backend nor
+    the counterparty changes.
 implementation:
   gateway_capabilities:
-    - pgp-crypto (decrypt, target request)    # inbound: base64(armor) in, plaintext to the backend
-    - pgp-crypto (encrypt, target response)   # outbound: backend plaintext out, base64(armor) to the partner
-    - proxy-rewrite                           # published paths differ from the backend's
-    - request-id                              # crypto errors are deliberately opaque; this is what a partner quotes
+  - pgp-crypto (decrypt, target request)
+  - pgp-crypto (encrypt, target response)
+  - proxy-rewrite
+  - request-id
   custom_code_required: false
-  notes: >-
-    WIRE FORMAT, verified against a gateway: both directions use BASE64 OF THE
-    ASCII-ARMORED MESSAGE, not the armor. A raw armored inbound body is REJECTED;
-    the same message base64-encoded decrypts and the plaintext reaches the upstream
-    with content-type application/json, which the plugin sets. The outbound body is
-    replaced with base64(armor) and the content type becomes text/plain.
-    `field` on an ENCRYPT block selects what is RETURNED, not just what is
-    encrypted: encrypting with a field returns only that value's ciphertext as the
-    whole response body and discards the rest of the document. Verified.
-    Errors are generic to the caller by design; the reason is in gateway telemetry.
-    fail-close on both directions: inbound because forwarding an undecryptable body
-    gives the backend something it cannot read, outbound because fail-open would
-    return the statement in the clear.
-    The key material is a LITERAL in the document — the gateway does not resolve
-    <ENV:...> or ${...}. Same class of footgun as helix-auth's signing_secret, and
-    longer lived. With more than one counterparty, fetch the key per request
-    instead — solution 12.
-
+  notes: 'WIRE FORMAT, verified against a gateway: both directions use BASE64 OF THE ASCII-ARMORED
+    MESSAGE, not the armor. A raw armored inbound body is REJECTED; the same message base64-encoded
+    decrypts and the plaintext reaches the upstream with content-type application/json, which
+    the plugin sets. The outbound body is replaced with base64(armor) and the content type becomes
+    text/plain. `field` on an ENCRYPT block selects what is RETURNED, not just what is encrypted:
+    encrypting with a field returns only that value''s ciphertext as the whole response body and
+    discards the rest of the document. Verified. Errors are generic to the caller by design; the
+    reason is in gateway telemetry. fail-close on both directions: inbound because forwarding
+    an undecryptable body gives the backend something it cannot read, outbound because fail-open
+    would return the statement in the clear. The key material is a LITERAL in the document — the
+    gateway does not resolve <ENV:...> or ${...}. Same class of footgun as helix-auth''s signing_secret,
+    and longer lived. With more than one counterparty, fetch the key per request instead — solution
+    12.'
+  plugins:
+  - name: pgp-crypto
+    scope: route
+    at: POST /statements/inbound · GET /statements/{statementId}
+    role: Configured on this solution's routes.
+  - name: proxy-rewrite
+    scope: route
+    at: POST /statements/inbound · GET /statements/{statementId}
+    role: Configured on this solution's routes.
+  - name: request-id
+    scope: document
+    role: Configured on this solution's routes.
+relations:
+  pairs_with:
+  - 12-key-value-map
+  alternative_to: []
+  prerequisite_for: []
+  guides:
+  - platform-model
+  - vocabulary
+  - placeholders
+answers: what-shape-is-the-payload
 validation:
   local: PASS
   gateway_dry_run: PASS
   deployment: DEPLOYED
   functional_test: PASS
   record: validation/
-
-artifacts:
-  documentation: [README.md, architecture.md, business-need.md]
-  source_code: [gateway/api-spec.yaml, gateway/verify.sh]
-  agent_prompt: helix-agent-prompt.md
-  diagrams: [README.md]   # mermaid blocks, rendered inline by GitHub
-  tests: [tests/test-plan.yaml, tests/requests/, tests/expected/]
-  validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
-
 assumptions:
-  - API name is "Statements API" with routes /statements/inbound and /statements/{statementId} (illustrative).
-  - One counterparty, one key pair. Past the first counterparty the design changes — see solution 12.
-  - The private key is unprotected (empty passphrase). A passphrase is a second literal in the document.
-  - The upstream echoes requests, which is what makes the decrypted plaintext observable in a test.
-  - The package ships unauthenticated on purpose so the crypto is the only behaviour under test.
-
+- API name is "Statements API" with routes /statements/inbound and /statements/{statementId} (illustrative).
+- One counterparty, one key pair. Past the first counterparty the design changes — see solution
+  12.
+- The private key is unprotected (empty passphrase). A passphrase is a second literal in the document.
+- The upstream echoes requests, which is what makes the decrypted plaintext observable in a test.
+- The package ships unauthenticated on purpose so the crypto is the only behaviour under test.
 limitations:
-  - The wire format is base64 of the ASCII-armored message in BOTH directions. No
-    standard PGP tool produces that by default, so every counterparty needs an
-    explicit integration note; the rejection message does not mention base64.
-  - >-
-    Setting `field` on an encrypt block returns ONLY that field's ciphertext as the
-    entire response body and discards the rest of the document. It is not a way to
-    encrypt one field of a document you otherwise keep.
-  - Key material is a literal in the route configuration. There is no <ENV:...> or
-    ${...} resolution, so the filled-in spec must be kept out of version control.
-  - One key pair per route. Two counterparties means two routes, and rotation is a
-    hard cutover — old and new keys cannot both be live on one route.
-  - >-
-    The route's two key fields belong to DIFFERENT pairs held by different parties:
-    decrypt.private_key is yours, encrypt.public_key is the counterparty's. They are
-    not a pair. Filling both from one pair deploys and round-trips, which makes it a
-    convenient single-party test and an inaccurate model of production — and it
-    removes any possibility of observing a key mismatch, since the two fields can
-    then never disagree.
-  - >-
-    Encrypting to the WRONG public key is undetectable from the gateway — the
-    response is well formed and the partner simply cannot read it. Only a
-    round-trip test finds it.
-  - Errors are generic to the caller by design, so a counterparty cannot self-diagnose
-    a crypto failure and needs a support path and a request id.
-  - Crypto buffers the whole body and is bounded by max_body_size, which rejects
-    rather than streams. Batch files are how this is usually discovered.
-  - Confidentiality only. No sender authentication, no signature, no non-repudiation.
-  - >-
-    Encryption is not access control — anyone who can reach the route receives a
-    document they cannot read, which is not the same as being refused.
-  - The gateway decrypts FOR the backend, so this does not protect the payload from
-    the backend itself.
-
-status: READY   # validated on a gateway; verify.sh passes 7/7 including the round trip
+- The wire format is base64 of the ASCII-armored message in BOTH directions. No standard PGP tool
+  produces that by default, so every counterparty needs an explicit integration note; the rejection
+  message does not mention base64.
+- Setting `field` on an encrypt block returns ONLY that field's ciphertext as the entire response
+  body and discards the rest of the document. It is not a way to encrypt one field of a document
+  you otherwise keep.
+- Key material is a literal in the route configuration. There is no <ENV:...> or ${...} resolution,
+  so the filled-in spec must be kept out of version control.
+- One key pair per route. Two counterparties means two routes, and rotation is a hard cutover
+  — old and new keys cannot both be live on one route.
+- 'The route''s two key fields belong to DIFFERENT pairs held by different parties: decrypt.private_key
+  is yours, encrypt.public_key is the counterparty''s. They are not a pair. Filling both from
+  one pair deploys and round-trips, which makes it a convenient single-party test and an inaccurate
+  model of production — and it removes any possibility of observing a key mismatch, since the
+  two fields can then never disagree.'
+- Encrypting to the WRONG public key is undetectable from the gateway — the response is well formed
+  and the partner simply cannot read it. Only a round-trip test finds it.
+- Errors are generic to the caller by design, so a counterparty cannot self-diagnose a crypto
+  failure and needs a support path and a request id.
+- Crypto buffers the whole body and is bounded by max_body_size, which rejects rather than streams.
+  Batch files are how this is usually discovered.
+- Confidentiality only. No sender authentication, no signature, no non-repudiation.
+- Encryption is not access control — anyone who can reach the route receives a document they cannot
+  read, which is not the same as being refused.
+- The gateway decrypts FOR the backend, so this does not protect the payload from the backend
+  itself.
+status: READY

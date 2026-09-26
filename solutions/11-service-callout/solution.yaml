@@ -1,93 +1,135 @@
-# Solution manifest — the traceability spine for this package.
-# Every artifact below corresponds to this one solution version. If the gateway
-# config changes, bump `version` and re-derive the docs and diagrams from it
-# — never the other way round.
+# Solution manifest — nav, metadata and traceability spine.
+# `nav` drives the tab strip and the gate's required-file list;
+# `implementation.plugins` must match gateway/api-spec.yaml exactly.
 
+layout: v2
 solution:
   name: One shared lookup at the edge, delivered to the backend as headers
   slug: 11-service-callout
-  version: 1.0.0
-  category:
-    - Programmable Policies
-    - API Transformation
-  tags: [service-callout, enrichment, tenant-profile, proxy-rewrite, ctx-variables, fail-open]
-
+  title: The lookup every service re-implements, done once
+  summary: Several services each begin by calling the same customer-profile service to learn the
+    caller's plan and account status. Each caches it differently, each fails differently, the
+    profile service carries one call per service per request, and a contract change becomes a
+    hunt across th
+  version: 1.1.0
+  released: '2026-09-21'
+  updated: '2026-09-25'
+  category: Integration
+  categories:
+  - Integration
+  tags:
+  - service-callout
+  - enrichment
+  - tenant-profile
+  - proxy-rewrite
+  - ctx-variables
+  - fail-open
+facts:
+  setup_time: ~15 minutes
+  difficulty: Beginner
+  needs:
+  - A fresh org (its default test environment). Nothing to fill in — the upstream echoes request
+    headers so you can see what the backend received, and the callout target is a public sample
+    service standing in for your own
+  plugins:
+  - proxy-rewrite
+  - request-id
+  - service-callout
+  build_with:
+  - agent
+  - openapi-import
+nav:
+- tab: Overview
+  file: readme.md
+- tab: Business need
+  file: business-need.md
+- tab: How it works
+  file: how-it-works.md
+- tab: Install
+  file: install.md
+- tab: Configuration
+  file: configuration.md
+- tab: Test & verify
+  file: testing.md
+- tab: Changelog
+  file: changelog.md
 problem:
-  statement: >-
-    Several services each begin by calling the same customer-profile service to
-    learn the caller's plan and account status. Each caches it differently, each
-    fails differently, the profile service carries one call per service per request,
-    and a contract change becomes a hunt across the estate for copies — one of
-    which is always found by an incident rather than by the search.
-
+  statement: Several services each begin by calling the same customer-profile service to learn
+    the caller's plan and account status. Each caches it differently, each fails differently,
+    the profile service carries one call per service per request, and a contract change becomes
+    a hunt across the estate for copies — one of which is always found by an incident rather than
+    by the search.
 business_need:
-  summary: >-
-    Make the lookup a property of the path rather than of each service: one call,
-    one cache, one timeout, and one failure policy chosen deliberately per route.
-    The payoff that funds it is onboarding — a new service behind the route reads a
-    header instead of implementing the lookup first.
-
+  summary: 'Make the lookup a property of the path rather than of each service: one call, one
+    cache, one timeout, and one failure policy chosen deliberately per route. The payoff that
+    funds it is onboarding — a new service behind the route reads a header instead of implementing
+    the lookup first.'
 implementation:
   gateway_capabilities:
-    - service-callout (phase rewrite)   # one synchronous outbound call; response mapped into ctx
-    - proxy-rewrite (headers.set)       # injects the mapped values as upstream headers
-    - request-id                        # a callout doubles the places a request can fail
+  - service-callout (phase rewrite)
+  - proxy-rewrite (headers.set)
+  - request-id
   custom_code_required: false
-  notes: >-
-    Two things decide whether this works, both verified against a gateway.
-    First, phase MUST be rewrite. proxy-rewrite runs in the rewrite phase, so an
-    access-phase callout produces its values after the injection has happened —
-    the route returns 200 with no headers and no error. Within the rewrite phase
-    service-callout (2003) runs before proxy-rewrite (1008). Phase beats priority.
-    Second, the bridge is a gateway variable named literally
-    ctx.helix.<ctx_namespace>.<field>, dots included, which proxy-rewrite resolves
-    as ${ctx.helix.service_callout.tenant_plan}.
-    headers.set is required rather than headers.add: set REPLACES a client-supplied
-    header. With add, any caller could assert its own tenant plan. Verified.
-    This is NOT an authorization decision. service-callout stores a response; it
-    does not act on it. Use forward-auth or opa where a verdict is needed.
-
+  notes: 'Two things decide whether this works, both verified against a gateway. First, phase
+    MUST be rewrite. proxy-rewrite runs in the rewrite phase, so an access-phase callout produces
+    its values after the injection has happened — the route returns 200 with no headers and no
+    error. Within the rewrite phase service-callout (2003) runs before proxy-rewrite (1008). Phase
+    beats priority. Second, the bridge is a gateway variable named literally ctx.helix.<ctx_namespace>.<field>,
+    dots included, which proxy-rewrite resolves as ${ctx.helix.service_callout.tenant_plan}. headers.set
+    is required rather than headers.add: set REPLACES a client-supplied header. With add, any
+    caller could assert its own tenant plan. Verified. This is NOT an authorization decision.
+    service-callout stores a response; it does not act on it. Use forward-auth or opa where a
+    verdict is needed.'
+  plugins:
+  - name: proxy-rewrite
+    scope: route
+    at: GET /storefront/orders · POST /storefront/checkout
+    role: Configured on this solution's routes.
+  - name: request-id
+    scope: document
+    role: Configured on this solution's routes.
+  - name: service-callout
+    scope: route
+    at: GET /storefront/orders · POST /storefront/checkout
+    role: Configured on this solution's routes.
+relations:
+  pairs_with:
+  - 14-dynamic-mock
+  alternative_to: []
+  prerequisite_for: []
+  guides:
+  - platform-model
+  - vocabulary
+  - placeholders
+answers: what-else-must-happen
 validation:
   local: PASS
   gateway_dry_run: PASS
   deployment: DEPLOYED
   functional_test: PASS
   record: validation/
-
-artifacts:
-  documentation: [README.md, architecture.md, business-need.md]
-  source_code: [gateway/api-spec.yaml, gateway/verify.sh]
-  agent_prompt: helix-agent-prompt.md
-  diagrams: [README.md]   # mermaid blocks, rendered inline by GitHub
-  tests: [tests/test-plan.yaml, tests/requests/, tests/expected/]
-  validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
-
 assumptions:
-  - API name is "Storefront API" with routes /storefront/orders and /storefront/checkout (illustrative).
-  - The callout target is a public sample service standing in for a customer-profile service; replace it with yours.
-  - The upstream echoes request headers, which is what makes the enrichment observable in a test.
-  - The backend is willing to read three headers. Anything richer than strings has to be flattened.
-  - The package ships unauthenticated on purpose so the callout is the only behaviour under test.
-
+- API name is "Storefront API" with routes /storefront/orders and /storefront/checkout (illustrative).
+- The callout target is a public sample service standing in for a customer-profile service; replace
+  it with yours.
+- The upstream echoes request headers, which is what makes the enrichment observable in a test.
+- The backend is willing to read three headers. Anything richer than strings has to be flattened.
+- The package ships unauthenticated on purpose so the callout is the only behaviour under test.
 limitations:
-  - >-
-    The callout is synchronous by default — the request waits for it, and `timeout`
-    bounds the worst case this route can exhibit. Setting `async` to true exists as
-    an option but makes the response unavailable to the request, which defeats the
-    purpose here.
-  - This is not an authorization decision. The response is stored, never acted on.
-    Rejecting a caller based on it needs forward-auth or opa.
-  - Configured per route. A route added later is not enriched, and the symptom at the
-    backend is a missing header rather than an error.
-  - Mapped values become request headers, so they are strings and are visible to the
-    backend and to anything on the path. Map what the backend needs, not the whole
-    profile.
-  - A dotted path that resolves to nothing yields no value and NO error, so a typo is
-    invisible until a backend notices the header is absent.
-  - Under fail-open the enrichment headers are ABSENT, not empty. Every backend
-    reading them must decide explicitly what a missing header means.
-  - The plugin has no response cache of its own. Every request makes the call.
-  - It consolidates N calls per request into one; it does not remove the dependency
-    on the profile service, and its availability is now in this route's path.
-
-status: READY   # validated on a gateway; verify.sh passes 5/5, three failure cases reproduced
+- The callout is synchronous by default — the request waits for it, and `timeout` bounds the worst
+  case this route can exhibit. Setting `async` to true exists as an option but makes the response
+  unavailable to the request, which defeats the purpose here.
+- This is not an authorization decision. The response is stored, never acted on. Rejecting a caller
+  based on it needs forward-auth or opa.
+- Configured per route. A route added later is not enriched, and the symptom at the backend is
+  a missing header rather than an error.
+- Mapped values become request headers, so they are strings and are visible to the backend and
+  to anything on the path. Map what the backend needs, not the whole profile.
+- A dotted path that resolves to nothing yields no value and NO error, so a typo is invisible
+  until a backend notices the header is absent.
+- Under fail-open the enrichment headers are ABSENT, not empty. Every backend reading them must
+  decide explicitly what a missing header means.
+- The plugin has no response cache of its own. Every request makes the call.
+- It consolidates N calls per request into one; it does not remove the dependency on the profile
+  service, and its availability is now in this route's path.
+status: READY

@@ -1,5 +1,9 @@
 # Business need — one conversion at the edge instead of four in the clients
 
+[Overview](readme.md) · **Business need** · [How it works](how-it-works.md) · [Install](install.md) · [Configuration](configuration.md) · [Test & verify](testing.md) · [Changelog](changelog.md)
+
+---
+
 ## The risk today
 
 An XML backend with JSON clients does not produce one problem. It produces one

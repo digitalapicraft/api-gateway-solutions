@@ -1,101 +1,165 @@
-# Solution manifest — the traceability spine for this package.
-# Every artifact below corresponds to this one solution version. If the gateway
-# config changes, bump `version` and re-derive the docs and diagrams from it
-# — never the other way round.
+# Solution manifest — nav, metadata and traceability spine.
+# `nav` drives the tab strip and the gate's required-file list;
+# `implementation.plugins` must match gateway/api-spec.yaml exactly.
 
+layout: v2
 solution:
   name: HTTP to Kafka — accept events at the edge, publish them without an ingest service
   slug: 07-http-to-kafka
-  version: 1.0.0
-  category:
-    - Integration & Mediation
-  tags: [kafka, event-ingest, webhooks, kafka-logger, mocking, request-validation, at-most-once]
-
+  title: HTTP to Kafka, with no service in between
+  summary: Partners want to POST events to an estate whose downstream is already Kafka, but the
+    service in between — authenticate, validate, produce — is three lines of logic wrapped in
+    a repository, a pipeline, an image, an autoscaling policy and an on-call rotation, so it stays
+    on the roa
+  version: 1.1.0
+  released: '2026-09-16'
+  updated: '2026-09-25'
+  category: Integration
+  categories:
+  - Integration
+  tags:
+  - kafka
+  - event-ingest
+  - webhooks
+  - kafka-logger
+  - mocking
+  - request-validation
+  - at-most-once
+facts:
+  setup_time: ~20 minutes, once you have a broker
+  difficulty: Intermediate
+  needs:
+  - An org whose build includes `kafka-logger`, `mocking` and `request-validation`
+  - a Kafka broker
+  - a topic browser to verify with. [Kafka quickstart](https://kafka.apache.org/quickstart)
+  - '[Kafka UI](https://github.com/provectus/kafka-ui) or [Redpanda Console](https://github.com/redpanda-data/console)'
+  plugins:
+  - kafka-logger
+  - mocking
+  - request-id
+  - request-validation
+  build_with:
+  - agent
+  - openapi-import
+nav:
+- tab: Overview
+  file: readme.md
+- tab: Business need
+  file: business-need.md
+- tab: How it works
+  file: how-it-works.md
+- tab: Install
+  file: install.md
+- tab: Configuration
+  file: configuration.md
+- tab: Test & verify
+  file: testing.md
+- tab: Changelog
+  file: changelog.md
 problem:
-  statement: >-
-    Partners want to POST events to an estate whose downstream is already Kafka,
-    but the service in between — authenticate, validate, produce — is three lines
-    of logic wrapped in a repository, a pipeline, an image, an autoscaling policy
-    and an on-call rotation, so it stays on the roadmap and integrations queue
-    behind it.
-
+  statement: Partners want to POST events to an estate whose downstream is already Kafka, but
+    the service in between — authenticate, validate, produce — is three lines of logic wrapped
+    in a repository, a pipeline, an image, an autoscaling policy and an on-call rotation, so it
+    stays on the roadmap and integrations queue behind it.
 business_need:
-  summary: >-
-    Open an event-ingest endpoint in a configuration change instead of a new
-    deployable, removing one hop that can fail from a path that already goes
-    through the gateway, and rejecting malformed events at the edge so consumers
-    stop re-validating defensively. The trade is at-most-once delivery, which is
-    acceptable for analytics, audit trails and telemetry and is not acceptable for
-    payments or orders.
-
+  summary: Open an event-ingest endpoint in a configuration change instead of a new deployable,
+    removing one hop that can fail from a path that already goes through the gateway, and rejecting
+    malformed events at the edge so consumers stop re-validating defensively. The trade is at-most-once
+    delivery, which is acceptable for analytics, audit trails and telemetry and is not acceptable
+    for payments or orders.
 implementation:
   gateway_capabilities:
-    - request-validation   # rewrite 2800 — rejects malformed events; also re-encodes the body
-    - mocking              # access 1999 — returns 202 and short-circuits; no upstream is contacted
-    - kafka-logger         # log 403 — publishes {event, request_id, received_at}
-    - request-id           # the correlation id that makes the Kafka leg verifiable
+  - request-validation
+  - mocking
+  - kafka-logger
+  - request-id
   custom_code_required: false
-  notes: >-
-    mocking does short-circuit the access phase, so kafka-logger's access handler —
-    where include_req_body calls read_body() — never runs. It does not matter:
-    $request_body in log_format resolves correctly regardless, verified against a
-    deployed route with request-validation removed AND with include_req_body false.
-    An earlier version of this package claimed removing request-validation would
-    silently empty every message; that was mechanically plausible and false, and is
-    corrected throughout. request-validation is here to reject malformed events,
-    which with _meta.filter also keeps them off the topic.
-    log_format MUST use $apisix_request_id, not $request_id. $request_id is nginx's
-    own id and never equals the X-Request-Id the caller receives; the request-id
-    plugin overwrites $apisix_request_id with the UUID it returns. The first
-    version of this spec used $request_id, so its correlation field correlated with
-    nothing.
-    The route is deliberately unauthenticated — the smallest configuration that
-    demonstrates the mechanism. Closing it with solution 06 requires REMOVING
-    request-validation, because it re-encodes the body ahead of hmac-auth's digest
-    check; validate_request_body then becomes the rewrite-phase body read instead.
-    Three kafka-logger defaults are overridden because they are chosen for logging
-    rather than producing: producer_type async -> sync, required_acks 1 -> -1,
-    max_retry_count 0 -> 3. None of them changes the at-most-once semantics.
-    mocking's with_mock_header defaults to true and is set false — a production
-    ingest endpoint should not advertise that its acknowledgement is mocked.
-
+  notes: 'mocking does short-circuit the access phase, so kafka-logger''s access handler — where
+    include_req_body calls read_body() — never runs. It does not matter: $request_body in log_format
+    resolves correctly regardless, verified against a deployed route with request-validation removed
+    AND with include_req_body false. An earlier version of this package claimed removing request-validation
+    would silently empty every message; that was mechanically plausible and false, and is corrected
+    throughout. request-validation is here to reject malformed events, which with _meta.filter
+    also keeps them off the topic. log_format MUST use $apisix_request_id, not $request_id. $request_id
+    is nginx''s own id and never equals the X-Request-Id the caller receives; the request-id plugin
+    overwrites $apisix_request_id with the UUID it returns. The first version of this spec used
+    $request_id, so its correlation field correlated with nothing. The route is deliberately unauthenticated
+    — the smallest configuration that demonstrates the mechanism. Closing it with solution 06
+    requires REMOVING request-validation, because it re-encodes the body ahead of hmac-auth''s
+    digest check; validate_request_body then becomes the rewrite-phase body read instead. Three
+    kafka-logger defaults are overridden because they are chosen for logging rather than producing:
+    producer_type async -> sync, required_acks 1 -> -1, max_retry_count 0 -> 3. None of them changes
+    the at-most-once semantics. mocking''s with_mock_header defaults to true and is set false
+    — a production ingest endpoint should not advertise that its acknowledgement is mocked.'
+  plugins:
+  - name: kafka-logger
+    scope: route
+    at: POST /events
+    role: Configured on this solution's routes.
+  - name: mocking
+    scope: route
+    at: POST /events
+    role: Configured on this solution's routes.
+  - name: request-id
+    scope: document
+    role: Configured on this solution's routes.
+  - name: request-validation
+    scope: route
+    at: POST /events
+    role: Configured on this solution's routes.
+relations:
+  pairs_with:
+  - 06-hmac-auth
+  alternative_to: []
+  prerequisite_for: []
+  guides:
+  - platform-model
+  - vocabulary
+  - placeholders
+answers: what-else-must-happen
 validation:
-  # Stage statuses only. What was checked and what happened is in validation/.
   local: PASS
   gateway_dry_run: PASS
   deployment: DEPLOYED
   functional_test: PASS
   record: validation/
-
-artifacts:
-  documentation: [README.md, architecture.md, business-need.md]
-  source_code: [gateway/api-spec.yaml, gateway/verify.sh]
-  agent_prompt: helix-agent-prompt.md
-  diagrams: [README.md, architecture.md]   # mermaid blocks, rendered inline by GitHub
-  tests: [tests/test-plan.yaml, tests/requests/, tests/expected/]
-  validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
-
 assumptions:
-  - API name is "Event Ingest API" and the ingest path is POST /events (illustrative — replace with yours).
-  - The event shape (event_id, event_type, occurred_at, payload) is illustrative; body_schema and the OpenAPI requestBody schema are separate documents and both must be changed together.
-  - A Kafka broker is reachable FROM THE GATEWAY, not merely from the operator's machine.
-  - The topic is created explicitly at deploy time. Auto-creation drops the message that triggers it.
-  - Losing an occasional event is acceptable for this data. If it is not, this solution is the wrong shape — the README lists three alternatives.
-  - A topic browser is available to verify the Kafka leg, which is not observable from the caller's side.
-  - An upstream is bound to the service even though the /events route never reaches it; a revision will not deploy without a binding.
-
+- API name is "Event Ingest API" and the ingest path is POST /events (illustrative — replace with
+  yours).
+- The event shape (event_id, event_type, occurred_at, payload) is illustrative; body_schema and
+  the OpenAPI requestBody schema are separate documents and both must be changed together.
+- A Kafka broker is reachable FROM THE GATEWAY, not merely from the operator's machine.
+- The topic is created explicitly at deploy time. Auto-creation drops the message that triggers
+  it.
+- Losing an occasional event is acceptable for this data. If it is not, this solution is the wrong
+  shape — the README lists three alternatives.
+- A topic browser is available to verify the Kafka leg, which is not observable from the caller's
+  side.
+- An upstream is bound to the service even though the /events route never reaches it; a revision
+  will not deploy without a binding.
 limitations:
-  - AT-MOST-ONCE DELIVERY. kafka-logger publishes from the log phase, after the response has been flushed, so no publish outcome can ever reach the caller. A broker outage returns an identical 202. No setting on this route changes that.
-  - No ordering guarantee. batch_max_size 1 makes each event its own zero-delay timer and those timers race, so events land out of order even on a single partition. Kafka offsets carry no ordering meaning here — order downstream on a timestamp inside the event.
-  - kafka-logger's key is a static string used verbatim with no variable resolution, so partitioning by a field in the event body is not possible. Without a key, records round-robin.
-  - The route is unauthenticated as shipped. Deliberate, and the cost of closing it (dropping request-validation) is documented.
-  - No back-pressure. The gateway accepts at HTTP speed regardless of what the broker can absorb; producer-buffer overflow is dropped, not signalled.
-  - No dead-letter path. A message that cannot be produced is a log line.
-  - Topic auto-creation silently costs exactly one event per new topic, and in production that is a real one.
-  - Edge validation is structural only. JSON Schema cannot check that event_id is unique or that occurred_at is plausible, and nothing deduplicates — event_id is carried so the CONSUMER can.
-  - max_req_body_bytes defaults to 512 KB; a larger body is published TRUNCATED, not rejected.
-  - kafka-logger is a logger being used as a producer. That works and is deliberate, but its defaults are chosen for logs and three of them are overridden here for exactly that reason.
-  - request-validation cannot share a route with hmac-auth's validate_request_body.
-  - Topic auto-creation dropping the first message is the one case still unverified here — it needs a broker with auto.create.topics.enable and a topic that does not yet exist. Create topics explicitly and the question does not arise.
-
-status: READY   # deployed and exercised against a real Kafka cluster: verify.sh 4/4 plus three manual cases
+- AT-MOST-ONCE DELIVERY. kafka-logger publishes from the log phase, after the response has been
+  flushed, so no publish outcome can ever reach the caller. A broker outage returns an identical
+  202. No setting on this route changes that.
+- No ordering guarantee. batch_max_size 1 makes each event its own zero-delay timer and those
+  timers race, so events land out of order even on a single partition. Kafka offsets carry no
+  ordering meaning here — order downstream on a timestamp inside the event.
+- kafka-logger's key is a static string used verbatim with no variable resolution, so partitioning
+  by a field in the event body is not possible. Without a key, records round-robin.
+- The route is unauthenticated as shipped. Deliberate, and the cost of closing it (dropping request-validation)
+  is documented.
+- No back-pressure. The gateway accepts at HTTP speed regardless of what the broker can absorb;
+  producer-buffer overflow is dropped, not signalled.
+- No dead-letter path. A message that cannot be produced is a log line.
+- Topic auto-creation silently costs exactly one event per new topic, and in production that is
+  a real one.
+- Edge validation is structural only. JSON Schema cannot check that event_id is unique or that
+  occurred_at is plausible, and nothing deduplicates — event_id is carried so the CONSUMER can.
+- max_req_body_bytes defaults to 512 KB; a larger body is published TRUNCATED, not rejected.
+- kafka-logger is a logger being used as a producer. That works and is deliberate, but its defaults
+  are chosen for logs and three of them are overridden here for exactly that reason.
+- request-validation cannot share a route with hmac-auth's validate_request_body.
+- Topic auto-creation dropping the first message is the one case still unverified here — it needs
+  a broker with auto.create.topics.enable and a topic that does not yet exist. Create topics explicitly
+  and the question does not arise.
+status: READY
