@@ -1,7 +1,8 @@
 # Agent-mode prompt — OAuth 2.0 with gateway-issued JWTs
 
 Three steps to an API behind a token exchange: the protected routes, then the
-token endpoint, then an app to test with. Replace the `<<...>>` values.
+token endpoint, then the deploy and an app to test with. Replace the `<<...>>`
+values.
 [AGENT-GUIDE.md](../../AGENT-GUIDE.md) carries the standing rules these prompts
 assume.
 
@@ -45,10 +46,12 @@ Leave the three existing routes unchanged.
 Show me the stored revision. Do not deploy.
 ```
 
-## Step 3 — an app to test with
+## Step 3 — deploy, and an app to test with
 
 ```text
-Create a developer "<<Partner Integrations>>" with an app subscribed to the
+Deploy the "<<Posts API>>" API to the test environment.
+
+Then create a developer "<<Partner Integrations>>" with an app subscribed to the
 "<<Posts API>>" API, and give me the client id and secret.
 
 Then curl commands showing, in order: no token -> 401; client credentials -> 200
@@ -88,6 +91,10 @@ verified rather than decorative.
   Ship the placeholder and the placeholder *is* your signing key.
 - **Read the revision back.** Three of the four known agent-mode defects report
   success at every step the agent shows you; the read-back is what catches them.
+  Measured on 2026-09-27 across five runs of this step, the agent's own exit
+  status carried **no signal**: of the three runs that exited 0, two had stored
+  routes with no plugins at all, while one of the two runs that exited non-zero
+  had stored the config correctly. Judge the stored revision, never the run.
 
 ## Tweak knobs
 
@@ -130,6 +137,7 @@ already counts per app.
 | The agent reaches for a `jwt-auth` plugin | Reply: `jwt-auth` is a `validate_auth_type` of `helix-auth`, not a plugin. |
 | The agent writes `<ENV:JWT_SIGNING_SECRET>` | Reply: this build uses `signing_secret` verbatim — put a real secret and keep it out of git. |
 | `stream closed with reason: error`, and the revision has 0 routes | The write was too deep for the agent's serialiser and never reached the control plane. Keep the steps split; don't fold step 2 back into step 1. |
+| The run reports success, the routes exist, and every one has **no plugins** | Observed repeatedly on 2026-09-27, at exit 0, on this exact prompt. The API is wide open and nothing in the transcript says so. Re-run the step, then read the revision back again — `make -C harness inspect API=<name>`. |
 | Deploy fails: `Only INACTIVE revisions can be updated` | Clone the revision or undeploy, then apply. |
 
 ## Related

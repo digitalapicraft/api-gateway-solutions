@@ -149,10 +149,12 @@ Leave the three existing routes unchanged.
 Show me the stored revision. Do not deploy.
 ```
 
-**Step 3 — an app to test with**
+**Step 3 — deploy, and an app to test with**
 
 ```text
-Create a developer "<<Partner Integrations>>" with an app subscribed to the
+Deploy the "<<Posts API>>" API to the test environment.
+
+Then create a developer "<<Partner Integrations>>" with an app subscribed to the
 "<<Posts API>>" API, and give me the client id and secret.
 
 Then curl commands showing, in order: no token -> 401; client credentials -> 200
@@ -163,6 +165,14 @@ CORRECT client id with a WRONG secret -> 401.
 The agent fetches the real `helix-auth` schema from your org, proposes the spec,
 and stops. See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for what to do when it takes
 a wrong turn.
+
+> **Check what was stored, not what the agent said.** After step 1, confirm each
+> of the three routes carries `helix-auth` and that the **service spec carries no
+> plugins at all**. Across five runs of step 1 on 2026-09-27, the agent's exit
+> status tracked nothing useful: two runs reported success having stored routes
+> with no plugins on them — an API that accepts every caller — and one run that
+> reported an error had stored the config correctly. A route with no plugins is
+> not a degraded deployment; it is an unauthenticated one.
 
 ## Install it directly
 
