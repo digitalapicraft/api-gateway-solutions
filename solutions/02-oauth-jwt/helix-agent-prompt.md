@@ -137,7 +137,7 @@ already counts per app.
 | The agent reaches for a `jwt-auth` plugin | Reply: `jwt-auth` is a `validate_auth_type` of `helix-auth`, not a plugin. |
 | The agent writes `<ENV:JWT_SIGNING_SECRET>` | Reply: this build uses `signing_secret` verbatim — put a real secret and keep it out of git. |
 | `stream closed with reason: error`, and the revision has 0 routes | The write was too deep for the agent's serialiser and never reached the control plane. Keep the steps split; don't fold step 2 back into step 1. |
-| The run reports success, the routes exist, and every one has **no plugins** | Observed repeatedly on 2026-09-27, at exit 0, on this exact prompt. The API is wide open and nothing in the transcript says so. Re-run the step, then read the revision back again — `make -C harness inspect API=<name>`. |
+| The run reports success, the routes exist, and every one has **no plugins** | Observed repeatedly on 2026-09-27, at exit 0, on this exact prompt. The API is wide open and nothing in the transcript says so. Re-run the step, then ask for the stored revision again and read it yourself — the plugins on each of the three routes, and the service spec. |
 | Deploy fails: `Only INACTIVE revisions can be updated` | Clone the revision or undeploy, then apply. |
 
 ## Related
