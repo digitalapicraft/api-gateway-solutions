@@ -1,5 +1,7 @@
 # Solution 01 — API Products: give different customers different usage limits
 
+> **Overview** · [Business need](business-need.md) · [Architecture](architecture.md) · [Guides](guides.md) · [Examples](examples.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [Configuration reference](configuration-reference.md) · [API reference](api-reference.md)
+
 **In short:** create pricing plans for your API, and automatically stop any one
 customer from using more than their plan allows, without affecting anyone else.
 
@@ -8,11 +10,6 @@ customer from using more than their plan allows, without affecting anyone else.
 | **Time to try it** | About 20 minutes |
 | **Difficulty** | 🟢 Beginner — no coding needed |
 | **What you'll need** | A free test account, plus two test apps so you can watch one get blocked while the other keeps working |
-
-**Overview** · [Business need](business-need.md) · [Architecture](architecture.md) ·
-[Guides](guides.md) · [Examples](examples.md) · [Agent prompt](helix-agent-prompt.md) ·
-[Tests](tests.md) · [Configuration reference](configuration-reference.md) ·
-[API reference](api-reference.md)
 
 ---
 
@@ -102,9 +99,9 @@ create two apps for them (one per plan), then grab each app's key.
 | Gateway dry-run | **PASS** | Non-destructive check against a live gateway. |
 | Gateway deployed | **DEPLOYED** | Two products, two apps on different products, ACTIVE. |
 | Functional tests | **PASS (5/5)** | `example/verify.sh` exit 0, including the isolation check (case 5). |
-| Agent-mode build | **PASS** (2026-09-21) | Read back from the deployed revision, not just from the agent's transcript. |
+| Agent-mode build | **UNVALIDATED** | An earlier two-step version of the prompt passed (2026-09-21, read back from the deployed revision). The one-shot prompts shipped today haven't been run yet — re-verify before relying on them. |
 
-**Overall: READY.**
+**Overall: READY WITH WARNINGS.** The gateway config (spec, plugins, quota enforcement) is fully validated above; the one open item is the one-shot agent prompts, which haven't been run yet.
 
 Confirmed live: the quota is exact, isolation holds (a second app on a different product kept working while the first was throttled), and the 429 body is `{"error":"quota exceeded"}` with no `Retry-After`/`X-RateLimit-*` headers — though the response's `content-type` says `text/plain`. The window is a fixed calendar minute, so a burst straddling the boundary can briefly get through at ~2×. Multi-node `quota_policy` couldn't be tested on a single-node environment — check it on your own cluster.
 

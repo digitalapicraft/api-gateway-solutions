@@ -1,9 +1,6 @@
 # Examples — API Products with enforced quota
 
-[Overview](README.md) · [Business need](business-need.md) · [Architecture](architecture.md) ·
-[Guides](guides.md) · **Examples** · [Agent prompt](helix-agent-prompt.md) ·
-[Tests](tests.md) · [Configuration reference](configuration-reference.md) ·
-[API reference](api-reference.md)
+> [Overview](README.md) · [Business need](business-need.md) · [Architecture](architecture.md) · [Guides](guides.md) · **Examples** · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [Configuration reference](configuration-reference.md) · [API reference](api-reference.md)
 
 ---
 

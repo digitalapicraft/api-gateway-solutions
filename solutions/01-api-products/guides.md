@@ -1,9 +1,6 @@
 # Guides — API Products with enforced quota
 
-[Overview](README.md) · [Business need](business-need.md) · [Architecture](architecture.md) ·
-**Guides** · [Examples](examples.md) · [Agent prompt](helix-agent-prompt.md) ·
-[Tests](tests.md) · [Configuration reference](configuration-reference.md) ·
-[API reference](api-reference.md)
+> [Overview](README.md) · [Business need](business-need.md) · [Architecture](architecture.md) · **Guides** · [Examples](examples.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [Configuration reference](configuration-reference.md) · [API reference](api-reference.md)
 
 ---
 
@@ -11,9 +8,11 @@ Three ways to build this, then how to test it and fix it.
 
 ## Build it with the Helix Agent
 
-The fastest path, and it works on a **fresh, empty org**. Two prompts, pasted
-one at a time — the first builds the API and both tiers, the second proves
-isolation. Copy both from [`helix-agent-prompt.md`](helix-agent-prompt.md).
+The fastest path, and it works on a **fresh, empty org**. One prompt does the
+whole build — the API, both tiers, the plugins, and two apps that prove
+isolation. [`helix-agent-prompt.md`](helix-agent-prompt.md) has three
+one-shot versions to pick from: a short one, a detailed one with every
+guardrail spelled out, and one for adding tiers to an API you already have.
 
 See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the ground rules these prompts
 assume.

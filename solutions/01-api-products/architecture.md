@@ -1,9 +1,6 @@
 # Architecture — API Products with enforced quota
 
-[Overview](README.md) · [Business need](business-need.md) · **Architecture** ·
-[Guides](guides.md) · [Examples](examples.md) · [Agent prompt](helix-agent-prompt.md) ·
-[Tests](tests.md) · [Configuration reference](configuration-reference.md) ·
-[API reference](api-reference.md)
+> [Overview](README.md) · [Business need](business-need.md) · **Architecture** · [Guides](guides.md) · [Examples](examples.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [Configuration reference](configuration-reference.md) · [API reference](api-reference.md)
 
 ---
 
