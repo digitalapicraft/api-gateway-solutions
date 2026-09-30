@@ -148,10 +148,15 @@ not on the wording: the steps are identical either way.
 > limiter**. Then confirm each product has a `quota` object, because a product
 > without one is a 403 rather than "unlimited".
 >
+> **And check the enforcer is actually there.** A reported run got everything else
+> right — identity, both products, both apps — and simply never added
+> `api-product-enforcer`. Nothing errors: the quota exists, nothing reads it, and
+> every call succeeds. Two plugin names on the API is the whole check.
+>
 > On the agent's normal model this prompt got it right unprompted — no
 > `limit-count` anywhere, both products carrying a quota at `scope: app`. On a
-> small free-tier model the same prompt added `limit-count` to both routes. The
-> check is cheap; do it anyway.
+> small free-tier model the same prompt added `limit-count` to both routes. Neither
+> run is a guarantee for yours; the check is cheap, do it anyway.
 
 ### Why the prompt is worded the way it is
 
@@ -225,10 +230,11 @@ than the prompt does.
 
 | Symptom | Cause |
 |---|---|
+| Everything works, every call 200s, **and no 429 ever comes** | `api-product-enforcer` was never added. Identity resolves, the products exist with their quotas, the apps are subscribed — and nothing enforces any of it. This is the quietest failure in the solution: there is no error, the demo looks finished, and the quota you are selling is decorative. Check the API carries the enforcer before you believe any limit. |
 | A `limit-count` on the routes, or anything keyed on a consumer name | The generic rate-limit reflex. Rate limiting here is the product quota, counted per app. Tell it to remove the limiter and enforce the tiers through the products instead. |
 | Everything 403s | The app isn't subscribed to a product covering this API, the route has no `service_id`, or a bare key check replaced identity that resolves a subscription. Ask for `get_app` and check the products map is non-empty. |
 | Everything 401s | You're sending the app's secret where its key (client id) belongs. |
-| No 429 ever arrives | The quota is higher than you think, or the quota backend is counting per node — see [the quota backend](#the-quota-backend-is-not-in-this-file). |
+| No 429 ever arrives | First check the enforcer is on the API at all (row 1). Then: the quota is higher than you think, or the quota backend is counting per node — see [the quota backend](#the-quota-backend-is-not-in-this-file). |
 | Both apps 429 together | They aren't two separate apps, or they share a product. Two keys on one app share a bucket. |
 | A product exists but every call 403s | It has no `quota` object. That is a 403, not "unlimited" — unlimited is `-1`. |
 | Identity lands in the service spec | Expected — this solution meters every route, so API-wide is the shipped shape. Move it per-route only if you later add a route that must stay reachable without a key, such as a token endpoint ([solution 02](../02-oauth-jwt/)). |
