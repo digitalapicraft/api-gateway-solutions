@@ -212,9 +212,11 @@ Don't use it when:
 
 - The API exists and is deployed to an environment, with the upstream bound to
   the service.
-- `JWT_SIGNING_SECRET` exists as an environment variable **before** the revision
-  is deployed. A spec referencing a secret that doesn't exist deploys cleanly and
-  fails at request time.
+- `<YOUR_JWT_SIGNING_SECRET>` in the spec has been replaced with a real,
+  high-entropy value — the **same** value on the token route and every validate
+  route. It is used **literally** as the HMAC key; this build resolves neither
+  `<ENV:...>` nor `${...}`, so a spec shipped with the placeholder still deploys
+  cleanly and hands anyone who reads it your signing key.
 - `helix-auth` is present in your org, and you've confirmed its schema with
   `get_plugin_config`.
 - At least one developer with one app, so you have a `client_id` and

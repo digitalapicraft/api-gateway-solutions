@@ -6,7 +6,7 @@
 solution:
   name: OAuth 2.0 with JWT, without touching the backend
   slug: 02-oauth-jwt
-  version: 1.0.0
+  version: 1.1.0
   category:
     - Security & Access
   tags: [oauth2, jwt, client-credentials, authentication, helix-auth, token-endpoint]
@@ -70,8 +70,10 @@ assumptions:
     it is the only bound on a leaked token's usefulness. Pick it for your own risk
     tolerance and tell integrators to cache and refresh at ~80% of the lifetime.
   - The gateway is the token issuer and no external identity provider is involved.
-  - JWT_SIGNING_SECRET exists as an environment variable on the target environment
-    BEFORE the revision is deployed.
+  - The signing secret is a LITERAL. The gateway resolves neither <ENV:...> nor
+    ${...}, so <YOUR_JWT_SIGNING_SECRET> in the spec must be replaced with a real,
+    high-entropy value before deploy, identically on the token route and every
+    validate route. The filled-in spec is not committed.
   - The upstream is bound on the service at import/bind time, not in the OpenAPI paths.
 
 limitations:
