@@ -148,10 +148,10 @@ not on the wording: the steps are identical either way.
 > limiter**. Then confirm each product has a `quota` object, because a product
 > without one is a 403 rather than "unlimited".
 >
-> **And check the enforcer is actually there.** A reported run got everything else
-> right — identity, both products, both apps — and simply never added
-> `api-product-enforcer`. Nothing errors: the quota exists, nothing reads it, and
-> every call succeeds. Two plugin names on the API is the whole check.
+> **And check the enforcer is actually there.** It is usually present; in a handful
+> of runs it simply was not. Nothing errors when it is missing: the quota exists,
+> nothing reads it, and every call succeeds. Two plugin names is the whole check,
+> and they may sit on the API or on each route — either is fine here.
 >
 > On the agent's normal model this prompt got it right unprompted — no
 > `limit-count` anywhere, both products carrying a quota at `scope: app`. On a
@@ -182,7 +182,7 @@ gateway's documentation. Three phrasings are doing real work:
 | Key header | nothing | an `apikey` header |
 | Error policy | nothing | `fail_close` on the enforcer, and nothing else in its block |
 | Counting scope | "per app" | `scope: app` on both product quotas |
-| Placement | nothing | identity and the enforcer **API-wide**, which is what this solution ships |
+| Placement | nothing | usually identity and the enforcer **API-wide**, which is what this solution ships — but sometimes on each route instead. Across five organisations it went API-wide in four and per-route in one. **Both are correct here**, because every route is metered either way |
 | Extras | nothing | `request-id` and `cors`; on a weaker model, sometimes an `OPTIONS` route |
 
 All of that is correct here. The window is the one worth a follow-up if your
@@ -237,7 +237,7 @@ than the prompt does.
 | No 429 ever arrives | First check the enforcer is on the API at all (row 1). Then: the quota is higher than you think, or the quota backend is counting per node — see [the quota backend](#the-quota-backend-is-not-in-this-file). |
 | Both apps 429 together | They aren't two separate apps, or they share a product. Two keys on one app share a bucket. |
 | A product exists but every call 403s | It has no `quota` object. That is a 403, not "unlimited" — unlimited is `-1`. |
-| Identity lands in the service spec | Expected — this solution meters every route, so API-wide is the shipped shape. Move it per-route only if you later add a route that must stay reachable without a key, such as a token endpoint ([solution 02](../02-oauth-jwt/)). |
+| Identity in the service spec, or on each route | Either is fine, and you will see both — this solution meters every route, so the two are equivalent. It only matters if you later add a route that must stay reachable without a key, such as a token endpoint ([solution 02](../02-oauth-jwt/)); then it has to be per-route. |
 
 ## Install it directly
 
