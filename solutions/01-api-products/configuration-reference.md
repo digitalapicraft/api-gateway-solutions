@@ -38,6 +38,8 @@ before you point this at your own backend). Both apply to every route.
 
 Full field-by-field reference for `api-product-enforcer` and the other traffic
 plugins: [docs.digitalapi.ai — Traffic plugins](https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-traffic).
+For every other plugin, and the rest of the gateway, start at
+[docs.digitalapi.ai/api-gateway](https://docs.digitalapi.ai/api-gateway).
 
 A product's `quota` object accepts `limit`, `interval`, `interval_unit`, and
 optionally `quota_key_scope` (defaults to `app`; set it to `developer` to pool a

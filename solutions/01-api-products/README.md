@@ -89,6 +89,8 @@ create two apps for them (one per plan), then grab each app's key.
 - **Want to understand how it works?** [Architecture](architecture.md) covers the
   moving parts and the vocabulary (what a "Product" or an "App" means here).
 - **Ready to build it?** [Guides](guides.md) walks you through it step by step.
+- **Want the full product documentation?** Every plugin, screen and API call is
+  covered at [docs.digitalapi.ai/api-gateway](https://docs.digitalapi.ai/api-gateway).
 
 ## Validation status
 

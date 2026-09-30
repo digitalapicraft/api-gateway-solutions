@@ -27,6 +27,9 @@ developer/product/app screens live under **API Distribution**
 
 **Before you start:**
 
+- **You have an account.** If you don't, register for a free trial at
+  [trial.digitalapi.ai](https://trial.digitalapi.ai/). A new trial org comes
+  with a `test` environment, which is all this walkthrough needs.
 - **You have permission to create APIs, products, and apps.** If you don't see
   an **Add API**, **Add API Product**, or **Add App** button, ask your org admin
   — these actions are permission-gated.
@@ -36,9 +39,6 @@ developer/product/app screens live under **API Distribution**
   **Admin → Orgs → (your org) → Environments tab → Create environment**, which
   needs an existing Gateway to attach to. Ask your admin if you're not sure one
   exists yet.
-- **You're not on a free trial that's already at its resource limit.** Creating
-  an API, product, or app is capped on some plans; the UI tells you if you've
-  hit that cap.
 
 **1. Import the API**
 1. Go to **API Gateway → APIs**, then click **Add API** (or

@@ -6,7 +6,8 @@
 
 The raw control-plane calls behind [Install it directly](guides.md#install-it-directly),
 listed for lookup rather than as a walkthrough. Every call below is exercised by this
-package's own setup — none of it requires custom code.
+package's own setup — none of it requires custom code. The full control-plane and
+plugin documentation is at [docs.digitalapi.ai/api-gateway](https://docs.digitalapi.ai/api-gateway).
 
 The API itself needs an upstream bound and its revision deployed **before**
 any of this is reachable — that's three calls the spec import doesn't do for
