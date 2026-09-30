@@ -6,7 +6,7 @@
 solution:
   name: "API Products: sell tiers you can actually enforce"
   slug: 01-api-products
-  version: 1.0.0
+  version: 1.1.0
   category:
     - API Products & Monetization
     - Traffic Management
