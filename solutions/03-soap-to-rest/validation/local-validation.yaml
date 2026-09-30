@@ -11,17 +11,17 @@ local_validation:
     syntax:                  PASS   # api-spec.yaml parses as valid OpenAPI 3.0.3; verify.sh parses under bash
     schema:                  PASS_WITH_WARNINGS   # helix-auth, proxy-rewrite, request-id and cors use confirmed fields; xml-to-json is left as a DEFAULT block because its schema is build-dependent
     required_fields:         PASS   # generate route carries token_ttl + signing_secret; validate route carries validate_auth_type + signing_secret; proxy-rewrite carries uri
-    references:              PASS   # /oauth/token and /locations reference the identical <ENV:JWT_SIGNING_SECRET>
+    references:              PASS   # /oauth/token and /locations reference the identical <YOUR_JWT_SIGNING_SECRET>
     plugin_ordering:         PASS   # access (helix-auth) -> rewrite (proxy-rewrite) -> request transform -> upstream -> response transform. Rejection precedes translation, which is the property that matters.
     plugin_scoping:          PASS   # validate is per-route on /locations, NOT at the document root, so POST /oauth/token stays reachable without a token
     transform_direction:     PASS   # xml-to-json has transform_request:true (default is false) and transform_response:true; proxy-rewrite retargets the path only (no Content-Type override, which would run first and defeat the request transform). No json-to-xml (that is the opposite plugin).
     plugin_agreement:        PASS   # proxy-rewrite declares Content-Type text/xml and xml-to-json is what makes that true — the two are consistent
     auth_authz_dependencies: PASS   # /oauth/token intentionally unprotected; nothing on /locations reads context helix-auth has not yet produced
     request_response:        PASS   # documented 200/401/502/504 responses match the design
-    security:                PASS   # no literal secrets; signing_secret is <ENV:JWT_SIGNING_SECRET>; client_id/client_secret provisioned on the credential by the control plane
+    security:                PASS   # no literal secrets; signing_secret is the placeholder <YOUR_JWT_SIGNING_SECRET>, used VERBATIM as the HMAC key on this build — it must be replaced before deploy; client_id/client_secret provisioned on the credential by the control plane
     no_commentary_keys:      PASS   # plugin blocks contain schema fields only; all explanation is in YAML comments
     tests_match_impl:        PASS   # the five verify.sh cases map to routes and plugins present in the spec; the seven manual/boundary/failure cases are flagged as such in tests/test-plan.yaml
-    placeholders:            PASS   # <SOAP_UPSTREAM_URL>, <YOUR_GATEWAY_HOST>, <ORG_ID>, <CLIENT_ID>, <CLIENT_SECRET>, <ENV:JWT_SIGNING_SECRET> — no real hosts, org ids or personas
+    placeholders:            PASS   # <SOAP_UPSTREAM_URL>, <YOUR_GATEWAY_HOST>, <ORG_ID>, <CLIENT_ID>, <CLIENT_SECRET>, <YOUR_JWT_SIGNING_SECRET> — no real hosts, org ids or personas
 
   warnings:
     - >-

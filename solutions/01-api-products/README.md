@@ -125,47 +125,113 @@ Better, but still worth knowing.
 
 ## Build it with the Helix Agent
 
-Recommended path, and it works on a **fresh org**. Two steps — paste the first,
-confirm, then the second. Full prompt with the reasoning, tweak knobs and failure
-modes: [`helix-agent-prompt.md`](helix-agent-prompt.md).
+Recommended path, and it works on a **fresh org**. The whole build is **one
+prompt** — [`helix-agent-prompt.md`](helix-agent-prompt.md). Paste it as a single
+message and replace the `<<...>>` values.
 
+It goes all the way: the API and its routes, key-based identity, the two tier
+products with their quotas, then a developer, two apps and the loop that makes the
+429 appear. It **deploys**, because step 3 cannot hand you working keys otherwise.
+
+**If the run dies mid-way, paste the three steps one at a time instead.** This
+build asks for more in a single turn than most — two products and two apps — and
+on 2026-09-30 the whole prompt in one message ended the stream four times running,
+while each step pasted on its own completed cleanly. That is a limit on the turn,
+not on the wording: the steps are identical either way.
+[AGENT-GUIDE.md](../../AGENT-GUIDE.md) carries the standing rules it assumes.
+
+> **Check that the quota is the limiter.** The classic wrong turn here is a
+> generic rate-limit plugin — `limit-count`, often keyed on a consumer name —
+> sitting alongside or instead of the product quota. It looks right, meters the
+> wrong thing, and silently coexists with the quota you actually sell. Read the
+> stored revision back: identity and the product enforcer, and **no second
+> limiter**. Then confirm each product has a `quota` object, because a product
+> without one is a 403 rather than "unlimited".
+>
+> On the agent's normal model this prompt got it right unprompted — no
+> `limit-count` anywhere, both products carrying a quota at `scope: app`. On a
+> small free-tier model the same prompt added `limit-count` to both routes. The
+> check is cheap; do it anyway.
+
+### Why the prompt is worded the way it is
+
+It names no plugin and no field. Ask for an outcome and the agent reads the real
+schemas your org ships; ask for fields and it pattern-matches them from another
+gateway's documentation. Three phrasings are doing real work:
+
+- **"Sell this API in two tiers."** Tiers are what products *are* on this
+  platform, so naming the commercial shape is what gets you products with quotas
+  rather than a rate-limit plugin bolted onto a route. Rate limiting here **is**
+  the product quota; there is no separate limiter to reach for.
+- **"Per app."** Quota is counted against the credential. Saying it out loud is
+  what stops a per-developer or per-IP reading, and it is the difference between
+  a limit that isolates a bad integration and one that does not.
+- **"Two separate apps."** Two keys on the *same* app share a bucket, so a demo
+  built that way shows both keys throttling together and looks like a broken
+  quota when it is a correct one.
+
+### What the agent decides for you
+
+| | The prompt says | The agent chose |
+|---|---|---|
+| Key header | nothing | an `apikey` header |
+| Error policy | nothing | `fail_close` on the enforcer, and nothing else in its block |
+| Counting scope | "per app" | `scope: app` on both product quotas |
+| Placement | nothing | identity and the enforcer **API-wide**, which is what this solution ships |
+| Extras | nothing | `request-id` and `cors`; on a weaker model, sometimes an `OPTIONS` route |
+
+All of that is correct here. The window is the one worth a follow-up if your
+contracts are written differently — see [tier design](#tier-design-that-works),
+and the first entry under [Variations](#variations).
+
+## Variations
+
+Follow-ups for the same session, once the build above is standing. Same register
+as the prompt — say what you want to be true, not which fields to set.
+
+**Pool a developer's apps into one bucket**
 ```text
-Create a REST API "<<Posts API>>" on upstream https://jsonplaceholder.typicode.com,
-environment test, with routes GET /posts and GET /posts/{postId} proxied straight
-through. Fresh org — nothing exists yet. Confirm the route has a service_id.
-
-Identify the caller with helix-auth in validate mode, key-auth, reading the key
-from an "apikey" header. I need the app's product subscription resolved, so don't
-substitute a bare key check.
-
-Create two products, each with a quota — Free 5/min and Pro 1000/min — and deploy
-both to test. A product with no quota object is a 403, not "unlimited".
-
-Put api-product-enforcer on the routes with error_policy fail_close. The product
-quota IS the rate limiter: no second limiter, nothing keyed on consumer_name, and
-no Redis settings on the enforcer.
-
-Plugins go in a top-level "plugins" map on the route object, each under its own
-plugin name. No "x-helix-gateway" wrapper — a live route discards it silently and
-still reports success.
-
-Show me the spec, run dry_run_deploy, then read the revision back so I can see
-which plugins actually landed. Wait before deploying.
+Count the quota per developer rather than per app, and tell me what that changes
+about blast radius when one of their apps misbehaves.
 ```
 
-Then the part that makes it demonstrable:
-
+**Point at my real upstream**
 ```text
-Create a developer with TWO SEPARATE apps, one subscribed to Free and one to Pro,
-and give me both keys. Two keys on one app share a bucket and would prove nothing.
-
-Then give me a curl loop showing the Free app getting 429 after 5 requests while
-the Pro app still gets 200s in the same window.
+Point this at <<https://my-backend.internal>> instead and keep the tiers as they
+are. My backend's paths differ from the route paths, so rewrite them on the way
+through.
 ```
 
-See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for what to say if the agent reaches
-for a `limit-count` on `consumer_name` — the generic reflex this platform doesn't
-use.
+**More tiers**
+```text
+Add an Enterprise tier at 10000 a minute, and an Internal tier that is unlimited
+but still authenticated and attributed, so I can see its traffic.
+```
+
+**Require a token instead of a static key**
+```text
+Callers should exchange a client id and secret for a short-lived token instead of
+sending a static key, and the tier limits should still apply behind it.
+```
+That's [solution 02](../02-oauth-jwt/) composed with this one.
+
+## When the agent goes wrong
+
+**Read the stored revision before you trust any of it.** Driven against a small
+free-tier model, this prompt added `limit-count` to both routes — the wrong turn
+the platform is most prone to, from a prompt that asked for nothing of the kind.
+On the agent's normal model it did not. Which model is serving decides more here
+than the prompt does.
+
+| Symptom | Cause |
+|---|---|
+| A `limit-count` on the routes, or anything keyed on a consumer name | The generic rate-limit reflex. Rate limiting here is the product quota, counted per app. Tell it to remove the limiter and enforce the tiers through the products instead. |
+| Everything 403s | The app isn't subscribed to a product covering this API, the route has no `service_id`, or a bare key check replaced identity that resolves a subscription. Ask for `get_app` and check the products map is non-empty. |
+| Everything 401s | You're sending the app's secret where its key (client id) belongs. |
+| No 429 ever arrives | The quota is higher than you think, or the quota backend is counting per node — see [the quota backend](#the-quota-backend-is-not-in-this-file). |
+| Both apps 429 together | They aren't two separate apps, or they share a product. Two keys on one app share a bucket. |
+| A product exists but every call 403s | It has no `quota` object. That is a 403, not "unlimited" — unlimited is `-1`. |
+| Identity lands in the service spec | Expected — this solution meters every route, so API-wide is the shipped shape. Move it per-route only if you later add a route that must stay reachable without a key, such as a token endpoint ([solution 02](../02-oauth-jwt/)). |
 
 ## Install it directly
 
@@ -309,12 +375,6 @@ behaviour:
 
 ## Gotchas
 
-- **The per-IP `limit-count` needs `real-ip` in front of it.** If the gateway sits
-  behind a load balancer or proxy and `real-ip` isn't configured, every caller
-  presents the balancer's address. The per-IP ceiling then collapses into a single
-  global cap on that endpoint — a self-inflicted outage waiting for a traffic
-  spike. Nothing in the spec can detect your topology; you have to know it.
-
 Each of these has cost somebody an afternoon.
 
 - **The quota backend isn't on the route.** On more than one node, `quota_policy`
@@ -408,17 +468,16 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 | Gateway dry-run | **PASS** | Non-destructive validation on a gateway. |
 | Gateway deployed | **DEPLOYED** | Two products, two apps on different products, ACTIVE. |
 | Functional tests | **PASS (5/5)** | `gateway/verify.sh` exit 0 — **including isolation** (case 5). |
+| Agent path | **PASS, model-dependent** | Driven live 2026-09-30 on the agent's normal model, one step per turn: identity, both tier products with `scope: app` quotas, the enforcer at `fail_close`, no `limit-count`, then a developer and two separately-subscribed apps. A small free-tier model reached for `limit-count` instead. |
 
-Overall: **READY.** Confirmed live: quota is exact (a Free app at 5/min served
-exactly five 200s then 429 in a clean window); isolation holds (a second app on a
-different product kept getting 200s while the first was throttled); the 429 body is
-`{"error":"quota exceeded"}` with **no** `Retry-After` and **no** `X-RateLimit-*`
-headers; a product without a `quota` object is rejected at creation; and an app
-whose product doesn't cover the API gets 403. Two observations worth knowing: the
-429 is JSON but carries `content-type: text/plain`, and the quota window is a fixed
-calendar minute (a boundary-straddling burst can briefly serve 2×). The multi-node
-`quota_policy` pitfall could not be exercised on a single-node test — verify it on
-your own cluster. Full record:
+Overall: **READY.** Confirmed live: the quota is exact and isolation holds; the
+429 body is `{"error":"quota exceeded"}` with **no** `Retry-After` and **no**
+`X-RateLimit-*` headers; a product without a `quota` object is rejected at
+creation; an app whose product doesn't cover the API gets 403. Two quirks worth
+knowing: that 429 is JSON but carries `content-type: text/plain`, and the window
+is a fixed calendar minute, so a boundary-straddling burst can briefly serve 2×.
+The multi-node `quota_policy` pitfall cannot be exercised on one node — verify it
+on your own cluster. Full record:
 [`validation/gateway-validation.yaml`](validation/gateway-validation.yaml).
 
 ## Related solutions
