@@ -4,81 +4,89 @@
 
 ---
 
-## Why this matters
+## The problem in one sentence
 
-Two problems that seem unrelated actually come from the same gap: **every
-caller shares one pool, and the gateway doesn't know who's calling or what
-they paid for.**
+Today every caller shares one pool of capacity, and the gateway does not know
+who is calling or which plan they are on.
 
-- **It causes outages.** One partner's misbehaving app can use up capacity
-  meant for everyone else, and nobody can say what its limit should have been
-  until after it's already down.
-- **It makes your pricing dishonest.** If "Enterprise" is supposed to get more
-  capacity but nothing actually checks that, a Free customer can use exactly
-  as much as your best-paying one.
+That one gap shows up in two very different places:
 
-The quieter costs add up too: you provision for a guess instead of a
-commitment, support can't tell a customer their real limit, "which partner
-caused this?" is a log hunt at 3am, and you can't bill anyone for the load
-they actually generate.
+- **Reliability.** If one partner's app starts calling far too often, it can
+  use up the capacity meant for everyone. Nobody can say what that app's
+  limit should have been, because there was no limit.
+- **Pricing.** If your Enterprise plan promises more capacity than Free, but
+  nothing checks that, then a Free customer can use exactly as much as your
+  best-paying one. The difference between the plans exists only on paper.
 
-## What changes
+There are smaller costs too. You size your servers for a guess instead of a
+known total. Support cannot tell a customer what their limit is. Finding out
+which partner caused a spike means searching through logs. And you cannot
+bill anyone for the load they create.
 
-The quota attaches to **the thing you sell** — a product — and is counted
-per app:
+## What this solution changes
 
-| Dimension | Without product quota | With this solution |
+A quota is attached to **the product you sell**, and it is counted **per
+app**. Each app gets its own budget. When an app uses up its budget, the
+gateway answers its requests with HTTP 429 ("too many requests") until the
+budget resets. Every other app keeps working.
+
+| | Without product quota | With this solution |
 |---|---|---|
-| **Blast radius of a bad integration** | 100% of your customers | Just the one app |
+| **One app misbehaves** | Everyone is affected | Only that app is affected |
 | **What "Enterprise" means** | A line in a contract | A real, enforced difference |
-| **Capacity planning basis** | A guess at the worst case | The sum of what you've sold |
-| **Attribution** | An IP address in a log | Every request tied to an app |
-| **Chargeback** | Not possible | Per-app request counts |
+| **How you size capacity** | Guess the worst case | Add up what you have sold |
+| **Who caused the spike?** | An IP address in a log | The app name, on every request |
+| **Billing by usage** | Not possible | Request counts per app |
 
-## The two things that actually change
+## Why this is different from a simple rate limit
 
-**The blast radius gets bounded, and stays with whoever caused it.** Not "we
-survive the spike" — the offending app runs out of its own budget while every
-other caller keeps working. A global rate limit doesn't do this: it protects
-the backend by rejecting whoever happens to be calling, so one partner's bug
-still becomes everyone's bad day, just a smaller one.
+A plain rate limit protects your backend by rejecting requests once the total
+gets too high. It does not care who is calling. So when one partner has a
+bug, everyone gets some rejections, and the partner who caused it is not
+the only one who suffers.
 
-**Capacity planning changes what it's measured against.** Without a
-per-caller bound, you provision for what a caller *might* do. With one, you
-provision for the sum of what you *sold* — but only if that sum is actually
-below what your upstream can handle. Add the tiers up and check that before
-you rely on the saving; if you've oversold, the quota turns that into 429s
-instead of an outage, which is better, but still worth knowing.
+A product quota does the opposite. The app that caused the problem runs out
+of its own budget and gets 429s. Nobody else notices.
 
-That second point is usually what gets this funded: **a quota turns a
-contract line into a real product feature, and a ceiling into an upgrade
-conversation.** An app that keeps hitting its Free limit is a qualified lead
-with a number attached. See [solution 04](../04-analytics/) for the queries
-that surface that.
+## Two things worth knowing before you rely on it
 
-How to actually size your tiers: [Architecture](architecture.md#tier-design-that-works).
-What this doesn't solve, in detail: [Configuration reference](configuration-reference.md).
+**Capacity planning gets simpler, with one check.** Once every app has a
+limit, you can plan for the sum of what you have sold instead of the worst
+thing any caller might do. Add up your plan tiers and make sure that total is
+below what your backend can handle. If you have sold more than you can serve,
+the quota turns an outage into 429s. That is better, but it is still worth
+knowing.
 
-## The payoff
+**A limit is also a sales signal.** An app that keeps hitting its Free limit
+is a customer who needs more. The quota turns "you are at your limit" into
+an upgrade conversation with real numbers behind it. [Solution 04](../04-analytics/)
+shows how to find those apps.
 
-- **Availability stops depending on your worst-behaved partner.** An outage
-  becomes one partner getting 429s — an action item you can actually close.
-- **Tiers become sellable**, because the difference between them is real.
+How to choose the numbers for each tier: [Architecture](architecture.md#tier-design-that-works).
+What this solution does not cover: [Configuration reference](configuration-reference.md).
+
+## What you get
+
+- **Uptime no longer depends on your least careful partner.** A problem
+  becomes one app getting 429s, which you can act on.
+- **Plans become worth paying for**, because the difference between them is
+  enforced.
 - **Capacity is planned from commitments**, not guesses.
-- **Upgrade conversations get real data** instead of a hunch.
-- **Incident attribution drops from hours to seconds.**
-- **Chargeback becomes possible**, and a marketplace becomes reachable — the
-  product is the thing a partner subscribes to.
+- **Upgrade conversations come with data.**
+- **Finding the cause of a spike takes seconds**, not hours.
+- **Usage-based billing becomes possible**, and so does a marketplace, because
+  the product is the thing a partner subscribes to.
 
-## Done looks like
+## How you know it is working
 
-- A deliberately misbehaving app gets 429s while **every other app keeps
-  working** — verified by [`example/verify.sh`](example/verify.sh) case 5,
-  not case 4. Proving a limit exists is easy; proving it stays with the
-  offender is the point.
-- Support can state a customer's limit, and it matches what's enforced.
+- One app that is deliberately calling too often gets 429s, and **every other
+  app keeps working**. The example script [`example/verify.sh`](example/verify.sh)
+  checks this in case 5. Case 4 only shows that a limit exists. Case 5 shows the
+  limit stays with the app that broke it, which is the point.
+- Support can state a customer's limit, and it matches what the gateway
+  enforces.
 - Capacity is planned from the sum of committed quotas, checked against what
-  your upstream can take.
-- "Which app caused the spike?" is answerable in seconds.
-- If the gateway runs more than one node, you've **confirmed** `quota_policy`
-  is `redis` rather than assumed it.
+  your backend can handle.
+- "Which app caused the spike?" can be answered in seconds.
+- If the gateway runs on more than one node, you have **confirmed** that
+  `quota_policy` is set to `redis`, not assumed it. See [Guides](guides.md).

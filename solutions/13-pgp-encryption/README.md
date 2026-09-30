@@ -200,7 +200,7 @@ Two things it cannot do, both worth knowing before you rely on it:
   rejected, because the statement was encrypted to *their* key and your inbound
   route holds *yours*.
 
-## The wire format will cost you an afternoon
+## The wire format is base64 of the armor
 
 **Both directions use base64 of the ASCII-armored message — not the armor
 itself.**

@@ -201,8 +201,6 @@ the manual tests `verify.sh` can't run for you: [Tests](tests.md).
 
 ## Troubleshooting
 
-Each of these has cost somebody an afternoon.
-
 - **The quota backend isn't on the route.** On more than one node, `quota_policy`
   must be `redis` in `plugin_attr.api-product-enforcer`. The default, `local`,
   counts per node — so an N-node cluster serves roughly N times the quota you sold.

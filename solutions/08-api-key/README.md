@@ -288,7 +288,7 @@ deliberately does not ship.
   second factor. See § above.
 - **A 403 is not a 401.** 401 means the key did not resolve to an app. 403 means
   it did, and the app's product does not cover this API — add the API to the
-  product. People lose afternoons treating the second as a credential problem.
+  product. The second is a product-coverage problem, not a credential problem.
 - **The key is the credential *key*, not the app id and not the secret.** The
   most common cause of "401 with a key I'm certain is right".
 - **Revocation is not instant to the millisecond.** Credential state is cached at

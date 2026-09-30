@@ -296,8 +296,6 @@ Full plan including expiry (which needs a wait, so it's a manual case):
 
 ## Gotchas
 
-Each of these has cost somebody an afternoon.
-
 - **The signing secret must be identical on the issue route and every validate
   route.** A mismatch means every freshly issued token is rejected with an
   opaque 401 — the config looks correct on both sides, and the failure gives you
