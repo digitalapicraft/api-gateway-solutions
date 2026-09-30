@@ -19,7 +19,7 @@ https://jsonplaceholder.typicode.com. Two routes — GET /posts and GET
 Step 2:
 Callers should identify themselves with an API key. I want to sell this API in two
 tiers: a free tier capped at 5 requests a minute, and a pro tier at 1000. Enforce
-those limits per app on both routes.
+those limits per product.
 
 Step 3:
 Create a developer "<<api-products-user>>" with two separate apps, one on the free

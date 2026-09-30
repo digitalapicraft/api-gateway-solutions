@@ -168,9 +168,12 @@ gateway's documentation. Three phrasings are doing real work:
   platform, so naming the commercial shape is what gets you products with quotas
   rather than a rate-limit plugin bolted onto a route. Rate limiting here **is**
   the product quota; there is no separate limiter to reach for.
-- **"Per app."** Quota is counted against the credential. Saying it out loud is
-  what stops a per-developer or per-IP reading, and it is the difference between
-  a limit that isolates a bad integration and one that does not.
+- **"Per product."** This names the thing the limit hangs off, and it is the
+  phrase that most reliably produces the product enforcer rather than a quota
+  sitting on a product that nothing reads. It does not need to say "per app":
+  quota counts against the credential by **default**, and the stored quotas come
+  back `scope: app` whether or not the prompt asks for it. Say `per developer`
+  instead only if you want a developer's apps pooled into one bucket.
 - **"Two separate apps."** Two keys on the *same* app share a bucket, so a demo
   built that way shows both keys throttling together and looks like a broken
   quota when it is a correct one.
@@ -181,7 +184,7 @@ gateway's documentation. Three phrasings are doing real work:
 |---|---|---|
 | Key header | nothing | an `apikey` header |
 | Error policy | nothing | `fail_close` on the enforcer, and nothing else in its block |
-| Counting scope | "per app" | `scope: app` on both product quotas |
+| Counting scope | nothing | `scope: app` on both product quotas — the platform default, and what the isolation demo needs |
 | Placement | nothing | usually identity and the enforcer **API-wide**, which is what this solution ships — but sometimes on each route instead. Across five organisations it went API-wide in four and per-route in one. **Both are correct here**, because every route is metered either way |
 | Extras | nothing | `request-id` and `cors`; on a weaker model, sometimes an `OPTIONS` route |
 
