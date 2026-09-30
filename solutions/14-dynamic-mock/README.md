@@ -83,8 +83,12 @@ brace_form  =
 namespace   = {"tier":"platinum"}
 ```
 
-`gateway/verify.sh` asserts that the brace form stays empty. If it ever starts
+`example/verify.sh` asserts that the brace form stays empty. If it ever starts
 resolving, this package's explanation is wrong and its guidance should change.
+
+**Drop `/sandbox/diagnostics` before production.** It's a teaching aid — it
+exposes the substitution grammar and the namespace's contents, which is exactly
+what you don't want a caller to see once this is live.
 
 ### Where values land
 
@@ -179,7 +183,7 @@ read the revision back.
 # import the spec (multipart — a raw application/yaml body is rejected with 415)
 curl -X POST "$CP/api/orgs/$ORG/apis/from-spec" \
   -H "authorization: Bearer $TOKEN" \
-  -F "file=@gateway/api-spec.yaml"
+  -F "file=@example/api-spec.yaml"
 
 # bind an upstream and deploy. The upstream is never contacted — mocking
 # short-circuits — but the binding is required for the revision to deploy.
@@ -188,7 +192,7 @@ curl -X POST "$CP/api/orgs/$ORG/apis/from-spec" \
 Then prove it:
 
 ```bash
-GATEWAY=https://<YOUR_GATEWAY_HOST> ./gateway/verify.sh
+GATEWAY=https://<YOUR_GATEWAY_HOST> ./example/verify.sh
 ```
 
 ## What the caller sees
@@ -271,10 +275,8 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 ## Validation status
 
 - **Locally validated** — structure, plugin fields against the live schema,
-  reference and alias agreement, ordering. See
-  [`validation/local-validation.yaml`](validation/local-validation.yaml).
+  reference and alias agreement, ordering.
 - **Gateway dry-run passed** — the spec imports and dry-runs clean.
 - **Gateway deployed** — deployed ACTIVE to a test environment to run the tests.
-- **Functional test passed** — `gateway/verify.sh` 6/6, including partner
-  isolation, a store miss, a change with no deploy, and the grammar guard. See
-  [`validation/gateway-validation.yaml`](validation/gateway-validation.yaml).
+- **Functional test passed** — `example/verify.sh` 6/6, including partner
+  isolation, a store miss, a change with no deploy, and the grammar guard.

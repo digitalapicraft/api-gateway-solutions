@@ -132,3 +132,4 @@ unsigned reads are allowed but attributed, while POST stays strictly signed.
 | App creation fails on an unsupported auth plugin | The product's `authMethods` is still the `["helix-auth"]` default. |
 | The agent invents a `secret_key` field on the route | It has none. The credential carries it. |
 | You need the secret again | It's returned once and stored encrypted. Rotate instead. |
+| The session ends with `"stream closed with reason: error"` mid-run | Seen in verification: the config landed correctly (both routes, per-method `signed_headers`, `validate_request_body` on the write route) before the session died on a later step. Read the revision back to confirm what actually landed rather than trusting the transcript, then resume from there. |

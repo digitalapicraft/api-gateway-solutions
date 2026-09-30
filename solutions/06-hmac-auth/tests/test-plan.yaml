@@ -1,6 +1,6 @@
 # Test plan — HMAC request signing at the edge.
 #
-# Cases 1-8 are executed in order by ../gateway/verify.sh, which exits 0 only if
+# Cases 1-8 are executed in order by ../example/verify.sh, which exits 0 only if
 # all of them hold. The fixtures under requests/ and expected/ document each case
 # independently so you can run one by hand.
 #
@@ -15,7 +15,7 @@
 meta:
   solution: 06-hmac-auth
   version: 1.0.0
-  executor: gateway/verify.sh
+  executor: example/verify.sh
   note: >-
     Cases 1-8 are automated. Case 9 (a cavage client library) needs a second
     language runtime and case 10 (removing signed_headers) mutates the route

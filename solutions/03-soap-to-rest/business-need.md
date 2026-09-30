@@ -126,7 +126,7 @@ You'd call this done when:
   critical path.
 - No new service was deployed to make it work.
 - The response body genuinely contains no XML — verified by
-  [`gateway/verify.sh`](gateway/verify.sh) case 4, not by trusting a content-type
+  [`example/verify.sh`](example/verify.sh) case 4, not by trusting a content-type
   header.
 - Onboarding partner *n+1* requires creating an app and nothing else.
 - You can answer "which partner called the legacy system how often yesterday"

@@ -10,8 +10,8 @@ answer to the backend as a header.**
 | **Difficulty** | 🟢 Beginner |
 | **Needs** | A fresh org (its default **test** environment). Nothing to fill in — the upstream echoes request headers so you can see what the backend received, and the callout target is a public sample service standing in for your own. |
 | **Plugins** | `service-callout` · `proxy-rewrite` · `request-id` |
-| **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Manifest](solution.yaml) |
+| **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`example/api-spec.yaml`](example/api-spec.yaml) |
+| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](example/) · ✅ [Tests](tests/) · ✅ [Manifest](solution.yaml) |
 
 ---
 
@@ -212,14 +212,14 @@ export ORG=<ORG_ID>
 export TOKEN=<control-plane bearer token>      # short-lived
 export BASE=https://<YOUR_GATEWAY_HOST>/api
 
-# 1. Import gateway/api-spec.yaml. Nothing in it needs filling in.
+# 1. Import example/api-spec.yaml. Nothing in it needs filling in.
 # 2. Bind your backend as the upstream and deploy the revision to "test".
 # 3. Point the callout `uri` at your own profile service and adjust the
 #    map_response_to_ctx paths to its response shape.
 # 4. Prove it
-GATEWAY=https://<YOUR_GATEWAY_HOST> ./gateway/verify.sh
+GATEWAY=https://<YOUR_GATEWAY_HOST> ./example/verify.sh
 #    Against a backend that does not echo headers:
-GATEWAY=https://<YOUR_GATEWAY_HOST> ECHOES_HEADERS=0 ./gateway/verify.sh
+GATEWAY=https://<YOUR_GATEWAY_HOST> ECHOES_HEADERS=0 ./example/verify.sh
 ```
 
 ## Testing
@@ -310,15 +310,14 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 
 | Stage | Status | Provenance |
 |---|---|---|
-| Configuration generated | **YES** | [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| Local validation | **PASS** | [`validation/local-validation.yaml`](validation/local-validation.yaml) |
+| Configuration generated | **YES** | [`example/api-spec.yaml`](example/api-spec.yaml) |
+| Local validation | **PASS** | Structural review of the spec and tests |
 | Gateway dry-run | **PASS** | Non-destructive, against a temporary import. |
 | Gateway deployed | **DEPLOYED** | Revision ACTIVE in a test environment. |
 | Functional tests | **PASS (5/5)** | Plus all three failure cases reproduced on a temporary lab API. |
 
 Overall: **READY.** The phase-ordering and failure-policy behaviours were
-reproduced rather than inferred — see
-[`validation/gateway-validation.yaml`](validation/gateway-validation.yaml).
+reproduced rather than inferred.
 
 ## Related solutions
 

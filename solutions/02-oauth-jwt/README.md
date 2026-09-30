@@ -9,8 +9,8 @@ authentication happened.**
 | **Difficulty** | 🟢 Beginner |
 | **Needs** | A fresh org (its default **test** environment) · a real signing-secret value to paste into the spec (used literally — see below) · one developer + app to test with. The upstream is public jsonplaceholder, so no backend of your own. |
 | **Plugins** | `helix-auth` (generate + validate) · `request-id` · `cors` |
-| **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Manifest](solution.yaml) |
+| **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`example/api-spec.yaml`](example/api-spec.yaml) |
+| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](example/) · ✅ [Tests](tests/) · ✅ [Manifest](solution.yaml) |
 
 ---
 
@@ -166,7 +166,7 @@ H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
 #    is not resolved. Use the SAME value on the token route and every protected
 #    route. Do not commit the filled-in spec.
 
-# 2. Import gateway/api-spec.yaml (OpenAPI import in the portal, or Agent Mode)
+# 2. Import example/api-spec.yaml (OpenAPI import in the portal, or Agent Mode)
 #    and bind the upstream https://jsonplaceholder.typicode.com to the service
 #    (swap in your own backend later). Importing assigns service_id automatically.
 
@@ -178,7 +178,7 @@ H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
 # 5. Prove it
 GATEWAY=https://<YOUR_GATEWAY_HOST> \
 CLIENT_ID=<CLIENT_ID> CLIENT_SECRET=<CLIENT_SECRET> EXPECT_TTL=900 \
-./gateway/verify.sh          # defaults to /posts and /oauth/token
+./example/verify.sh          # defaults to /posts and /oauth/token
 ```
 
 > An **ACTIVE** revision will not accept edits — you'll get `Only INACTIVE
@@ -187,7 +187,7 @@ CLIENT_ID=<CLIENT_ID> CLIENT_SECRET=<CLIENT_SECRET> EXPECT_TTL=900 \
 
 ## Configuration
 
-Source of truth: [`gateway/api-spec.yaml`](gateway/api-spec.yaml). Two blocks
+Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml). Two blocks
 carry the whole solution.
 
 On the token endpoint:
@@ -269,7 +269,7 @@ genuinely awkward for integrators. Two consequences to design around:
 
 ```bash
 GATEWAY=https://<YOUR_GATEWAY_HOST> \
-CLIENT_ID=<CLIENT_ID> CLIENT_SECRET=<CLIENT_SECRET> ./gateway/verify.sh
+CLIENT_ID=<CLIENT_ID> CLIENT_SECRET=<CLIENT_SECRET> ./example/verify.sh
 ```
 
 Exit 0 means all six cases held:
@@ -310,6 +310,9 @@ Each of these has cost somebody an afternoon.
 - **`authorization` must be in `cors.allow_headers`.** Otherwise browser clients
   fail at preflight and you get a CORS error, not a 401 — which sends people
   debugging the wrong layer for an hour.
+- **`allow_origins: "*"` is only safe here because `allow_credential` is
+  `false`.** Right for a public partner API — don't flip `allow_credential` to
+  `true` without narrowing the origins first.
 - **`generate` is the only mode that checks the app's secret.** `key-auth`
   validate resolves on the credential *key* alone. If you need proof of
   possession, you need this flow, not a static key.
@@ -370,18 +373,17 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 
 | Stage | Status | Provenance |
 |---|---|---|
-| Configuration generated | **YES** | [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| Local validation | **PASS** | Structural review — [`validation/local-validation.yaml`](validation/local-validation.yaml) |
+| Configuration generated | **YES** | [`example/api-spec.yaml`](example/api-spec.yaml) |
+| Local validation | **PASS** | Structural review — Structural review of the spec and tests |
 | Gateway dry-run | **PASS** | Non-destructive; a missing upstream binding is reported here, before any deploy. |
 | Gateway deployed | **DEPLOYED** | Revision ACTIVE in a test environment; `service_id` auto-assigned on import. |
-| Functional tests | **PASS (6/6)** | `gateway/verify.sh` exit 0 — including the wrong-secret and forged-token cases. |
+| Functional tests | **PASS (6/6)** | `example/verify.sh` exit 0 — including the wrong-secret and forged-token cases. |
+| Agent-mode run | **PASS** (2026-09-21) | Read back from the deployed revision, not just from the agent's transcript. |
 
 Overall: **READY.** The token flow works exactly as documented — three-segment
 HS256 JWT, `expires_in` matching `token_ttl`, the client secret genuinely checked,
-forged and prefix-less tokens rejected. Full record, including the two repo
-corrections this run produced (the `<ENV:...>` finding and the `jwt-auth`
-plugin-naming fix), is in
-[`validation/gateway-validation.yaml`](validation/gateway-validation.yaml).
+forged and prefix-less tokens rejected. This run also produced two repo
+corrections: the `<ENV:...>` finding and the `jwt-auth` plugin-naming fix.
 
 **One thing you must do:** replace `<YOUR_JWT_SIGNING_SECRET>` with a real secret.
 It is used *literally* as the HMAC key on this build — `<ENV:...>` syntax is not

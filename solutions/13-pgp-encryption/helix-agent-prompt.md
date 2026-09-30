@@ -13,7 +13,7 @@ counterparty actually needs.
 > `stream closed with reason: error` — a tool-argument serialisation defect in the
 > agent, not your prompt, and nothing is written when it happens. Retry once; if
 > the second attempt fails the same way, import
-> [`gateway/api-spec.yaml`](gateway/api-spec.yaml) instead.
+> [`example/api-spec.yaml`](example/api-spec.yaml) instead.
 
 [AGENT-GUIDE.md](../../AGENT-GUIDE.md) carries the standing rules these prompts
 assume.

@@ -10,8 +10,8 @@ that breaks at 2am.**
 | **Difficulty** | 🟡 Intermediate — you supply a key pair |
 | **Needs** | A fresh org (its default **test** environment) · an OpenPGP key pair. The upstream echoes requests, so the decrypted plaintext is visible without a backend of your own. |
 | **Plugins** | `pgp-crypto` (encrypt + decrypt) · `proxy-rewrite` · `request-id` |
-| **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Manifest](solution.yaml) |
+| **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`example/api-spec.yaml`](example/api-spec.yaml) |
+| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](example/) · ✅ [Tests](tests/) · ✅ [Manifest](solution.yaml) |
 
 ---
 
@@ -235,7 +235,7 @@ self-diagnose. Give them `X-Request-Id` and a support path.
 
 ## Configuration
 
-Source of truth: [`gateway/api-spec.yaml`](gateway/api-spec.yaml).
+Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml).
 
 Inbound:
 
@@ -296,7 +296,10 @@ and failure modes: [`helix-agent-prompt.md`](helix-agent-prompt.md).
 > and you put the real armored blocks in yourself. And any route write has a real
 > chance of ending in `stream closed with reason: error`, a tool-argument defect in
 > the agent rather than anything about your prompt; nothing is written when it
-> happens. Retry once, then import [`gateway/api-spec.yaml`](gateway/api-spec.yaml).
+> happens. Verified: four of five attempts in this package's own testing ended
+> this way, and payload size wasn't the discriminator — one failure carried 570
+> bytes and one success carried more. Retry once, then import
+> [`example/api-spec.yaml`](example/api-spec.yaml).
 
 **Step 1 — the API and the inbound (decrypt) route**
 
@@ -385,12 +388,12 @@ export BASE=https://<YOUR_GATEWAY_HOST>/api
 
 # 1. Replace <PGP_PRIVATE_KEY> and <PGP_PUBLIC_KEY> with real armored blocks.
 #    Do NOT commit the filled-in file.
-# 2. Import gateway/api-spec.yaml, bind your backend, deploy the revision to "test".
+# 2. Import example/api-spec.yaml, bind your backend, deploy the revision to "test".
 # 3. Prove it — cases 1-4 need only bash, curl and base64:
-GATEWAY=https://<YOUR_GATEWAY_HOST> ./gateway/verify.sh
+GATEWAY=https://<YOUR_GATEWAY_HOST> ./example/verify.sh
 #    Add the round trip when you have keys to hand:
 GATEWAY=https://<YOUR_GATEWAY_HOST> \
-GNUPGHOME=/path/to/keyring RECIPIENT=partner@example.com ./gateway/verify.sh
+GNUPGHOME=/path/to/keyring RECIPIENT=partner@example.com ./example/verify.sh
 ```
 
 ## Testing
@@ -472,6 +475,9 @@ Don't use it when:
 - **Confidentiality only** — no sender authentication, no signing, no
   non-repudiation.
 - **Not authentication.** Reaching the route is not the same as being entitled to.
+- **Whether *your* key material parses was never tested here.** Validation used
+  a throwaway key pair. A key that doesn't parse is a runtime failure, not a
+  config error, and it won't show up in a dry-run.
 
 Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 
@@ -481,15 +487,19 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 
 | Stage | Status | Provenance |
 |---|---|---|
-| Configuration generated | **YES** | [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| Local validation | **PASS** | [`validation/local-validation.yaml`](validation/local-validation.yaml) |
+| Configuration generated | **YES** | [`example/api-spec.yaml`](example/api-spec.yaml) |
+| Local validation | **PASS** | Structural review of the spec and tests |
 | Gateway dry-run | **PASS** | Non-destructive, against a temporary import. |
 | Gateway deployed | **DEPLOYED** | Revision ACTIVE in a test environment, with a throwaway RSA-3072 key pair. |
 | Functional tests | **PASS (7/7)** | Both directions, both rejection cases, and the full round trip. |
+| Agent-mode run | **PARTIAL** | Step 1 landed exactly right, confirmed by reading the revision back. Step 2 hit the tool-call defect above and was not completed by the agent in this run — see below. |
 
 Overall: **READY.** The wire format and the `field` behaviour were established by
-running them, not by reading the schema —
-[`validation/gateway-validation.yaml`](validation/gateway-validation.yaml).
+running them, not by reading the schema. One thing worth being precise about:
+the deployed, tested outbound (encrypt) route came from importing
+[`example/api-spec.yaml`](example/api-spec.yaml), not from the agent finishing
+Step 2 — in the verified run, Step 2 failed on the tool-call defect before it
+could complete, and this package doesn't claim otherwise.
 
 ## Related solutions
 

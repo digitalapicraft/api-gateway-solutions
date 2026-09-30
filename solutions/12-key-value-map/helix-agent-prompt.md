@@ -82,7 +82,7 @@ array of both routes, then read the revision back and run dry_run_deploy.
 
 > If a step ends in `stream closed with reason: error`, nothing was written — a
 > tool-argument defect in the agent, not your prompt. Retry once, then import
-> [`gateway/api-spec.yaml`](gateway/api-spec.yaml) for the remaining step.
+> [`example/api-spec.yaml`](example/api-spec.yaml) for the remaining step.
 
 ---
 

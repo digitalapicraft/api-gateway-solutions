@@ -1,177 +1,87 @@
 # Business need — API Products with enforced quota
 
-## The situation
+[Overview](README.md) · **Business need** · [Architecture](architecture.md) ·
+[Guides](guides.md) · [Examples](examples.md) · [Agent prompt](helix-agent-prompt.md) ·
+[Tests](tests.md) · [Configuration reference](configuration-reference.md) ·
+[API reference](api-reference.md)
 
-Two failures that look unrelated are the same failure.
+---
 
-**The first is an outage.** One integration partner's retry loop has no backoff. It
-sends 40,000 requests a minute at an endpoint sized for 3,000. Every other customer
-gets 503s. You find out from Twitter, and the post-mortem action item is "add rate
-limiting", which sits in a backlog because nobody can say what the limit should be.
+## Why this matters
 
-**The second is a commercial dead end.** You sell an "Enterprise" tier that promises
-higher throughput. There is no technical difference between it and the free tier.
-Sales knows this. Some customers suspect it. Nobody upgrades for throughput, because
-throughput isn't actually what they're buying — and when an Enterprise customer has a
-capacity problem, you have no answer that isn't "we'll look into it".
+Two problems that seem unrelated actually come from the same gap: **every
+caller shares one pool, and the gateway doesn't know who's calling or what
+they paid for.**
 
-Both come from the same place: **every caller shares one undifferentiated pool, and
-the gateway has no idea who is calling or what they bought.**
+- **It causes outages.** One partner's misbehaving app can use up capacity
+  meant for everyone else, and nobody can say what its limit should have been
+  until after it's already down.
+- **It makes your pricing dishonest.** If "Enterprise" is supposed to get more
+  capacity but nothing actually checks that, a Free customer can use exactly
+  as much as your best-paying one.
 
-The consequences compound quietly:
-
-- **You provision for the worst-behaved caller's peak**, because that's the only
-  bound that exists. Capacity is sized against a hypothetical, not against
-  commitments.
-- **The real limit is undocumented**, because it isn't a limit — it's the point where
-  the backend falls over. Support can't tell a customer their ceiling. Neither can
-  on-call.
-- **"Which partner caused this?"** is a log hunt with IP addresses, during an
-  incident, at 3am.
-- **Chargeback is impossible.** You can't attribute infrastructure cost to the
-  customers generating it, so heavy users are subsidised by light ones and nobody
-  knows by how much.
+The quieter costs add up too: you provision for a guess instead of a
+commitment, support can't tell a customer their real limit, "which partner
+caused this?" is a log hunt at 3am, and you can't bill anyone for the load
+they actually generate.
 
 ## What changes
 
-The quota attaches to **the thing you sell** — a product — and is counted per app.
+The quota attaches to **the thing you sell** — a product — and is counted
+per app:
 
 | Dimension | Without product quota | With this solution |
 |---|---|---|
-| **Blast radius of a bad integration** | 100% of consumers | The offending app |
-| **Revenue-path protection** | Checkout competes with batch and free-tier traffic for one pool | Committed accounts get the throughput they paid for |
-| **What "Enterprise" means** | A contract line with no enforcement | An enforced technical difference |
-| **Upgrade motivation** | None — the tiers are identical in practice | Hitting the ceiling is the trigger |
-| **Capacity planning basis** | The worst caller's hypothetical peak | The sum of committed quotas |
-| **Attribution** | An IP in a log | Every request tied to an app and a developer |
-| **Support answer to "what's my limit?"** | Nobody knows | A number, in the contract, enforced |
+| **Blast radius of a bad integration** | 100% of your customers | Just the one app |
+| **What "Enterprise" means** | A line in a contract | A real, enforced difference |
+| **Capacity planning basis** | A guess at the worst case | The sum of what you've sold |
+| **Attribution** | An IP address in a log | Every request tied to an app |
 | **Chargeback** | Not possible | Per-app request counts |
 
-## The mechanism that matters
+## The two things that actually change
 
-Two things change, and the second is the one people miss.
+**The blast radius gets bounded, and stays with whoever caused it.** Not "we
+survive the spike" — the offending app runs out of its own budget while every
+other caller keeps working. A global rate limit doesn't do this: it protects
+the backend by rejecting whoever happens to be calling, so one partner's bug
+still becomes everyone's bad day, just a smaller one.
 
-**First: the blast radius becomes bounded, and bounded to the party responsible.**
-Not "we survive the spike" — the offending app exhausts its *own* budget while every
-other caller is unaffected. That's a different property from a global rate limit,
-which protects the backend by rejecting *whoever happens to be calling*. A global
-limit turns one partner's bug into everyone's degraded service, just less severely.
+**Capacity planning changes what it's measured against.** Without a
+per-caller bound, you provision for what a caller *might* do. With one, you
+provision for the sum of what you *sold* — but only if that sum is actually
+below what your upstream can handle. Add the tiers up and check that before
+you rely on the saving; if you've oversold, the quota turns that into 429s
+instead of an outage, which is better, but still worth knowing.
 
-**Second: capacity planning changes basis.**
+That second point is usually what gets this funded: **a quota turns a
+contract line into a real product feature, and a ceiling into an upgrade
+conversation.** An app that keeps hitting its Free limit is a qualified lead
+with a number attached. See [solution 04](../04-analytics/) for the queries
+that surface that.
 
-> Without a per-caller bound, you must provision against what a caller *might* do.
-> With one, you provision against the sum of what you *sold*.
+How to actually size your tiers: [Architecture](architecture.md#tier-design-that-works).
+What this doesn't solve, in detail: [Configuration reference](configuration-reference.md).
 
-That's the cost argument, and it's a real one — but it comes with an arithmetic check
-that's easy to skip: **add up the committed quotas across the tiers you have actually
-sold, and compare that with what your upstream can take.** If the sum exceeds your
-capacity, you have oversold. The quota will surface that as 429s to your customers
-rather than as an outage — which is a better failure, but it is still a failure, and
-it is better to discover it in a spreadsheet.
+## The payoff
 
-And the commercial consequence, which is usually what gets this funded:
+- **Availability stops depending on your worst-behaved partner.** An outage
+  becomes one partner getting 429s — an action item you can actually close.
+- **Tiers become sellable**, because the difference between them is real.
+- **Capacity is planned from commitments**, not guesses.
+- **Upgrade conversations get real data** instead of a hunch.
+- **Incident attribution drops from hours to seconds.**
+- **Chargeback becomes possible**, and a marketplace becomes reachable — the
+  product is the thing a partner subscribes to.
 
-> A quota turns a contract line into a product feature, and a ceiling into an upgrade
-> conversation.
+## Done looks like
 
-An app repeatedly hitting its Free limit is a qualified lead with a number attached.
-An Enterprise account never approaching its quota is either over-provisioned or not
-really integrated yet, and both are worth knowing. Neither signal exists without
-metering. See [solution 04](../04-analytics/) for the queries that surface them.
-
-## Tier design is a commercial decision, not a technical one
-
-The numbers matter more than the configuration, and only two rules generalise:
-
-**Free must be unusable for production.** If it's generous enough to build on, nobody
-upgrades and you have given the product away. Its job is to let someone *try* the
-API, not run on it.
-
-**Enterprise must match a contract.** It's the one tier where the quota is a promise
-you've made in writing, and it's the number a customer will quote at you during an
-incident. Don't derive it by scaling the tier below.
-
-Everything between those is measurement: roughly 2× a healthy integration's p95 is a
-reasonable starting point for a production tier, but use your own numbers.
-
-One choice that trips people up — **the window shapes behaviour as much as the
-limit.** A per-minute window *absorbs* bursts; a per-second window *shapes* them.
-Contracts written in requests-per-*day* are the worst of both: one app can spend the
-entire day's budget in 40 seconds and then go dark until midnight, which is neither
-protection nor a usable service.
-
-## Business outcomes
-
-**Availability stops depending on your worst-behaved partner.** The 22-minute outage
-class of incident becomes one partner's 429s. That's the outcome you can put in a
-post-mortem action item and actually close.
-
-**Tiers become sellable.** "Enterprise gets 10,000 requests a minute" is a
-differentiated product with an enforced guarantee. This is the change that makes the
-pricing page honest.
-
-**Capacity is provisioned against commitments.** You size for what you sold rather
-than for what anyone might do. How much that saves depends entirely on the gap
-between your current headroom and your committed quotas — measure it rather than
-assuming a multiple.
-
-**Upgrade conversations get data.** Quota consumption per app is a pipeline signal
-with a number attached, not a hunch.
-
-**Incident attribution drops from hours to seconds.** Every request is tied to an app
-and a developer, so "which integration caused this" is a query.
-
-**Chargeback becomes possible.** Per-app request counts are the input to attributing
-infrastructure cost to the customers generating it.
-
-**A marketplace becomes reachable.** The product is the unit a partner subscribes to.
-Without products there is nothing to list, nothing to self-serve onto, and no
-metering behind the subscription.
-
-## What this does not buy you
-
-Stated plainly, because overclaiming here produces disappointed partners:
-
-- **No budget headers.** `api-product-enforcer` emits no `X-RateLimit-*` and no
-  `Retry-After`. A client cannot read its remaining quota from a response. The retry
-  contract must live in your developer documentation, and it must specify backoff
-  *with jitter* — without it, every client retries at the same instant at the top of
-  each window and you've scheduled a thundering herd.
-- **It is not per-request pricing.** The quota is a request count. A cheap read and a
-  30-second report consume one unit each. If cost varies wildly by endpoint, split
-  into separate products per endpoint group or the quota misprices your expensive
-  paths.
-- **It is not burst shaping.** Quota counts within a window. A caller can spend a
-  minute's budget in two seconds unless you choose a shorter window.
-- **It doesn't meter your end users.** The unit is the app. If you need per-end-user
-  limits, that's application logic.
-- **It doesn't fix an oversold capacity model.** See the arithmetic check above. It
-  makes overselling visible instead of catastrophic, which is not the same as
-  preventing it.
-- **On more than one gateway node it silently doesn't work** unless the quota backend
-  is Redis. This isn't a limitation of the model, but it is the most common reason
-  the promised outcome doesn't materialise, and it's invisible from the route
-  configuration.
-- **No numbers are claimed here.** The 40,000-requests-a-minute outage is the
-  *shape* of a common incident, not a measured figure from your estate, and this
-  document deliberately quantifies mechanisms (blast radius, planning basis) rather
-  than inventing an ROI multiple. Use your own capacity numbers and your own
-  committed quotas.
-
-## Success criteria
-
-You'd call this done when:
-
-- A deliberately misbehaving app receives 429s while **every other app is
-  unaffected** — verified by [`gateway/verify.sh`](gateway/verify.sh) case 5, not by
-  case 4. Proving a limit exists is easy; proving it's scoped to the offender is the
-  point.
-- Support can state a customer's throughput limit, and it matches what's enforced.
-- Your pricing page's tier differences are technically real.
-- Capacity is planned from the sum of committed quotas, and you've checked that sum
-  against what the upstream can take.
+- A deliberately misbehaving app gets 429s while **every other app keeps
+  working** — verified by [`example/verify.sh`](example/verify.sh) case 5,
+  not case 4. Proving a limit exists is easy; proving it stays with the
+  offender is the point.
+- Support can state a customer's limit, and it matches what's enforced.
+- Capacity is planned from the sum of committed quotas, checked against what
+  your upstream can take.
 - "Which app caused the spike?" is answerable in seconds.
-- You can list the apps within 10% of their quota — those are your upgrade
-  conversations.
-- If the gateway runs more than one node, you have confirmed `quota_policy` is
-  `redis`, rather than assumed it.
+- If the gateway runs more than one node, you've **confirmed** `quota_policy`
+  is `redis` rather than assumed it.

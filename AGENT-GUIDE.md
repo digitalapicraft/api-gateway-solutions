@@ -218,5 +218,5 @@ route. Remove it."* works. *"That's wrong"* gets you a different guess.
 - The environment secrets the spec references actually exist.
 - Nothing the agent produced contains a literal credential.
 
-Then run the solution's `gateway/verify.sh`. That's the difference between "the
+Then run the solution's `example/verify.sh`. That's the difference between "the
 agent said it deployed" and "it works".

@@ -53,20 +53,19 @@ implementation:
     caller sent.
 
 validation:
-  # Stage statuses only. What was checked and what happened is in validation/.
+  # Stage statuses only. What was checked and what happened is folded into the README/Changelog directly.
   local: PASS
   gateway_dry_run: PASS
   deployment: DEPLOYED
   functional_test: PASS
-  record: validation/
+  record: README.md § Validation status
 
 artifacts:
   documentation: [README.md, architecture.md, business-need.md]
-  source_code: [gateway/api-spec.yaml, gateway/verify.sh]
+  source_code: [example/api-spec.yaml, example/verify.sh]
   agent_prompt: helix-agent-prompt.md
   diagrams: [README.md]   # mermaid blocks, rendered inline by GitHub
   tests: [tests/test-plan.yaml, tests/requests/, tests/expected/]
-  validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
 
 assumptions:
   - The caller's identity arrives in x-partner-id. Illustrative — in a real
@@ -105,5 +104,13 @@ limitations:
     guarantees beyond the TTL, and no audit trail of who changed a value.
   - Every value is visible to anyone who can call the read route with the right
     partner id, which is a header. Do not store anything confidential.
+  - The /sandbox/diagnostics route is a teaching aid, shipped so a team can see
+    the substitution-grammar difference rather than read about it. Drop it before
+    production — it exposes the grammar and the namespace's contents.
+  - >-
+    Not established here — whether the store is shared across environments or
+    scoped per environment; behaviour when the store itself is unreachable
+    (fail_action close is set, but no outage was simulated); any statement about
+    throughput or the cost of a fetch per request.
 
 status: READY   # validated on a gateway; verify.sh passes 6/6

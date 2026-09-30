@@ -1,6 +1,6 @@
 # Test plan — OAuth 2.0 client credentials with gateway-issued JWTs.
 #
-# Cases 1-6 are executed in order by ../gateway/verify.sh, which exits 0 only if
+# Cases 1-6 are executed in order by ../example/verify.sh, which exits 0 only if
 # all of them hold. The fixtures under requests/ and expected/ document each case
 # independently so you can run one by hand.
 #
@@ -13,7 +13,7 @@
 meta:
   solution: 02-oauth-jwt
   version: 1.0.0
-  executor: gateway/verify.sh
+  executor: example/verify.sh
   note: >-
     Cases 1-6 are automated. Case 7 (expiry) requires waiting out the token
     lifetime, and case 8 (rotation) mutates environment configuration, so both are

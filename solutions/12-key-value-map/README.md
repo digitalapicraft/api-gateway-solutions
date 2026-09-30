@@ -10,8 +10,8 @@ write — neither is a release.**
 | **Difficulty** | 🟡 Intermediate — two plugins, and a write path you have to protect |
 | **Needs** | A fresh org (its default **test** environment) and an OpenPGP public key to register. **Nothing to fill in** — no key material appears in this spec, which is the point. |
 | **Plugins** | `key-value-map` (insert + fetch) · `pgp-crypto` · `proxy-rewrite` · `request-id` |
-| **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Manifest](solution.yaml) |
+| **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`example/api-spec.yaml`](example/api-spec.yaml) |
+| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](example/) · ✅ [Tests](tests/) · ✅ [Manifest](solution.yaml) |
 
 ---
 
@@ -127,7 +127,7 @@ Two things to know before you write one:
 
 ## Configuration
 
-Source of truth: [`gateway/api-spec.yaml`](gateway/api-spec.yaml).
+Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml).
 
 Registration — the value comes from the **request body**, never from this file:
 
@@ -278,7 +278,7 @@ array of both routes, then read the revision back and run dry_run_deploy.
 
 > If a step ends in `stream closed with reason: error`, nothing was written — a
 > tool-argument defect in the agent, not your prompt. Retry once, then import
-> [`gateway/api-spec.yaml`](gateway/api-spec.yaml) for the remaining step.
+> [`example/api-spec.yaml`](example/api-spec.yaml) for the remaining step.
 
 ## Install it directly
 
@@ -287,14 +287,14 @@ export ORG=<ORG_ID>
 export TOKEN=<control-plane bearer token>      # short-lived
 export BASE=https://<YOUR_GATEWAY_HOST>/api
 
-# 1. Import gateway/api-spec.yaml. Nothing in it needs filling in — that is the point.
+# 1. Import example/api-spec.yaml. Nothing in it needs filling in — that is the point.
 # 2. Bind your backend as the upstream and deploy the revision to "test".
 # 3. Put authentication in front of /partners/keys before anyone else can reach it.
 # 4. Register a partner's key, then prove it:
 GATEWAY=https://<YOUR_GATEWAY_HOST> \
 PUBLIC_KEY_FILE=./partner-a-public.asc GNUPGHOME=~/.gnupg-partner-a \
 SECOND_PUBLIC_KEY_FILE=./partner-a-rotated.asc SECOND_GNUPGHOME=~/.gnupg-partner-a2 \
-./gateway/verify.sh
+./example/verify.sh
 ```
 
 ## Testing
@@ -440,15 +440,14 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 
 | Stage | Status | Provenance |
 |---|---|---|
-| Configuration generated | **YES** | [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| Local validation | **PASS** | [`validation/local-validation.yaml`](validation/local-validation.yaml) |
+| Configuration generated | **YES** | [`example/api-spec.yaml`](example/api-spec.yaml) |
+| Local validation | **PASS** | Structural review of the spec and tests |
 | Gateway dry-run | **PASS** | Non-destructive, against a temporary import. |
 | Gateway deployed | **DEPLOYED** | Revision ACTIVE in a test environment. |
 | Functional tests | **PASS (7/7)** | Including rotation: re-registering changed which key the document was encrypted to, with no deploy, and the old key could no longer read it. |
 
 Overall: **READY.** The store, the reference grammar and the rotation claim were
-all exercised against a live gateway —
-[`validation/gateway-validation.yaml`](validation/gateway-validation.yaml).
+all exercised against a live gateway, not inferred from the schema.
 
 ## Related solutions
 

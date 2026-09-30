@@ -103,7 +103,9 @@ jobs:
                   if os.path.exists(f"{d}/{name}"):
                       F(f"{d}/{name} is a non-public artifact and must not be published here")
 
-          REQUIRED = ("README.md", "solution.yaml", "architecture.md",
+          # solution.yaml is a legacy manifest some solutions still carry —
+          # no longer required, so the library isn't stuck on it.
+          REQUIRED = ("README.md", "architecture.md",
                       "business-need.md", "helix-agent-prompt.md")
           SECRET_KEY = re.compile(r'(signing_secret|client_secret|password)\s*[:=]\s*"?([^<{"\s].*)$')
           TOKEN = re.compile(r'AIza[0-9A-Za-z_-]{30,}'
@@ -149,8 +151,8 @@ jobs:
 
               # 2. parse every spec we ship — malformed YAML is an unusable package
               for rel, kind in (("solution.yaml", "yaml"),
-                                ("gateway/api-spec.yaml", "openapi"),
-                                ("gateway/products.json", "json")):
+                                ("example/api-spec.yaml", "openapi"),
+                                ("example/products.json", "json")):
                   p = f"{d}/{rel}"
                   if not os.path.exists(p):
                       continue
@@ -195,7 +197,7 @@ jobs:
                       if not first.startswith(KINDS):
                           F(f"{md}: mermaid block {j} declares no diagram type")
 
-              for spec in sorted(glob.glob(f"{d}/gateway/**/*", recursive=True)):
+              for spec in sorted(glob.glob(f"{d}/example/**/*", recursive=True)):
                   if not os.path.isfile(spec):
                       continue
                   for i, line in enumerate(open(spec, encoding="utf-8", errors="replace"), 1):
@@ -204,11 +206,53 @@ jobs:
                           F(f"{spec}:{i}: {m.group(1)} holds a literal, not a placeholder "
                             f"— the gateway uses it verbatim")
 
-              # 7. the public README is where readers look for the one-glance
-              #    version; type-correctness of every block is checked above
+              # 7. the public README is normally where readers look for the
+              #    one-glance version; in the split ("tabbed") layout the
+              #    request-flow diagram lives in architecture.md instead, and
+              #    either counts. Type-correctness of every block is checked above.
               rm = f"{d}/README.md"
-              if os.path.exists(rm) and '```mermaid' not in open(rm).read():
-                  W(f"{rm}: no mermaid diagram — public readers get no one-glance version")
+              am = f"{d}/architecture.md"
+              has_mmd = any(
+                  os.path.exists(p) and '```mermaid' in open(p, encoding="utf-8", errors="replace").read()
+                  for p in (rm, am)
+              )
+              if not has_mmd:
+                  W(f"{d}: no mermaid diagram in README.md or architecture.md — "
+                    f"public readers get no one-glance version")
+
+              # 8. validation status must stay a summary, not a narrative. In the
+              #    split layout, changelog.md IS that summary in full; otherwise
+              #    it's the README's "Validation status"/"Changelog" section.
+              cl = f"{d}/changelog.md"
+              if os.path.exists(cl):
+                  # count from the first ## heading onward, so the page's
+                  # title/nav-line/rule (present on every split-layout page)
+                  # isn't counted as "status" content
+                  cl_lines = open(cl, encoding="utf-8", errors="replace").readlines()
+                  f_flag, vslines = False, 0
+                  for line in cl_lines:
+                      if line.startswith('## '):
+                          f_flag = True
+                      if f_flag:
+                          vslines += 1
+                  vssrc = "changelog.md"
+              else:
+                  vslines = 0
+                  vssrc = "README.md"
+                  if os.path.exists(rm):
+                      f_flag, headings_seen = False, 0
+                      for line in open(rm, encoding="utf-8", errors="replace"):
+                          if re.match(r'^## (Validation status|Changelog)', line):
+                              f_flag = True
+                          if f_flag and line.startswith('## '):
+                              headings_seen += 1
+                              if headings_seen > 1:
+                                  break
+                          if f_flag:
+                              vslines += 1
+              if vslines > 25:
+                  W(f"{d}: {vssrc}'s validation-status content is {vslines} lines — "
+                    f"compress it (>25 reads as a provenance log, not a status)")
 
           for w in warns:
               print(f"::warning::{w}")

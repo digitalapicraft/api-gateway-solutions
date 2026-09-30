@@ -9,8 +9,8 @@ seconds. The credential travels on every request — so make it cheap to kill.**
 | **Difficulty** | 🟢 Beginner |
 | **Needs** | A fresh org (its default **test** environment) · one product covering this API · one app per caller. The upstream is public jsonplaceholder, so no backend of your own. |
 | **Plugins** | `helix-auth` (validate · key-auth) · `proxy-rewrite` · `request-id` |
-| **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Manifest](solution.yaml) |
+| **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`example/api-spec.yaml`](example/api-spec.yaml) |
+| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](example/) · ✅ [Tests](tests/) · ✅ [Manifest](solution.yaml) |
 
 ---
 
@@ -168,7 +168,7 @@ export ORG=<ORG_ID>
 export TOKEN=<control-plane bearer token>      # short-lived
 export BASE=https://<YOUR_GATEWAY_HOST>/api
 
-# 1. Import gateway/api-spec.yaml (OpenAPI import in the portal, or Agent Mode).
+# 1. Import example/api-spec.yaml (OpenAPI import in the portal, or Agent Mode).
 #    There is nothing to fill in — this spec contains no secret and no key.
 
 # 2. Bind your upstream to the service and deploy the revision to "test".
@@ -180,7 +180,7 @@ export BASE=https://<YOUR_GATEWAY_HOST>/api
 # 4. Prove it
 GATEWAY=https://<YOUR_GATEWAY_HOST> \
 DEVICE_KEY=<DEVICE_API_KEY> APP_SECRET=<APP_SECRET> \
-./gateway/verify.sh
+./example/verify.sh
 ```
 
 > An **ACTIVE** revision will not accept edits — you'll get `Only INACTIVE
@@ -189,7 +189,7 @@ DEVICE_KEY=<DEVICE_API_KEY> APP_SECRET=<APP_SECRET> \
 
 ## Configuration
 
-Source of truth: [`gateway/api-spec.yaml`](gateway/api-spec.yaml). One block
+Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml). One block
 carries the whole solution, and it is on every protected route:
 
 ```yaml
@@ -254,7 +254,7 @@ between "we chose headers" and "we assumed headers".
 
 ```bash
 GATEWAY=https://<YOUR_GATEWAY_HOST> \
-DEVICE_KEY=<DEVICE_API_KEY> APP_SECRET=<APP_SECRET> ./gateway/verify.sh
+DEVICE_KEY=<DEVICE_API_KEY> APP_SECRET=<APP_SECRET> ./example/verify.sh
 ```
 
 Exit 0 means all seven cases held:
@@ -358,15 +358,14 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 
 | Stage | Status | Provenance |
 |---|---|---|
-| Configuration generated | **YES** | [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| Local validation | **PASS** | [`validation/local-validation.yaml`](validation/local-validation.yaml) |
+| Configuration generated | **YES** | [`example/api-spec.yaml`](example/api-spec.yaml) |
+| Local validation | **PASS** | Structural review of the spec and tests |
 | Gateway dry-run | **PASS** | Non-destructive. An earlier draft without `apikey.source` was rejected here, before any deploy. |
 | Gateway deployed | **DEPLOYED** | Revision ACTIVE in a test environment. |
 | Functional tests | **PASS (7/7)** | All seven cases, including the wrong-header, query-string and secret-as-key rejections. |
 
-Overall: **READY.** Full record, including the two schema findings this run
-produced, is in
-[`validation/gateway-validation.yaml`](validation/gateway-validation.yaml).
+Overall: **READY.** This run also produced two schema findings — see
+[`helix-agent-prompt.md`](helix-agent-prompt.md) § *When it goes wrong*.
 
 ## Related solutions
 

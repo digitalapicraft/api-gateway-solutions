@@ -127,7 +127,7 @@ You'd call this done when:
 
 - No request to a protected route succeeds without a token issued by the gateway.
 - A forged or expired token is rejected before it reaches the backend — verifiable
-  with [`gateway/verify.sh`](gateway/verify.sh) cases 1, 4 and 6.
+  with [`example/verify.sh`](example/verify.sh) cases 1, 4 and 6.
 - An app's *wrong* secret does not produce a token (case 5). Without this you have
   a static key in a token's clothing.
 - Every request is attributable to a named app, and you can produce last hour's

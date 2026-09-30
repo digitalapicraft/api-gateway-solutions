@@ -91,7 +91,7 @@ NOT do.
 
 > **If step 4 ends in `stream closed with reason: error`, that's the defect above,
 > not your prompt.** The route spec is now large enough to trigger it reliably.
-> Import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) instead — same
+> Import [`example/api-spec.yaml`](example/api-spec.yaml) instead — same
 > configuration, complete, and the agent has already done the parts that teach you
 > anything.
 
@@ -153,7 +153,7 @@ exactly as it is — masking is not access control.
 
 | Symptom | Cause |
 |---|---|
-| `stream closed with reason: error` after `update_route_spec` | The serialisation defect above. Nothing was written. Retry once; if it repeats, import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) for the rest. |
+| `stream closed with reason: error` after `update_route_spec` | The serialisation defect above. Nothing was written. Retry once; if it repeats, import [`example/api-spec.yaml`](example/api-spec.yaml) for the rest. |
 | The write succeeds and the routes have no plugins | They were nested under `x-helix-gateway`. Ask for a flat `plugins` map and read the revision back. |
 | Only the first record is masked | A filter is missing `scope: global`. |
 | Nothing is masked | The pattern doesn't match the serialised body — check key spelling and whitespace, and whether something on the route converts the format first. |

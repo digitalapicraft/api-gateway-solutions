@@ -10,8 +10,8 @@ crossing the wire — and binds the proof to one request's method, path and body
 | **Difficulty** | 🟢 Beginner. One API, one product, one app, a public upstream |
 | **Needs** | An org whose build includes **`hmac-auth`** · one upstream. The upstream here is the public jsonplaceholder, so no backend of your own. |
 | **Plugins** | `hmac-auth` · `request-id` |
-| **Build it with** | 🤖 **[the Agent](helix-agent-prompt.md)** — recommended · or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Products](gateway/products.json) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Manifest](solution.yaml) |
+| **Build it with** | 🤖 **[the Agent](helix-agent-prompt.md)** — recommended · or import [`example/api-spec.yaml`](example/api-spec.yaml) |
+| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](example/) · ✅ [Products](example/products.json) · ✅ [Tests](tests/) · ✅ [Manifest](solution.yaml) |
 
 ---
 
@@ -202,7 +202,7 @@ curl -i -X POST "https://<YOUR_GATEWAY_HOST>/posts" \
   -d "$BODY"
 ```
 
-[`gateway/verify.sh`](gateway/verify.sh) contains the same construction as a
+[`example/verify.sh`](example/verify.sh) contains the same construction as a
 reusable shell function, handling both the with-digest and no-digest signed sets.
 
 ## Build it with the Agent
@@ -213,7 +213,7 @@ verified on the default agent model.
 ## Install it directly
 
 ```text
-1. Import gateway/api-spec.yaml (OpenAPI import in the portal, or Agent Mode)
+1. Import example/api-spec.yaml (OpenAPI import in the portal, or Agent Mode)
    and bind the upstream https://jsonplaceholder.typicode.com to the service
    (swap in your own backend later). Importing assigns service_id automatically.
    There is NOTHING to fill in first — this spec contains no secret and no
@@ -221,7 +221,7 @@ verified on the default agent model.
 
 2. Deploy the revision to the "test" environment (a free-trial org's default).
 
-3. Create the product from gateway/products.json. authMethods MUST be
+3. Create the product from example/products.json. authMethods MUST be
    ["hmac-auth"] — it defaults to ["helix-auth"], and an app under a product that
    does not name hmac-auth is rejected.
 
@@ -231,7 +231,7 @@ verified on the default agent model.
 
 5. Prove it
    GATEWAY=https://<YOUR_GATEWAY_HOST> KEY_ID=... SECRET_KEY=... \
-     ./gateway/verify.sh
+     ./example/verify.sh
 ```
 
 ## Getting a credential
@@ -325,7 +325,7 @@ single log lookup. That is why `request-id` is in this spec.
 
 ## Testing
 
-[`gateway/verify.sh`](gateway/verify.sh) exits 0 only if all eight hold:
+[`example/verify.sh`](example/verify.sh) exits 0 only if all eight hold:
 
 | # | Case | Expect |
 |---|---|---|
@@ -432,20 +432,16 @@ supported configuration in this package and is not covered by its validation.
 
 | Stage | Status | Provenance |
 |---|---|---|
-| Configuration generated | **YES** | [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| Local validation | **PASS** | [`validation/local-validation.yaml`](validation/local-validation.yaml) |
+| Configuration generated | **YES** | [`example/api-spec.yaml`](example/api-spec.yaml) |
+| Local validation | **PASS** | Structural review of the spec and tests |
 | Gateway dry-run | **PASS** | `{"success":true,"message":"Dry-run validation successful"}` |
 | Gateway deployed | **DEPLOYED** | Revision ACTIVE on a temporary test API, since torn down |
-| Functional tests | **PASS (8/8)** | `gateway/verify.sh` exit 0 — including the weak-signed-set and replay cases |
+| Functional tests | **PASS (8/8)** | `example/verify.sh` exit 0 — including the weak-signed-set and replay cases |
+| Agent-mode run | **PASS (config), run ended on a tool-call defect** (2026-09-21) | See below |
 
-Overall: **READY.** Every claim in this package was exercised against a deployed
-route with a real app credential: the signing base is the one the gateway builds,
-the digest binds the body, `clock_skew` and `signed_headers` are both enforced, a
-wrong secret is rejected, and `@request-target` binds the path (a signature for
-`/posts/1` returns 401 against `/posts/2`). The replay case passed by being
-**accepted** — which is the documented limitation, demonstrated.
-[`validation/gateway-validation.yaml`](validation/gateway-validation.yaml) has
-the detail.
+Overall: **READY.** Every claim was exercised against a deployed route with a real app credential: the signing base is the one the gateway builds, the digest binds the body, `clock_skew`/`signed_headers` are enforced, a wrong secret is rejected, `@request-target` binds the path, and the replay case passed by being **accepted** — the documented limitation, demonstrated.
+
+**The agent-mode run itself didn't finish cleanly:** correct config, confirmed by reading the revision back, but the session then hit `"stream closed with reason: error"` — see [`helix-agent-prompt.md`](helix-agent-prompt.md) § *When it goes wrong*.
 
 ## Related solutions
 
