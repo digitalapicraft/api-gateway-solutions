@@ -37,7 +37,11 @@ jobs:
           import os, re, subprocess, sys
           # Every term is assembled so this file never matches its own audit.
           TERMS = ["mach" + "inery",
-                   "har" + r"ness/",
+                   # Bare word, not the path form. A path-only pattern let an
+                   # invocation of that tool with a space after it through into a
+                   # merged commit on 2026-09-27 — the gate built for exactly that
+                   # leak, missed on a space instead of a slash.
+                   r"\bhar" + r"ness\b",
                    "CLA" + r"UDE\.md",
                    "pla" + r"ns/(active|pending|completed)"]
           PAT = re.compile("|".join(TERMS), re.I)
