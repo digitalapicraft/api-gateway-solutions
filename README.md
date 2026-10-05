@@ -109,10 +109,13 @@ solutions/<NN>-<slug>/
 Diagrams live inside `README.md` as mermaid blocks, which GitHub renders inline —
 there is no separate image to open, and nothing to build.
 
-There's no separate `validation/` folder. What was checked, when, and by what
-method — dates, provenance, case-by-case results, and any finding worth
-knowing, including a run that didn't go cleanly — lives directly in the
-README's own **Validation status** section, right next to the claim it backs.
+There's no separate `validation/` folder. For most solutions, what was checked,
+when, and by what method — dates, provenance, case-by-case results, and any
+finding worth knowing, including a run that didn't go cleanly — lives directly
+in the README's own **Validation status** section, right next to the claim it
+backs. Solutions in the split layout (solution 01 today) keep that record
+internally and the package carries no status table; what you can rely on there
+is the spec, the tests and `example/verify.sh`, which you run yourself.
 
 Only files that apply are present — a solution needing no API Products has no
 `products.json`. Some packages carry an extra file where the subject warrants it:
@@ -120,8 +123,7 @@ solution 04 has [`charts.md`](solutions/04-analytics/charts.md), a catalogue of
 the real analytics-API queries for the library, which is that package's deliverable.
 
 Some packages split their docs further, one file per topic instead of one long
-`README.md` — `guides.md`, `tests.md`, `api-reference.md` — with `README.md` left as a short landing page (carrying its
-own Validation status section) and every page sharing the same row of links so
+`README.md` — `guides.md`, `tests.md`, `api-reference.md` — with `README.md` left as a short landing page and every page sharing the same row of links so
 you can jump between them. Solution 01 uses this layout; it's being rolled out
 to the rest of the library over time, so don't assume every solution has these
 files yet — some older packages may still carry a `solution.yaml` manifest,
@@ -180,13 +182,13 @@ These are five different things and this library never blurs them:
 `Configuration generated` · `Locally validated` · `Gateway dry-run passed` ·
 `Gateway deployed` · `Functional test passed`
 
-Each solution README's own **Validation status** section records which of these
-actually happened, who performed it, and whether it was re-run when the
-package was last touched. Where a status came from an earlier run rather than
+A solution README's **Validation status** section, where it has one, records
+which of these actually happened, who performed it, and whether it was re-run
+when the package was last touched. Where a status came from an earlier run rather than
 the current one, it says so. **Nothing in this repo claims a result that
 wasn't produced by a real gateway.**
 
-Each solution README carries the same table:
+Those READMEs carry the same table:
 
 | Stage | Status | Provenance |
 |---|---|---|

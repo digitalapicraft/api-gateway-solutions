@@ -92,21 +92,6 @@ create two apps for them (one per plan), then grab each app's key.
 - **Want the full product documentation?** Every plugin, screen and API call is
   covered at [docs.digitalapi.ai/api-gateway](https://docs.digitalapi.ai/api-gateway).
 
-## Validation status
-
-| Stage | Status | Where to check |
-|---|---|---|
-| Configuration generated | **YES** | [`example/api-spec.yaml`](example/api-spec.yaml) |
-| Local validation | **PASS** | Structural review of the spec and tests. |
-| Gateway dry-run | **PASS** | Non-destructive check against a live gateway. |
-| Gateway deployed | **DEPLOYED** | Two products, two apps on different products, ACTIVE. |
-| Functional tests | **PASS (5/5)** | `example/verify.sh` exit 0, including the isolation check (case 5). |
-| Agent-mode build | **PASS, model-dependent** | Driven live 2026-09-30 on the agent's normal model, one step per turn: identity, both tier products with `scope: app` quotas, the enforcer at `fail_close`, no `limit-count`, then a developer and two separately-subscribed apps. A small free-tier model reached for `limit-count` instead. |
-
-**Overall: READY.** The gateway config (spec, plugins, quota enforcement) and the agent prompt are both validated above. The agent result depends on which model is serving, so read the stored revision back before trusting a run.
-
-Confirmed live: the quota is exact, isolation holds (a second app on a different product kept working while the first was throttled), and the 429 body is `{"error":"quota exceeded"}` with no `Retry-After`/`X-RateLimit-*` headers — though the response's `content-type` says `text/plain`. The window is a fixed calendar minute, so a burst straddling the boundary can briefly get through at ~2×. Multi-node `quota_policy` couldn't be tested on a single-node environment — check it on your own cluster.
-
 ## Related solutions
 
 - **[02 — OAuth 2.0 with JWT](../02-oauth-jwt/)** — if you can't yet tell which
