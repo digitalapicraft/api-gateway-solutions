@@ -50,20 +50,19 @@ implementation:
     discarded.
 
 validation:
-  # Stage statuses only. What was checked and what happened is in validation/.
+  # Stage statuses only. What was checked and what happened is folded into the README/Changelog directly.
   local: PASS
   gateway_dry_run: PASS
   deployment: DEPLOYED
   functional_test: PASS
-  record: validation/
+  record: README.md § Validation status
 
 artifacts:
   documentation: [README.md, architecture.md, business-need.md]
-  source_code: [gateway/api-spec.yaml, gateway/verify.sh]
+  source_code: [example/api-spec.yaml, example/verify.sh]
   agent_prompt: helix-agent-prompt.md
   diagrams: [README.md]   # mermaid blocks, rendered inline by GitHub
   tests: [tests/test-plan.yaml, tests/requests/, tests/expected/]
-  validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
 
 assumptions:
   - API name "Partner Locations API"; mediated route POST /locations; SOAP handler path <SOAP_HANDLER_PATH>. All illustrative — replace with yours.

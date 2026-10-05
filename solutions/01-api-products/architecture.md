@@ -1,250 +1,190 @@
 # Architecture — API Products with enforced quota
 
-The gateway becomes the **policy enforcement point for a commercial model**. It
-resolves which app is calling, which product that app bought, and whether that
-product's budget for the current window still has room. Your backend service is
-unchanged and has no notion of tiers.
-
-The important structural claim: the quota is attached to the **thing you sell** (a
-product), not to a route, an IP, or a service. That's what makes a tier enforceable
-rather than aspirational.
+> [Overview](README.md) · [Business need](business-need.md) · **Architecture** · [Guides](guides.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [API reference](api-reference.md)
 
 ---
 
-## The request path
+## What the gateway does here
 
-```
-┌────────┐      ┌───────────────────────────────────────────────────┐   ┌──────────┐
-│ Client │      │                     Gateway                       │   │ Upstream │
-└───┬────┘      │                                                   │   └────┬─────┘
-    │           │                                                   │        │
-    │ GET /posts                                                   │        │
-    │ apikey: <client id>                                           │        │
-    ├──────────►│  ┌─────────────── helix-auth ─────────────────┐   │        │
-    │           │  │ validate + key-auth                         │   │        │
-    │           │  │ resolve the CREDENTIAL by its key           │   │        │
-    │           │  │ attach the consumer + its subscriptions     │   │        │
-    │   401     │  │ (does NOT check the app's secret)           │   │        │
-    │◄──────────┼──┤ unknown key ──────────────────────────────► │   │        │
-    │           │  └──────────────────┬──────────────────────────┘   │        │
-    │           │                     ▼                             │        │
-    │           │  ┌────────── product resolution ───────────────┐   │        │
-    │           │  │ a SHARED step, before the access phase      │   │        │
-    │           │  │                                             │   │        │
-    │           │  │ of the products this app subscribes to,     │   │        │
-    │           │  │ take those covering this route's service_id │   │        │
-    │           │  │ and pick the TOP-RANKED one                 │   │        │
-    │   403     │  │                                             │   │        │
-    │◄──────────┼──┤ no covering product, or no service_id ────► │   │        │
-    │           │  └──────────────────┬──────────────────────────┘   │        │
-    │           │                     ▼                             │        │
-    │           │  ┌────────── api-product-enforcer ─────────────┐   │        │
-    │           │  │ consume ONE unit of THAT product's quota     │   │        │
-    │           │  │                                             │   │        │
-    │           │  │ under quota → forward, attributed           │   │        │
-    │   429     │  │ over quota  → 429 {"error":"quota exceeded"} │   │        │
-    │◄──────────┼──┤ backend down + fail_close → 503             │   │        │
-    │           │  └──────────────────┬──────────────────────────┘   │        │
-    │           │                     └──────────────────────────────┼───────►│
-    │   200     │                                                   │◄───────┤
-    │◄──────────┴───────────────────────────────────────────────────┴────────┘
-```
+The gateway becomes the place where your pricing plan is enforced. For every
+request it answers three questions:
 
-Four distinct rejection points, and they are worth being able to tell apart because
-they look similar in a dashboard and mean entirely different things:
+1. Which app is calling?
+2. Which product did that app buy?
+3. Does that product still have budget left in the current time window?
 
-| Status | Meaning | Where to look |
+Your backend does not change at all. It never learns that plans exist.
+
+The key idea is simple: **the quota belongs to the product you sell**. It is
+not attached to a URL, an IP address, or a backend service. If you have used
+other gateways, please read this page before you configure anything. The way
+this platform thinks about quotas is different.
+
+For the full list of fields on every plugin mentioned here, see
+[docs.digitalapi.ai — Traffic plugins](https://docs.digitalapi.ai/api-gateway/plugin-reference/plugins-traffic).
+
+## The model
+
+Four words come up on every page of this solution. Here is what each one means.
+
+| Word | What it means in Helix | Name used inside the platform |
 |---|---|---|
-| **401** | The gateway doesn't know who you are | The `apikey` header — is it the credential *key*, not the secret? |
-| **403** | It knows who you are, but there's no product covering this route — or the route has no `service_id` | The app's subscription map; the route's service id |
-| **429** | It knows who you are, it found your product, and your window is spent | Nothing is wrong. This is the system working. |
-| **503** | The quota backend is unreachable and `error_policy` is `fail_close` | `plugin_attr.api-product-enforcer` |
+| **Developer** | The company or person using your API | a Consumer |
+| **App** | One integration owned by a developer. It has its own key and secret. | a Credential |
+| **Product** | A set of APIs plus a quota. This is what you sell. | a product document |
+| **Subscription** | An app signs up to one or more products. Each has a **rank** (an order of preference). | a `{productId: rank}` map |
+
+**The quota is attached to the Product and counted per App.** It is not
+counted per IP address and not per developer. On other gateways it is common
+to count on the consumer name. Here that would count the wrong thing.
+
+A developer with three apps gets **three separate budgets**. This is usually
+what you want. If their test app misbehaves, it should not use up their
+production app's budget. If you would rather pool all of a developer's apps
+into one budget, set `quota_key_scope: developer` on the product. Two keys on
+the *same* app always share one budget. See [Tests](tests.md).
+
+## How a request flows
+
+```mermaid
+flowchart TD
+    C["Client sends apikey — the app's client id"]
+    C --> A["helix-auth, validate + key-auth<br/>finds the app and its developer<br/>key-auth does NOT check the app's secret"]
+    A --> P{"Product resolution — a shared platform step<br/>pick the TOP-RANKED product the app subscribes to<br/>that ALSO covers this route's service"}
+    P -->|no match| F403["403 — quota is never checked"]
+    P -->|match| E["api-product-enforcer<br/>uses one unit of THAT product's quota"]
+    E -->|under quota| U["Backend — request is recorded against the app and developer"]
+    E -->|over quota| F429["429 quota exceeded<br/>NO fallback to another product"]
+```
+
+**Only one product is checked per request, and there is no fallback.** If
+the top-ranked product's budget is used up, the request gets a 429. It does
+not move on to a second product the app also subscribes to. Rank decides
+*which* product is checked. It is not a list of budgets to work through.
+
+## Reading a rejection
+
+The gateway can reject a request with several different codes. They look
+similar on a dashboard but mean very different things.
+
+| Status | What it means | Where to look |
+|---|---|---|
+| **401** | The gateway does not know who is calling | The `apikey` header. Is it the app's *key*, not its secret? |
+| **403** | It knows who is calling, but no product covers this route. Or the route has no `service_id`. | The app's subscriptions, and the route's service id |
+| **429** | It knows who is calling, found the product, and the budget is used up | Nothing is wrong. This is the system working as designed. |
+| **503** | The quota store cannot be reached and `error_policy` is `fail_close` | `plugin_attr.api-product-enforcer` |
+| **200, not counted** | The product has `limit: -1` (unlimited) | The app is still identified and recorded, just never limited |
 
 ## Execution order
 
-Plugins run by **priority**, not in the order they appear in the document. The
-dependency chain here is strict:
+Plugins run in **priority order**, not in the order they appear in the file.
+For this solution the order is:
 
-| Order | Step | Produces | Consumes |
+| Order | Step | What it produces | What it needs |
 |---|---|---|---|
-| 1 | `helix-auth` (validate, key-auth) | the resolved credential and its product subscriptions | the `apikey` header |
-| 2 | product resolution *(shared platform step)* | the single product this request will be metered against | step 1's subscriptions + the route's `service_id` |
-| 3 | `api-product-enforcer` | a consumed quota unit, or a 429 | step 2's resolved product |
-| — | `request-id` | `X-Request-Id` | — |
-| — | analytics *(platform-global)* | per-request telemetry attributed to the app | step 1's identity |
+| 1 | `helix-auth` (validate, key-auth) | the app and its product subscriptions | the `apikey` header |
+| 2 | product resolution *(a shared platform step)* | the one product this request counts against | step 1's subscriptions and the route's `service_id` |
+| 3 | `api-product-enforcer` | one unit of quota used, or a 429 | step 2's product |
+| — | `request-id` | an `X-Request-Id` header | — |
+| — | analytics *(platform-wide)* | a record of the request, tied to the app | step 1's identity |
 
-**Step 3 can only work if step 1 produced a subscription.** This is the whole reason
-`helix-auth` matters rather than raw `key-auth`: `key-auth` completes step 1's
-authentication but not its subscription resolution, so step 2 finds nothing and step
-3 returns 403 on every request. The configuration looks correct; the enforcer simply
-has nothing to enforce against.
+**Step 3 only works if step 1 found a subscription.** This is why the
+solution uses `helix-auth` and not a plain `key-auth` plugin. Plain
+`key-auth` can identify the app, but it does not look up the app's
+subscriptions. So step 2 finds nothing, and step 3 returns 403 on every
+request. The configuration looks correct, but the enforcer has nothing to
+check against. The same identity step is what lets analytics report usage
+*per app* rather than per IP address. See [solution 04](../04-analytics/).
 
-It's also why analytics can report quota consumption *per app* rather than per IP —
-identity resolved at step 1 is what every downstream layer reads. See
-[solution 04](../04-analytics/).
+## Tier design that works
 
-## The commercial model, precisely
+Example numbers for a first set of plans:
 
-```
-Developer  ──────►  App  ──────►  { Product: rank, Product: rank }
-(a Consumer)     (a Credential)         │
-                       │                └──►  Product = APIs + QUOTA
-                 key + secret                       │
-                       │                            └──► limit, interval,
-                  the key goes in                        interval_unit,
-                  the apikey header                      quota_key_scope
-```
+| Product | `limit` | `interval_unit` | Who it is for |
+|---|---|---|---|
+| Free | 60 | minute | Trying the API out. Too low to run production on. |
+| Pro | 1000 | minute | Normal production use. Roughly twice what a healthy integration needs at its busiest. |
+| Enterprise | 10000 | minute | Large accounts, matching a number written in the contract |
+| Internal | −1 | — | Your own services. Unlimited, but still identified and recorded. |
 
-Four properties follow, and each one is a common misunderstanding:
+Two rules matter more than the exact numbers:
 
-**Quota lives on the product.** Not the route, not the service. That's what makes it
-a commercial artefact: changing what a tier is worth is a product edit, not a
-deployment.
+- **Free must not be enough for production.** If it is, nobody upgrades.
+- **Choose the time window on purpose.** A per-minute window lets short bursts
+  through. A per-second window smooths them out. A per-day window is the worst
+  choice: one app can use the whole day's budget in under a minute and then be
+  blocked until midnight.
 
-**Quota counts per app by default.** A developer with three apps gets three
-independent buckets. This is usually correct — their staging integration misbehaving
-should not spend their production budget. `quota_key_scope: developer` pools them,
-and that's a real trade-off rather than a tidier default: pooling means one
-misbehaving app of theirs *can* starve their production traffic.
-
-**Two keys on one app share one bucket.** Isolation is per credential. This is the
-single most common false alarm when testing — two keys from one app makes correct
-isolation look broken, which is why [`verify.sh`](gateway/verify.sh) refuses to run
-with the same key twice.
-
-**One product is evaluated per request, and there is no fallback.** Of the products
-an app subscribes to, only those covering this route's `service_id` are candidates,
-and only the **top-ranked** candidate is evaluated. When its window is spent, the
-request 429s. It does *not* spill into a second subscribed product.
-
-Rank is a routing decision, not a chain of budgets. If a 429 arrives sooner than you
-expected, the usual cause is an app subscribed to something you'd forgotten about at
-a higher rank.
-
-## Where the quota is actually counted — and why that's off-route
+## Where the quota is actually counted
 
 `api-product-enforcer` accepts exactly two fields: `error_policy` and
-`ctx_namespace`. It does **not** accept a backend.
+`ctx_namespace`. It does **not** have a field for where the count is stored.
+That choice, `local` or `redis`, lives in the gateway's own `config.yaml`, not
+on the route. The default, `local`, keeps a separate count on each gateway
+node. So on three nodes, every app gets roughly three times the quota you
+sold. This is the most common way this solution is set up wrong. Full detail:
+[Guides → Troubleshooting](guides.md#troubleshooting).
 
-```
-gateway/api-spec.yaml                    the gateway's config.yaml
-────────────────────────                 ─────────────────────────────────────
-api-product-enforcer:                    plugin_attr:
-  error_policy: fail_close                 api-product-enforcer:
-                                             quota_policy: local | redis
-  ← what to do when the                      redis_host: ...
-    backend is unreachable                   ← WHERE the counter lives
-```
+## No custom code needed
 
-The consequence is severe and invisible from the route:
+Everything in this solution is standard configuration. **No custom code is
+needed, and writing any would make things worse.**
 
-> **Default `quota_policy` is `local`, which counts in each gateway node's own
-> memory.** On a three-node gateway, a product with a 1,000/min quota serves roughly
-> **3,000/min** — each node independently believes it is under the limit.
-
-You will not observe this in a single-node test environment. You will observe it in
-production, as a quota that appears not to work, and you will look for the cause in
-the route configuration where it does not exist.
-
-**More than one node → `quota_policy` must be `redis`.**
-
-Note the inconsistency with `limit-count`, which *does* take `policy` and
-`redis_host` on the route. That difference is real, and it's what leads people to
-add Redis settings to the enforcer where they're rejected.
-
-## Native vs custom
-
-Everything here is native configuration. **No custom code is required, and writing
-any would be actively harmful.**
-
-| Requirement | How it's met | Why not custom |
+| What you need | How it is done | Why not write code for it |
 |---|---|---|
-| Identify the caller | `helix-auth` validate/key-auth | Credential storage lives in the control plane. |
-| Resolve which product applies | the platform's shared product-resolution step | Rank ordering, service coverage and subscription state are platform state, not request state. |
-| Count and enforce | `api-product-enforcer` | Distributed counting with correct window semantics is genuinely hard. A custom counter is where off-by-one-window and race-condition bugs live. |
-| Attribute a disputed 429 | `request-id` + platform analytics | — |
+| Identify the caller | `helix-auth` validate/key-auth | The control plane already stores every app's credentials. |
+| Work out which product applies | the platform's shared product-resolution step | Rank, coverage, and subscription state live in the platform, not in the request. |
+| Count and enforce | `api-product-enforcer` | Counting correctly across many nodes and time windows is hard to get right. Custom counters are where subtle bugs live. |
+| Trace a disputed 429 | `request-id` plus platform analytics | — |
 
-The temptation to write custom code here usually takes one of two forms, and both
-are mistakes:
-
-- **A custom limiter keyed on something clever.** Whatever you key it on, you now
-  have two systems counting, disagreeing under load, and no single answer to "what is
-  this customer's remaining budget?"
-- **Custom logic to fall back into a second product when the first is spent.** This
-  sounds helpful and destroys the commercial model: a tier whose limit can be
-  exceeded by subscribing to another tier isn't a limit.
+Custom code here usually takes one of two forms, and both cause problems. A
+**custom limiter keyed on something clever** means two systems are counting,
+and they will disagree under load. **Logic that falls back to a second
+product when the first is used up** breaks the pricing model, because a limit
+you can work around is not a limit.
 
 ## When to use this
 
-Use it when:
+Use this solution when:
 
-- **You sell tiers and want them to be a technical difference**, not just a price
-  difference. This is the primary case. A quota is what converts a contract line into
-  an enforceable promise.
-- **One caller can hurt everyone.** The quota's real product is a bounded blast
-  radius.
-- **You're provisioning for an unbounded worst case.** Bound it, then provision for
-  the sum of what you sold. (Check that sum against your capacity — if it exceeds it,
-  you've oversold, and the quota surfaces that as 429s rather than an outage. Better,
-  but still worth knowing.)
-- **You need per-app attribution** for chargeback, incident response, or upgrade
-  conversations.
-- **You're building toward a marketplace or self-serve onboarding.** The product is
-  the unit a partner subscribes to; without one there is nothing to list.
+- you sell plans and want the difference between them to be real,
+- one caller can hurt everyone else,
+- you are sizing your servers for a worst case you cannot predict, or
+- you need to know which app made each request, for billing, incidents, or
+  upgrade conversations.
 
-Don't use it when:
+Do not use it when:
 
-- **Budget headers on the response are a hard requirement.** The enforcer emits no
-  `X-RateLimit-*` and no `Retry-After`. If a partner contract requires them, that's
-  `limit-count` with `show_limit_quota_header`, and you accept a different key.
-- **You need sub-second burst shaping.** Quota counts requests within a window.
-  Smoothing arrival rate or capping concurrency is a different control — `limit-conn`
-  for in-flight requests.
-- **The limit should be per end user.** The unit here is the app. The platform has no
-  notion of your application's users.
-- **Request cost varies wildly across endpoints.** Every request consumes one unit,
-  so a cheap read and a 30-second report cost the same. Split into separate products
-  per endpoint group, or the quota misprices your expensive paths.
-- **There's no commercial model and you just want a global ceiling.** A plain
-  `limit-count` is simpler; you don't need products.
-- **You can't identify callers yet.** Metering requires identity. Start with
-  [solution 02](../02-oauth-jwt/).
+- you need remaining-budget headers on the response. The enforcer sends none.
+  See the [Configuration reference](guides.md#configuration-reference).
+- you need to smooth out bursts faster than one second. `limit-conn` limits
+  concurrent connections; this does not.
+- you need limits per end user. The unit here is the app, not the people
+  using it.
+- you cannot identify callers yet. Start with [solution 02](../02-oauth-jwt/).
 
 ## Prerequisites
 
-- The API exists, is deployed to an environment, and **the route has a
-  `service_id`.** Without one the enforcer returns 403 regardless of subscription.
-- `helix-auth` and `api-product-enforcer` exist in your org — confirm with
-  `get_plugin_config`.
-- Products created **and deployed to the environment**. Creating them isn't enough.
-- A developer with **two apps**, each subscribed to a different product, so you can
-  prove isolation rather than merely prove a limit exists.
-- If the gateway runs more than one node: `quota_policy: redis` in
-  `plugin_attr.api-product-enforcer`.
+- The API exists, is deployed, and **the route has a `service_id`.** Without
+  one, the enforcer returns 403 no matter what the app subscribes to.
+- `helix-auth` and `api-product-enforcer` are available in your org. Confirm
+  with `get_plugin_config`.
+- Products are created **and deployed to the environment.** Creating them is
+  not enough.
+- A developer with **two apps**, each subscribed to a different product. This
+  lets you prove that one app's limit does not affect the other, rather than
+  only proving that a limit exists.
+- If the gateway runs on more than one node: `quota_policy: redis`.
 
-## Failure behaviour
+## Two settings worth extra attention
 
-| Condition | Result | Reaches upstream? |
-|---|---|---|
-| No `apikey` header | 401 | No |
-| Unknown key | 401 | No |
-| App subscribed to no product covering this API | 403 | No |
-| Route has no `service_id` | 403 | No |
-| Resolved product has no `quota` object | 403 | No — and note this is *not* "unlimited" |
-| Product quota window exhausted | 429 `{"error":"quota exceeded"}` | No |
-| Product `limit: -1` | passes, uncounted | Yes |
-| Quota backend unreachable, `fail_close` (default) | 503 | No |
-| Quota backend unreachable, `fail_open` | passes, unmetered | Yes |
+**A product with no `quota` section returns 403. It does not mean unlimited.**
+It is easy to assume that no limit means no limit. Here it means no
+configuration, and under `fail_close` that is a rejection. To make a product
+unlimited, write `limit: -1`.
 
-Two rows deserve attention.
-
-**"Resolved product has no quota object → 403."** People reason that a product
-without a limit means no limit. It means no configuration, and under `fail_close`
-that's a rejection. Unlimited is `limit: -1`.
-
-**The `fail_open` / `fail_close` row is a commercial decision disguised as a config
-field.** `fail_close` protects the accuracy of your metering at the cost of
-availability during a backend incident. `fail_open` protects availability at the cost
-of serving traffic you can't account for — and you may not notice it happened.
-Whichever you choose, choose it deliberately, and make sure whoever owns the revenue
-line knows which one is live.
+**`fail_open` or `fail_close` is a business decision, not just a setting.**
+It controls what happens if the quota store goes down. `fail_close` rejects
+requests, so your usage counts stay accurate but callers see errors.
+`fail_open` lets requests through, so callers are fine but you cannot account
+for that traffic. Either choice can be right. Make it on purpose.

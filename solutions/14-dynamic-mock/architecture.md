@@ -128,6 +128,6 @@ route exists at all, and why protecting it is part of adopting this package.
 |---|---|
 | Unregistered partner | 200 with empty values. A miss is not an error to the store. |
 | Value past its TTL | Identical to unregistered. No signal. |
-| Store unreachable | `fail_action: close` applies to store *errors*. Not simulated here — see `validation/gateway-validation.yaml` § `not_established_here`. |
+| Store unreachable | `fail_action: close` applies to store *errors*. Not simulated in this package — verify it on your own store before relying on it. |
 | Wrong grammar in a template | 200, empty string, nothing logged. This is why the diagnostics route exists. |
 | Registration route reachable by a partner | They can rewrite any partner's values, including their own. Protect it. |

@@ -1,6 +1,6 @@
 # Test plan — verifying Okta-issued access tokens at the gateway.
 #
-# Cases 1-6 are executed in order by ../gateway/verify.sh, which exits 0 only if
+# Cases 1-6 are executed in order by ../example/verify.sh, which exits 0 only if
 # all of them hold. Case 7 runs too, but only when you supply a token from a
 # second Okta authorization server. The fixtures under requests/ and expected/
 # document each case independently so you can run one by hand.
@@ -17,7 +17,7 @@
 meta:
   solution: 05-okta-jwt
   version: 1.0.0
-  executor: gateway/verify.sh
+  executor: example/verify.sh
   note: >-
     Cases 1-6 are automated and unconditional. Case 7 (wrong issuer) is automated
     but skipped unless OTHER_ISSUER_TOKEN is supplied, because it needs a second

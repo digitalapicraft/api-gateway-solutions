@@ -1,6 +1,6 @@
 # Test plan — OpenPGP at the edge, both directions.
 #
-# Cases 1-4 are executed by ../gateway/verify.sh with nothing but bash, curl and
+# Cases 1-4 are executed by ../example/verify.sh with nothing but bash, curl and
 # base64. Case 5 needs gpg and a key pair and is skipped loudly without them.
 #
 # Substitute your own values:
@@ -11,7 +11,7 @@
 meta:
   solution: 13-pgp-encryption
   version: 1.0.0
-  executor: gateway/verify.sh
+  executor: example/verify.sh
   note: >-
     The wire-format and fail-close cases need no key material, which is deliberate:
     they are the ones worth running in a pipeline. The round trip needs gpg,

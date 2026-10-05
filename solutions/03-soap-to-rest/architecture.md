@@ -181,7 +181,7 @@ Environment variable on the gateway environment
 Service binding (set at import/bind time, NOT in the OpenAPI paths)
    <SOAP_UPSTREAM_URL>  ──► the SOAP system
 
-Route configuration (in gateway/api-spec.yaml)
+Route configuration (in example/api-spec.yaml)
    proxy-rewrite  uri: <SOAP_HANDLER_PATH>      ← the handler's real path
    xml-to-json    {}                      ← defaults; confirm fields per build
 ```
@@ -250,5 +250,5 @@ Don't use it when:
 The last row is the dangerous one, because it looks like success. The status is
 200, the content type says JSON, and the partner's parser is what discovers the
 truth — with an error message pointing nowhere near your gateway. This is exactly
-why [`gateway/verify.sh`](gateway/verify.sh) case 4 asserts the body contains no
+why [`example/verify.sh`](example/verify.sh) case 4 asserts the body contains no
 XML markup rather than trusting the header.

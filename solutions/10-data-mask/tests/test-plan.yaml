@@ -1,6 +1,6 @@
 # Test plan — masking what the caller sees, and what the logs keep.
 #
-# Cases 1-6 are executed by ../gateway/verify.sh against the response. The log
+# Cases 1-6 are executed by ../example/verify.sh against the response. The log
 # cases cannot be checked from the client side at all — they are procedures, and
 # the one this package ran is written out in full.
 #
@@ -10,7 +10,7 @@
 meta:
   solution: 10-data-mask
   version: 1.0.0
-  executor: gateway/verify.sh
+  executor: example/verify.sh
   note: >-
     response-rewrite and log-data-mask are independent controls with independent
     evidence. No client-side assertion can establish what a logger wrote, so the

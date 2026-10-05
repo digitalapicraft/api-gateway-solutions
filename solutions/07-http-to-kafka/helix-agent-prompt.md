@@ -89,7 +89,7 @@ landed. Wait before deploying.
 **The schema here is deliberately shallow** — the three fields are required but
 their types aren't constrained. That is the most the agent path can carry on this
 build (see the failure table below). For the full property-level schema in
-[`gateway/api-spec.yaml`](gateway/api-spec.yaml), import the spec instead. Both
+[`example/api-spec.yaml`](example/api-spec.yaml), import the spec instead. Both
 routes end at the same config.
 
 ## Step 2 — prove the edge contract
@@ -179,7 +179,7 @@ Observed on the default agent model against a live org, 2026-09-21, seven runs.
 | What you see | What is happening | What to do |
 |---|---|---|
 | `stream closed with reason: error`, and the revision shows **0 routes** | The serialiser emitted malformed JSON for `update_route_spec` and the call never reached the control plane. Nothing was written; the API exists, empty. | Check your route object matches the one above, and keep `properties` out of `body_schema` (next row). |
-| The same error every time, when `body_schema` carries a `properties` map | **Reproducible, not intermittent — 5 of 5.** The nesting depth makes the serialiser transpose its closing delimiters: `…1}}]}}` where `…1}}}]}` is valid, closing the `routeSpec` array before the route object. Removing that one level made the identical prompt succeed. | Use the required-only schema via the agent, or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) for the full one. Spec import is unaffected. |
+| The same error every time, when `body_schema` carries a `properties` map | **Reproducible, not intermittent — 5 of 5.** The nesting depth makes the serialiser transpose its closing delimiters: `…1}}]}}` where `…1}}}]}` is valid, closing the `routeSpec` array before the route object. Removing that one level made the identical prompt succeed. | Use the required-only schema via the agent, or import [`example/api-spec.yaml`](example/api-spec.yaml) for the full one. Spec import is unaffected. |
 | The route deploys, but `plugins` contains `response_status`, `content_type`… as if they were plugin names | The agent dropped the plugin-name level and promoted one plugin's fields into the map. The write succeeds and the dry-run passes; the route carries several nonexistent plugins and none of the real one. | Read the revision back. The prompt states that level explicitly to prevent it. |
 | Success reported, dry-run passes, route has no plugins | The route object carried an `x-helix-gateway` wrapper, which a live route silently discards. | Re-send with `plugins` as a top-level key. |
 

@@ -1,6 +1,6 @@
 # Test plan — one shared lookup at the edge, delivered to the backend as headers.
 #
-# Cases 1-5 are executed by ../gateway/verify.sh. The failure-policy and
+# Cases 1-5 are executed by ../example/verify.sh. The failure-policy and
 # phase-ordering cases need a route pointed at an unreachable callout, so they are
 # procedures rather than assertions against the shipped routes.
 #
@@ -10,7 +10,7 @@
 meta:
   solution: 11-service-callout
   version: 1.0.0
-  executor: gateway/verify.sh
+  executor: example/verify.sh
   note: >-
     The assertions are about what the BACKEND received, so they need an upstream
     that echoes request headers. The package's sample upstream does; against your

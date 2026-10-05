@@ -1,6 +1,6 @@
 # Test plan — JSON in, JSON out, in front of an XML-only backend.
 #
-# Cases 1-5 are executed in order by ../gateway/verify.sh, which exits 0 only if
+# Cases 1-5 are executed in order by ../example/verify.sh, which exits 0 only if
 # all of them hold. The fixtures under requests/ and expected/ document each case
 # independently so you can run one by hand.
 #
@@ -10,7 +10,7 @@
 meta:
   solution: 09-xml-to-json
   version: 1.0.0
-  executor: gateway/verify.sh
+  executor: example/verify.sh
   note: >-
     Cases 3 and 4 assert what the BACKEND received, so they need an upstream that
     echoes the request. The package's sample upstream does; against your own

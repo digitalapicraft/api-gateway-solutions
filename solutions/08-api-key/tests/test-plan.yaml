@@ -1,6 +1,6 @@
 # Test plan — API-key identity for callers that cannot run a token exchange.
 #
-# Cases 1-7 are executed in order by ../gateway/verify.sh, which exits 0 only if
+# Cases 1-7 are executed in order by ../example/verify.sh, which exits 0 only if
 # all of them hold. The fixtures under requests/ and expected/ document each case
 # independently so you can run one by hand.
 #
@@ -12,7 +12,7 @@
 meta:
   solution: 08-api-key
   version: 1.0.0
-  executor: gateway/verify.sh
+  executor: example/verify.sh
   note: >-
     Cases 1-7 are automated. Case 6 is skipped unless APP_SECRET is set. The
     revocation, rotation and secret_validation cases are manual: the first two

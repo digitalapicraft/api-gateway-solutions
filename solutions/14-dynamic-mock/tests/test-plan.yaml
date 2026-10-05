@@ -1,7 +1,7 @@
 # Test plan — a per-caller sandbox served from the key-value store, with no
 # backend behind it.
 #
-# All six cases are executed in order by ../gateway/verify.sh, which exits 0 only
+# All six cases are executed in order by ../example/verify.sh, which exits 0 only
 # if every one of them holds. The fixtures under requests/ and expected/ document
 # each case independently so you can run one by hand.
 #
@@ -15,7 +15,7 @@
 meta:
   solution: 14-dynamic-mock
   version: 1.0.0
-  executor: gateway/verify.sh
+  executor: example/verify.sh
   note: >-
     Every case is automated; none requires waiting or mutating environment
     configuration. Case 6 asserts a negative about syntax rather than about

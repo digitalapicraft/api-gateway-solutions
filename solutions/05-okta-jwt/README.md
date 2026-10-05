@@ -9,8 +9,8 @@ four of the plugin's defaults are wrong for an API.**
 | **Difficulty** | 🟢 Beginner, *if* your build has the plugin — check that first |
 | **Needs** | An org whose build includes **`openid-connect`** (not all do — see below) · an Okta tenant with an authorization server and an application · one upstream. The upstream here is public jsonplaceholder, so no backend of your own. |
 | **Plugins** | `openid-connect` · `request-id` · `cors` |
-| **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Manifest](solution.yaml) |
+| **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`example/api-spec.yaml`](example/api-spec.yaml) |
+| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](example/) · ✅ [Tests](tests/) · ✅ [Manifest](solution.yaml) |
 
 ---
 
@@ -203,11 +203,11 @@ takes a wrong turn.
 
 ## Install it directly
 
-1. Import [`gateway/api-spec.yaml`](gateway/api-spec.yaml).
+1. Import [`example/api-spec.yaml`](example/api-spec.yaml).
 2. Bind an upstream on the revision, per environment.
 3. Replace the four `<OKTA_...>` placeholders with real values (see below).
 4. Dry-run the deploy, then deploy the revision.
-5. Run [`gateway/verify.sh`](gateway/verify.sh).
+5. Run [`example/verify.sh`](example/verify.sh).
 
 ## Configuration
 
@@ -297,7 +297,7 @@ single request.
 
 ## Testing
 
-[`gateway/verify.sh`](gateway/verify.sh) — seven cases, exits 0 only if all hold.
+[`example/verify.sh`](example/verify.sh) — seven cases, exits 0 only if all hold.
 
 ```bash
 GATEWAY=https://<YOUR_GATEWAY_HOST> \
@@ -305,7 +305,7 @@ OKTA_TOKEN_URL=https://<your-okta-domain>/oauth2/<authServerId>/v1/token \
 OKTA_CLIENT_ID=<CLIENT_ID> \
 OKTA_CLIENT_SECRET=<CLIENT_SECRET> \
 OKTA_SCOPE=<scope> \
-./gateway/verify.sh
+./example/verify.sh
 ```
 
 If your authorization server needs an `audience` parameter to issue a **JWT**
@@ -401,6 +401,7 @@ Not this solution if: no IdP exists and you'd be deploying Okta *for* this
 | Gateway dry-run | **PASS** |
 | Gateway deployed | **DEPLOYED** |
 | Functional tests | **PASS (7/7)** — this spec, deployed verbatim, exercised with a real IdP token |
+| Agent-mode run | **PASS** (2026-09-21) | Read back from the deployed revision, not just from the agent's transcript. |
 
 Overall: **READY WITH WARNINGS.** It works, and it rejects everything it should.
 The warning is the audience — not enforced by value, a property of the plugin
@@ -409,7 +410,7 @@ rather than of this spec. See [Gotchas](#gotchas).
 Valid token → `200`; no token → `401`; forged signature, `alg:none` → `401`;
 no auth scheme → `400`. Separately confirmed: a wrong `valid_issuers` rejects a
 genuine token, `required_scopes` gates on granted scope, and a missing `aud`
-returns `403`. Full record in [`validation/`](validation/).
+returns `403`.
 
 **The IdP exercised was Auth0, not Okta** — same OIDC mechanism and an identical
 configuration, but no Okta tenant was tested.

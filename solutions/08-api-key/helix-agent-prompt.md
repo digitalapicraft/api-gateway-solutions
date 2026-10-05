@@ -118,6 +118,7 @@ leave the device API on key-auth. Don't mix the two on one route.
 | The agent puts a key value in the spec | The route names the header only; the control plane issues the key on the app credential. |
 | `create_api` fails saying the API exists | A previous run left one behind. Use a free name. |
 | Deploy fails: `Only INACTIVE revisions can be updated` | Clone the revision or undeploy, then apply. |
+| You ask the agent to run `validate_route` | Don't. It's broken against this control plane — the tool posts `{"route": {...}}` but the endpoint requires `{"routeSpec": [...]}`, so it returns 400 regardless of content. Verified: an earlier prompt wording that asked for it failed twice, and the second failure was the agent retrying into a malformed tool call that ended the run. Ask for `dry_run_deploy` instead — that's why this prompt never mentions `validate_route`. |
 
 ## Related
 

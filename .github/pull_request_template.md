@@ -8,7 +8,7 @@
 - [ ] README carries a mermaid diagram that declares a diagram type
 - [ ] No secrets — placeholders only. The gateway uses `signing_secret` and
       `redis_host` **verbatim**; it does not resolve `<ENV:...>` or `${...}`.
-- [ ] `solution.yaml`, `gateway/api-spec.yaml`, `gateway/products.json` parse
+- [ ] `example/api-spec.yaml`, `example/products.json` parse (and `solution.yaml`, if this package still carries one)
 - [ ] No non-public artifacts (`blog.md`, `video-script.md`, `infographic.md`,
       `marketplace-publish.md`, `VERIFICATION.md`)
 

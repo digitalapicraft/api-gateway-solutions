@@ -1,12 +1,16 @@
 # Agent-mode prompt — rate limiting with an API Product quota
 
+> [Overview](README.md) · [Business need](business-need.md) · [Architecture](architecture.md) · [Guides](guides.md) · **Agent prompt** · [Tests](tests.md) · [API reference](api-reference.md)
+
+---
+
 Paste this to the Helix Agent as one message, replacing the `<<...>>` values.
 
 **If the run ends early, paste the three steps one at a time instead** — this
 build asks for a lot in a single turn, and splitting it changes nothing about the
-words. Why it is worded this way, what the agent decides on its own, and what to
-check before you trust it are in the
-[README](README.md#build-it-with-the-helix-agent).
+words. When it finishes, read the deployed revision back and check that
+`api-product-enforcer` is on the API and that no `limit-count` was added. See
+[Troubleshooting](guides.md#troubleshooting) if something looks off.
 
 ## Prompt
 

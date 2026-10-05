@@ -10,8 +10,8 @@ third — and is honest about what you give up.**
 | **Difficulty** | 🟡 Intermediate — needs a Kafka broker reachable from the gateway |
 | **Needs** | An org whose build includes **`kafka-logger`**, **`mocking`** and **`request-validation`** · a Kafka broker · a topic browser to verify with. [Kafka quickstart](https://kafka.apache.org/quickstart) · [Kafka UI](https://github.com/provectus/kafka-ui) or [Redpanda Console](https://github.com/redpanda-data/console) |
 | **Plugins** | `request-validation` · `mocking` · `kafka-logger` · `request-id` |
-| **Build it with** | 🤖 **[the Agent](helix-agent-prompt.md)** — recommended · or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Manifest](solution.yaml) |
+| **Build it with** | 🤖 **[the Agent](helix-agent-prompt.md)** — recommended · or import [`example/api-spec.yaml`](example/api-spec.yaml) |
+| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](example/) · ✅ [Tests](tests/) · ✅ [Manifest](solution.yaml) |
 
 ---
 
@@ -189,28 +189,28 @@ the nesting depth reproducibly corrupts the agent's own tool-call arguments, so
 nothing gets written at all. The prompt therefore ships a required-only schema,
 which still rejects events missing `event_id`, `event_type` or `occurred_at` but
 does not constrain their types. For the full schema in
-[`gateway/api-spec.yaml`](gateway/api-spec.yaml), import the spec as below — that
+[`example/api-spec.yaml`](example/api-spec.yaml), import the spec as below — that
 path is unaffected. The failure and the evidence are documented under *Known
 failure modes* in the prompt.
 
 ## Install it directly
 
 ```text
-1. Replace <YOUR_KAFKA_BROKER> in gateway/api-spec.yaml with a broker hostname
+1. Replace <YOUR_KAFKA_BROKER> in example/api-spec.yaml with a broker hostname
    the GATEWAY can reach — not one only your laptop can reach — and set
    kafka_topic to your topic. Neither value is a secret.
 
 2. CREATE THE TOPIC EXPLICITLY. Do not rely on auto-creation: the message that
    triggers topic creation is dropped, and the caller still gets its 202.
 
-3. Import gateway/api-spec.yaml and bind any upstream to the service. The /events
+3. Import example/api-spec.yaml and bind any upstream to the service. The /events
    route never reaches it — mocking short-circuits first — but a revision will not
    deploy without a binding.
 
 4. Deploy the revision to the "test" environment (a free-trial org's default).
 
 5. Prove the edge contract
-   GATEWAY=https://<YOUR_GATEWAY_HOST> ./gateway/verify.sh
+   GATEWAY=https://<YOUR_GATEWAY_HOST> ./example/verify.sh
 
 6. Prove the Kafka leg in your topic browser — see below. Step 5 cannot do it.
 ```
@@ -254,7 +254,7 @@ events posted in the same second, and `received_at` is the gateway's clock.
 
 ## Testing
 
-[`gateway/verify.sh`](gateway/verify.sh) exits 0 only if all four hold:
+[`example/verify.sh`](example/verify.sh) exits 0 only if all four hold:
 
 | # | Case | Expect |
 |---|---|---|
@@ -272,6 +272,9 @@ All four in [tests/test-plan.yaml](tests/test-plan.yaml).
 
 **Run the broker-down case once**, in front of whoever is deciding whether this
 shape suits the data. It is the fastest way to make the limitation concrete.
+Verified: with the broker unroutable, two valid events each still returned 202
+at normal latency (~0.56s) and neither reached the topic — the caller has no
+way to tell.
 
 ## When to use it
 
@@ -351,8 +354,8 @@ deployed, `verify.sh` 4/4, and the Kafka leg confirmed on a topic.**
 
 | Stage | Status | Provenance |
 |---|---|---|
-| Configuration generated | **YES** | [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| Local validation | **PASS** | [`validation/local-validation.yaml`](validation/local-validation.yaml) |
+| Configuration generated | **YES** | [`example/api-spec.yaml`](example/api-spec.yaml) |
+| Local validation | **PASS** | Structural review of the spec and tests |
 | Gateway dry-run | **PASS** | `{"success":true,"message":"Dry-run validation successful"}` |
 | Gateway deployed | **DEPLOYED** | Revision ACTIVE on a temporary test API, since torn down |
 | Functional tests | **PASS (4/4 + 3 manual)** | `verify.sh` exit 0; message-on-topic, rejected-event-not-published and broker-down all confirmed against a real broker |
@@ -364,8 +367,7 @@ caller still gets `202` while the event is lost — the headline limitation,
 demonstrated. The run also corrected two things in this package, both fixed
 above: the correlation field used `$request_id` (which never matches the caller's
 `X-Request-Id`), and the claim that removing `request-validation` empties every
-message is false. Topic auto-creation is the one case not run. Detail in
-[`validation/gateway-validation.yaml`](validation/gateway-validation.yaml).
+message is false. Topic auto-creation is the one case not run.
 
 ## Related solutions
 

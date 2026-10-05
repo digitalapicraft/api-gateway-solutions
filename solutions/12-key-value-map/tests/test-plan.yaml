@@ -1,6 +1,6 @@
 # Test plan — per-partner key material, fetched at request time.
 #
-# Cases 1-4 are executed by ../gateway/verify.sh and need only bash, curl, base64
+# Cases 1-4 are executed by ../example/verify.sh and need only bash, curl, base64
 # and an armored public key. Cases 5 and 6 need gpg and the matching private keys.
 #
 # Substitute your own values:
@@ -11,7 +11,7 @@
 meta:
   solution: 12-key-value-map
   version: 1.0.0
-  executor: gateway/verify.sh
+  executor: example/verify.sh
   note: >-
     Read solution 13 first. This package differs from it in exactly one respect —
     where the key comes from — and every crypto behaviour it relies on (the

@@ -16,7 +16,7 @@ GATEWAY DRY-RUN → TESTS → RESULTS → DOCUMENTATION
 ```
 
 **`tests/expected/*.json` are read by machines, not people.** They carry `status`,
-`headers` and `body` — nothing else. `gateway/verify.sh` parses the status out of
+`headers` and `body` — nothing else. `example/verify.sh` parses the status out of
 them, so a case's expectation lives in exactly one place and the script cannot
 drift from the fixtures. Explanation, caveats and anything manual go in
 `test-plan.yaml` (`intent`, `notes`, `response_notes`, `expected_outcome`), where
@@ -35,26 +35,30 @@ they're what makes the library scannable.
 
 ```
 solutions/<NN>-<slug>/
-├── README.md               required
-├── solution.yaml           required — the manifest
+├── README.md               required — problem, business need summary, how it
+│                             works, gotchas, and its own Validation status section
 ├── business-need.md        required
 ├── architecture.md         required
 ├── helix-agent-prompt.md   required
-├── gateway/
+├── example/
 │   ├── api-spec.yaml       required — the importable source of truth
 │   ├── products.json       only if the solution needs API Products
 │   └── verify.sh           required — must exit 0 against a live environment
-├── tests/
-│   ├── test-plan.yaml      required — cases, intent, and the prose
-│   ├── requests/           request fixtures (.http)
-│   └── expected/           machine-read: {status, headers, body} ONLY
-└── validation/
-    ├── local-validation.yaml    required
-    └── gateway-validation.yaml  required
+└── tests/
+    ├── test-plan.yaml      required — cases, intent, and the prose
+    ├── requests/           request fixtures (.http)
+    └── expected/           machine-read: {status, headers, body} ONLY
 ```
 
 Only create files that apply. A solution that needs no products doesn't get an
 empty `products.json`.
+
+There's no separate `validation/` folder, and no `solution.yaml` manifest.
+What was checked, when, and by what method is written directly into the
+README's own **Validation status** section — see *Validation honesty* below
+for what that section must contain. The full limitations list lives in
+**Configuration reference** (or the README, for a single-file package) rather
+than in a separate manifest field.
 
 The slug is a **problem**, not a plugin. `soap-to-rest` and `api-products`, not
 `xml-to-json-plugin`.
@@ -78,9 +82,16 @@ Rules:
 - **Never write "works on the gateway"** unless a gateway validated or executed it.
 - **Never record a dry-run, deployment or test result you didn't obtain from a
   real gateway.** Not an inference, not a strong expectation.
-- **If you didn't run it in the change you're submitting, say so.** Every status
-  in `validation/` carries `verified_this_session` and, where it came from an
-  earlier run, a `provenance` line naming who ran it and against what.
+- **If you didn't run it in the change you're submitting, say so.** The
+  README's Validation status table (or `changelog.md`'s) carries a date and a
+  provenance note for every stage — who ran it, when, and against what — not
+  just a bare PASS. Where a stage came from an earlier run rather than this
+  one, say that explicitly instead of implying it's current.
+- **State findings, not just verdicts.** A dry-run or agent-mode run that
+  surfaced something concrete — a defect, a corrected assumption, a run that
+  didn't finish cleanly — gets written into the README in plain language, not
+  summarized away as a bare PASS/FAIL. A reader should be able to tell *what
+  was actually learned*, not just that a check was run.
 - A failed dry-run is **NOT READY** and doesn't get merged as READY with a
   footnote.
 
@@ -148,8 +159,8 @@ Get these right or the package is confidently misleading:
   describe the mechanism instead.
 - **State the limitations in the package.** Every solution has some. A missing
   response header, a counting scope that surprises people, a manual step. They
-  go in the README under *Limitations* and in `solution.yaml`. Trust is the
-  product.
+  go in the README (or Configuration reference, for a split-layout package),
+  not buried in a separate manifest. Trust is the product.
 - **Show what a rejected caller actually sees** — status, body, and which headers
   are absent. This is the part readers hit in production.
 - Write for someone deciding in sixty seconds whether this applies to them.
@@ -161,7 +172,7 @@ The prompt is a first-class artifact, not a convenience.
 - It must work **from a blank organisation**, with no hidden conversation
   context. If it only works when you already know the answer, it's a note to
   self.
-- It must produce a solution **equivalent to `gateway/api-spec.yaml`**. If the
+- It must produce a solution **equivalent to `example/api-spec.yaml`**. If the
   agent's output and the committed spec have diverged, one of them is wrong.
 - Prompt at the level of outcomes; let the agent fetch real schemas. See
   [AGENT-GUIDE.md](AGENT-GUIDE.md).
@@ -177,8 +188,8 @@ A solution is mergeable when all of these hold:
 - [ ] Problem stated in a customer's words
 - [ ] Business need identified, and quantified where a real metric exists
 - [ ] Architecture documented, matching the spec
-- [ ] `gateway/api-spec.yaml` generated
-- [ ] Local validation passed, recorded in `validation/local-validation.yaml`
+- [ ] `example/api-spec.yaml` generated
+- [ ] Local validation passed, recorded in the README's Validation status section
 - [ ] Gateway dry-run performed and recorded — or the package is clearly labelled UNVALIDATED
 - [ ] Tests defined: at least one positive, one negative, one boundary, and one failure case where relevant
 - [ ] `verify.sh` present, and its exit-0 condition described in the README
@@ -189,10 +200,9 @@ A solution is mergeable when all of these hold:
 - [ ] Every `expected/*.json` has `status` and nothing outside {status, headers, body}
 - [ ] Every fixture is referenced by a case's `expected:`, and every `expected:` is a
       path — narrative belongs in `expected_outcome:` or `response_notes:`
-- [ ] `gateway/verify.sh` reads its expected statuses from the fixtures, not literals
+- [ ] `example/verify.sh` reads its expected statuses from the fixtures, not literals
 - [ ] Limitations stated
 - [ ] Validation status reported accurately, with provenance
-- [ ] `solution.yaml` version matches every artifact in the package
 
 ## Submitting
 

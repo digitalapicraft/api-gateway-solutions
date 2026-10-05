@@ -12,7 +12,7 @@ API.**
 | **Needs** | APIs that already receive traffic · a control-plane bearer token (the portal uses the same one) |
 | **Changes to your APIs** | **None.** Analytics is global; there is no plugin or config to add. |
 | **Run it** | 🤖 [ask the agent](helix-agent-prompt.md) — it charts it for you · 📊 [`scripts/query-analytics.sh`](scripts/query-analytics.sh) — CLI · 📖 [`charts.md`](charts.md) — raw queries |
-| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Query catalogue](charts.md) · ✅ [Query script](scripts/query-analytics.sh) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Validation](validation/) · ✅ [Manifest](solution.yaml) |
+| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Query catalogue](charts.md) · ✅ [Query script](scripts/query-analytics.sh) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Manifest](solution.yaml) |
 
 ---
 
@@ -158,9 +158,18 @@ shape its rows:
 **Validated against a live gateway.** Every query in [`charts.md`](charts.md) and
 [`scripts/query-analytics.sh`](scripts/query-analytics.sh) was run against the real
 analytics API and returned the expected shapes — requests by API/app/product,
-slowest/fastest by response time, and errors by status. See
-[`validation/`](validation/). Point the script at your own org and token to see
-your data.
+slowest/fastest by response time, and errors by status. Point the script at your
+own org and token to see your data.
+
+**Agent-mode run: PASS** (2026-09-21). The first everyday prompt in this
+package — "requests to all my APIs, broken down by API, busiest first," widened
+to 7 days — was run against the hosted agent on the default model, against a
+live org. It called `get_analytics_metadata` then a single `get_metrics` with
+`metricType: REQUESTS_COUNT`, `dimensions: [api_name]`, `aggregation: SUM`,
+`chartType: bar` — exactly the shape the prompt is written to elicit — and
+returned a ranked breakdown matching traffic that session had actually
+generated. No config is written by this prompt, so the live-route
+plugin-placement defects that affect other packages don't apply here.
 
 ## Related solutions
 
