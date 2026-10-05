@@ -190,16 +190,25 @@ wrong*. Three phrases in it are doing real work:
   wrong handler path is a 404 you will chase; wrong field names are an empty
   `{}` from a handler that looks healthy.
 
-Notably absent: any instruction about where plugins go, which direction needs
-enabling, or what the `Accept` header does. Those are real traps on this build
-(§ *The one thing everybody gets wrong*), and they are the reader's to verify
-afterwards rather than the prompt's to recite — on 01 and 02, removing guards of
-exactly that kind made the result better, not worse.
+It carries exactly one build-specific guard — **don't set `Content-Type` when you
+rewrite the path** — and that one is there because it was measured, not assumed.
+Without it, a live run put `Content-Type: application/xml` in `proxy-rewrite`,
+which is applied before the body is converted: the request transform never saw a
+JSON body, and the backend was handed JSON it could not parse. The route still
+answered **HTTP 200 with `content-type: application/json` and a JSON body**, so
+nothing looked wrong. See § *Validation status*.
 
-> **This prompt has not been driven against the agent since it was rewritten.**
-> The configuration it describes is deployed and functionally tested
-> (§ *Validation status*); the wording that produces it is not separately
-> verified. Read the revision back rather than trusting the run.
+Notably still absent: any instruction about where plugins go, which direction
+needs enabling, or what the `Accept` header does. On 01 and 02, removing guards of
+that kind made the result better rather than worse, and nothing here contradicts
+that — but the Content-Type trap is the one that does not announce itself, which
+is why it stays.
+
+> **Two rounds, not one.** Because the prompt tells the agent to ask rather than
+> guess, a run stops and asks — about the handler path, how your JSON maps to the
+> backend's elements, and what shape you want back. That is the prompt working,
+> not failing. Answer, and it builds. Read the revision back rather than trusting
+> the run: it is also where you confirm nothing set `Content-Type` on the rewrite.
 
 ## Variations
 
@@ -274,6 +283,7 @@ covered in [solution 04](../04-analytics/).
 | Handler 500s, but curling it directly works | A second transform plugin is converting the body twice; or a missing `SOAPAction`; or the request element names don't match what the handler reads. |
 | The response is still XML | The client isn't sending `Accept: application/json`, or `proxy-rewrite` is overriding `Content-Type` ahead of the transform. Both were real failures. |
 | XML body with a JSON content-type | The transform is running on the request direction only. Ask for the applied plugins on that route. |
+| 200, a JSON body, and the backend's own "bad input" error inside it | The agent set `Content-Type` in `proxy-rewrite`. It is applied before the body is converted, so the backend received raw JSON. Every outward sign is healthy — 200, `application/json`, well-formed JSON — and the mediation is dead. **Observed on a live run**; see § *Validation status*. |
 | The JSON body is `{}` | The handler returned an empty envelope — usually the request field names don't match its elements. Ask what XML it is actually generating. |
 | 415 from the handler | Confirm `proxy-rewrite` sets `text/xml`; SOAP 1.2 wants `application/soap+xml`. |
 | 504 on every call | The handler is slower than the gateway timeout. Looks like an outage, isn't. |
@@ -488,27 +498,26 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 
 ## Validation status
 
-**Validated end to end against a real SOAP backend.** The configuration here
-passes `verify.sh` including the case-4 no-XML-markup proof (JSON→XML→backend→XML→JSON
-round-trip).
+**Validated end to end against a real SOAP backend**, including the case-4
+no-XML-markup proof (JSON→XML→backend→XML→JSON round-trip).
 
 | Stage | Status | Provenance |
 |---|---|---|
 | Configuration generated | **YES** | [`gateway/api-spec.yaml`](gateway/api-spec.yaml) (corrected) |
 | Local validation | **PASS** | [`validation/local-validation.yaml`](validation/local-validation.yaml) |
 | Gateway dry-run | **PASS** | Non-destructive validation on a gateway. |
-| Gateway deployed | **DEPLOYED** | Deployed against a real SOAP backend; the ACTIVE-revision 409 and clone/undeploy flow were exercised for real. |
+| Gateway deployed | **DEPLOYED** | Against a real SOAP backend; the ACTIVE-revision 409 and clone/undeploy flow exercised for real. |
 | Functional tests | **PASS (5/5)** | `gateway/verify.sh` exit 0 — request JSON→XML and response XML→JSON both proven round-trip. |
 
-Overall: **READY (post-fix).** What the run corrected, and now works:
+Overall: **READY (post-fix)** — the run corrected all three traps in § *The one
+thing everybody gets wrong*. Full account: [`validation/gateway-validation.yaml`](validation/gateway-validation.yaml).
 
-- `transform_request: true` is now set — the empty block never converted the request.
-- The `Content-Type: text/xml` override was removed from `proxy-rewrite` — it ran
-  before the transform and hid the JSON body from it.
-- `verify.sh` now sends `Accept: application/json` — the response transform is
-  content-negotiated and did nothing without it.
-
-Full account: [`validation/gateway-validation.yaml`](validation/gateway-validation.yaml).
+**The agent path is weaker, measured 2026-10-05.** Driven once live it reached
+`Configuration generated` and `Gateway deployed`, in **two rounds** (it asks before
+guessing) and **with one correction**: it avoided the `transform_request` trap
+unprompted, then set `Content-Type` on the rewrite — so the route answered 200 with
+well-formed JSON while the backend reported input it could not parse. Removing only
+that field made the transform work; the prompt now guards against it.
 
 ## Related solutions
 

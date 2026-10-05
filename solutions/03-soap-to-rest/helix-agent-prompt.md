@@ -17,6 +17,11 @@ Create a REST API called "<<03-soap-to-rest>>" in the <<test>> environment,
 fronting a SOAP backend at <<SOAP_UPSTREAM_URL>>. One route — POST /locations —
 proxying to the upstream path <<SOAP_HANDLER_PATH>>. Partners send and receive
 JSON; the backend keeps speaking XML, and neither side changes to make that work.
+
+Do not set Content-Type when you rewrite the path. It is applied before the body
+is converted, so the conversion never sees a JSON body, the backend is handed
+JSON it cannot parse, and the call still returns 200 with a JSON-looking error.
+
 Tell me anything in the JSON shape I wouldn't have designed by hand, and ask me
 rather than guessing the handler path or the request field names.
 ```
