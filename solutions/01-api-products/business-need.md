@@ -1,6 +1,6 @@
 # API rate limiting and tiered quotas with API Products
 
-> [Overview](README.md) · **Business need** · [Architecture](architecture.md) · [Guides](guides.md) · [Examples](examples.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [Configuration reference](configuration-reference.md) · [API reference](api-reference.md)
+> [Overview](README.md) · **Business need** · [Architecture](architecture.md) · [Guides](guides.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [API reference](api-reference.md)
 
 ---
 

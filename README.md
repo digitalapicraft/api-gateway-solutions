@@ -120,8 +120,7 @@ solution 04 has [`charts.md`](solutions/04-analytics/charts.md), a catalogue of
 the real analytics-API queries for the library, which is that package's deliverable.
 
 Some packages split their docs further, one file per topic instead of one long
-`README.md` — `examples.md`, `guides.md`, `tests.md`, `configuration-reference.md`,
-`api-reference.md` — with `README.md` left as a short landing page (carrying its
+`README.md` — `guides.md`, `tests.md`, `api-reference.md` — with `README.md` left as a short landing page (carrying its
 own Validation status section) and every page sharing the same row of links so
 you can jump between them. Solution 01 uses this layout; it's being rolled out
 to the rest of the library over time, so don't assume every solution has these

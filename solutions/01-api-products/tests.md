@@ -1,6 +1,6 @@
 # Tests — API Products with enforced quota
 
-> [Overview](README.md) · [Business need](business-need.md) · [Architecture](architecture.md) · [Guides](guides.md) · [Examples](examples.md) · [Agent prompt](helix-agent-prompt.md) · **Tests** · [Configuration reference](configuration-reference.md) · [API reference](api-reference.md)
+> [Overview](README.md) · [Business need](business-need.md) · [Architecture](architecture.md) · [Guides](guides.md) · [Agent prompt](helix-agent-prompt.md) · **Tests** · [API reference](api-reference.md)
 
 ---
 

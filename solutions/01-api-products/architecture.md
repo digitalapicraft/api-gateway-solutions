@@ -1,6 +1,6 @@
 # Architecture — API Products with enforced quota
 
-> [Overview](README.md) · [Business need](business-need.md) · **Architecture** · [Guides](guides.md) · [Examples](examples.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [Configuration reference](configuration-reference.md) · [API reference](api-reference.md)
+> [Overview](README.md) · [Business need](business-need.md) · **Architecture** · [Guides](guides.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [API reference](api-reference.md)
 
 ---
 
@@ -123,7 +123,7 @@ That choice, `local` or `redis`, lives in the gateway's own `config.yaml`, not
 on the route. The default, `local`, keeps a separate count on each gateway
 node. So on three nodes, every app gets roughly three times the quota you
 sold. This is the most common way this solution is set up wrong. Full detail:
-[Configuration reference](configuration-reference.md).
+[Guides → Troubleshooting](guides.md#troubleshooting).
 
 ## No custom code needed
 
@@ -156,7 +156,7 @@ Use this solution when:
 Do not use it when:
 
 - you need remaining-budget headers on the response. The enforcer sends none.
-  See [Configuration reference](configuration-reference.md).
+  See the [Configuration reference](guides.md#configuration-reference).
 - you need to smooth out bursts faster than one second. `limit-conn` limits
   concurrent connections; this does not.
 - you need limits per end user. The unit here is the app, not the people

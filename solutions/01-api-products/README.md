@@ -1,6 +1,6 @@
 # Solution 01 — API Products: give different customers different usage limits
 
-> **Overview** · [Business need](business-need.md) · [Architecture](architecture.md) · [Guides](guides.md) · [Examples](examples.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [Configuration reference](configuration-reference.md) · [API reference](api-reference.md)
+> **Overview** · [Business need](business-need.md) · [Architecture](architecture.md) · [Guides](guides.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [API reference](api-reference.md)
 
 **In short:** create pricing plans for your API, and automatically stop any one
 customer from using more than their plan allows, without affecting anyone else.
@@ -80,7 +80,7 @@ quota, deploy that too, create the Pro product the same way, add a developer,
 create two apps for them (one per plan), then grab each app's key.
 [Full click-by-click walkthrough →](guides.md#build-it-in-the-ui)
 
-[See the full worked example →](examples.md)
+[Build it any of three ways, then see it work →](guides.md)
 
 ## Where to go next
 
@@ -101,7 +101,7 @@ create two apps for them (one per plan), then grab each app's key.
 | Gateway dry-run | **PASS** | Non-destructive check against a live gateway. |
 | Gateway deployed | **DEPLOYED** | Two products, two apps on different products, ACTIVE. |
 | Functional tests | **PASS (5/5)** | `example/verify.sh` exit 0, including the isolation check (case 5). |
-| Agent-mode build | **PASS, model-dependent** | Driven live 2026-09-30 on the agent's normal model, one step per turn: identity, both tier products with `scope: app` quotas, the enforcer at `fail_close`, no `limit-count`, then a developer and two separately-subscribed apps. A small free-tier model reached for `limit-count` instead. See [Guides](guides.md#build-it-with-the-helix-agent). |
+| Agent-mode build | **PASS, model-dependent** | Driven live 2026-09-30 on the agent's normal model, one step per turn: identity, both tier products with `scope: app` quotas, the enforcer at `fail_close`, no `limit-count`, then a developer and two separately-subscribed apps. A small free-tier model reached for `limit-count` instead. |
 
 **Overall: READY.** The gateway config (spec, plugins, quota enforcement) and the agent prompt are both validated above. The agent result depends on which model is serving, so read the stored revision back before trusting a run.
 

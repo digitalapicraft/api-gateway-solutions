@@ -1,6 +1,6 @@
 # API reference — API Products with enforced quota
 
-> [Overview](README.md) · [Business need](business-need.md) · [Architecture](architecture.md) · [Guides](guides.md) · [Examples](examples.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [Configuration reference](configuration-reference.md) · **API reference**
+> [Overview](README.md) · [Business need](business-need.md) · [Architecture](architecture.md) · [Guides](guides.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · **API reference**
 
 ---
 
@@ -20,7 +20,7 @@ you, easy to miss since nothing fails loudly if you skip them.
 | Bind the upstream to the revision | `PATCH /api/orgs/{orgId}/apis/{apiId}/revisions/{revisionId}/upstream-bindings/add` | `{"environmentUpstreams":[{"environmentId","upstreamId"}]}` | Must succeed before the deploy call below — the two are never combined into one request. |
 | Deploy the revision | `POST /api/orgs/{orgId}/apis/{apiId}/revisions/{revisionId}/deploy` | `{"environmentId","force":false}` | This is what makes the routes live. `force: true` replaces an existing deployment of the same revision. |
 | List APIs (to get `<API_ID>`) | `GET /api/orgs/{orgId}/apis` | — | Find the id of the imported "Posts API" here, if you didn't keep it from the import response. |
-| Create a product | `POST /api/orgs/{orgId}/products` | `{"name","displayName","apiIds","quota":{"limit","interval","interval_unit"}}` — see [Examples](examples.md) for the Free/Pro bodies | Repeat once per product (Free, Pro, …); there's no bulk-create call. |
+| Create a product | `POST /api/orgs/{orgId}/products` | `{"name","displayName","apiIds","quota":{"limit","interval","interval_unit"}}` — see [Guides → Install it directly](guides.md#install-it-directly) for the Free/Pro bodies | Repeat once per product (Free, Pro, …); there's no bulk-create call. |
 | Deploy a product to an environment | `POST /api/orgs/{orgId}/envs/{envId}/products/{productId}/deploy` | — | A different deploy than the revision's above — creating a product isn't enough, it has to be deployed too before it's enforced. |
 | Create a developer | `POST /api/orgs/{orgId}/developers` | `{"firstName","lastName","email"}` | Returns the developer's `id` — you'll need it for the next call. |
 | Create an app | `POST /api/orgs/{orgId}/developers/{developerId}/envs/{envId}/apps` | `{"name","products":{"<productId>":<rank>},"plugins":{"<authMethod>":{}}}` | `developerId` and the environment are **path segments**, not body fields. `products` is the `{productId: rank}` subscription map. `plugins` selects the app's auth method (matching what the product allows); an empty object requests auto-generated credentials. Repeat once per app — **two separate apps**, each subscribed to a different product, is the whole point. |

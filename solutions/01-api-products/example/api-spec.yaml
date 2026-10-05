@@ -3,7 +3,7 @@
 # This is the importable artifact: an OpenAPI 3.0.3 document carrying
 # x-helix-gateway.plugins. Two ways in: paste the agent prompt into Agent Mode
 # (it creates the API, the products, and an app), or import this file, then
-# create the products (Free, Pro — see ../examples.md for their exact fields;
+# create the products (Free, Pro — see ../guides.md, "Install it directly", for their exact fields;
 # there's no bulk-import for products), bind the upstream, deploy, and
 # subscribe apps.
 #
