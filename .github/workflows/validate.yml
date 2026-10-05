@@ -131,7 +131,10 @@ jobs:
                     'json-schema.org', 'openapis.org', 'swagger.io', 'w3.org',
                     'opensource.org', 'apache.org', 'mermaid.js.org',
                     'httpbin.org', 'creativecommons.org', 'ietf.org',
-                    'rfc-editor.org', 'openid.net', 'oauth.net', 'jwt.io')
+                    'rfc-editor.org', 'openid.net', 'oauth.net', 'jwt.io',
+                    # product documentation and the free-trial sign-up —
+                    # docs.digitalapi.ai, trial.digitalapi.ai
+                    'digitalapi.ai')
 
           def host_ok(h):
               h = h.strip('<>{}').lower().rstrip('.')
