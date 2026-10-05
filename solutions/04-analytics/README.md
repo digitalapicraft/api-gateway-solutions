@@ -56,29 +56,57 @@ All for a chosen window (the last hour by default):
 
 ## Read it with the Helix Agent
 
-Recommended path — no queries to hand-write. Ask the agent in plain English and it
+Recommended path — no queries to hand-write. Ask in plain English and the agent
 pulls the numbers and **renders a chart in the chat** (it calls its `get_metrics`
-tool for you; read-only, nothing added to your APIs). Full set of prompts:
-[`helix-agent-prompt.md`](helix-agent-prompt.md).
+tool for you; read-only, nothing added to your APIs). The full set of questions is
+[`helix-agent-prompt.md`](helix-agent-prompt.md) — paste any one of them. Start
+here:
 
 ```text
 Show me requests to all my APIs in the last hour, broken down by API and sorted
 busiest first.
 ```
 
-More of the everyday questions, each a plain-English prompt:
+### Keep the ask inside what analytics supports
+
+The agent maps your words onto the metrics API, so a question it cannot answer
+comes back empty or quietly approximated rather than as an error:
+
+| Ask for… | Not… | Because |
+|---|---|---|
+| **average / min / max** response time | p95 / p99 / percentiles | The metric supports AVG, MIN, MAX and SUM only. `MAX` is the tail signal. |
+| a **count of 429s** | "percent of quota used" | There is no quota-usage metric; you can count rejections, not headroom. |
+| an **aggregate slice** (by API, app, status, time) | "show me *that one* request" | Single-request lookup is a log-side join on `X-Request-Id`, not an analytics query. |
+| grouping by **`route_id`** | expecting one row per URL | A templated route collapses to one row under `route_id`; `api_path` gives one row per concrete id. |
+
+[AGENT-GUIDE.md](../../AGENT-GUIDE.md) carries the general pattern.
+
+### Follow-ups in the same session
+
+Each of these refines the previous answer rather than starting again:
 
 ```text
-Show me requests in the last hour grouped by app.
-Which of my APIs were slowest in the last hour, by average response time?
-Show me requests in the last 24 hours grouped by API and status code (4xx vs 5xx).
-Plot total requests per hour for the last 24 hours.
+Filter that to just the <<checkout-api>> and re-draw it.
+```
+```text
+Same chart, but for the last 7 days by day instead of the last hour.
+```
+```text
+Now show average and max response time side by side for those APIs.
+```
+```text
+Which apps sent the most requests to that API this week?
 ```
 
-Keep asks inside what analytics supports — **average/max, not percentiles**; a
-**count of 429s**, not "% of quota used"; an aggregate slice, not a single-request
-lookup. See [`helix-agent-prompt.md`](helix-agent-prompt.md) for why, and
-[AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the general pattern.
+### When a result looks wrong
+
+- **A breakdown comes back "unattributed".** That API doesn't resolve identity, so
+  analytics has no app or developer to attribute the rows to — a property of the
+  API, not of the query. See § *What makes the numbers useful*.
+- **An empty result.** Either there was no traffic in the window, or you are
+  outside the retention period. Widen the range and ask again.
+- **You asked for a percentile and got an average.** Ask for `max` as the tail
+  signal instead, or use a tracing stack for true percentiles.
 
 ## Run it from the CLI
 
@@ -139,6 +167,9 @@ or from your own login flow. Everything here only **reads** — it changes nothi
 - **No per-request lookup** — `X-Request-Id` isn't a dimension; match a single
   request in your own logs.
 - **No request/response bodies** — metadata only, by design.
+- **No unbounded history** — retention is finite and bounds how far back a window
+  can reach. Confirm yours before relying on a long-range report; a query past it
+  returns empty rather than an error.
 
 ## What makes the numbers useful
 
