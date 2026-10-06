@@ -52,7 +52,7 @@ partners speak. Nothing about resolving it requires knowing what a location is.
 
 ## Business need
 
-Full version: [`business-need.md`](business-need.md).
+The thirty-second version: [`business-need.md`](business-need.md).
 
 | Dimension | Adapter-per-partner | Mediated at the edge |
 |---|---|---|
@@ -142,68 +142,156 @@ xml-to-json:
 
 ## Build it with the Helix Agent
 
-The recommended path, and the one that stays at the right altitude — you describe
-the outcome and let the agent read the real plugin schema, which matters more here
-than anywhere because `xml-to-json`'s fields vary by build. Full prompt:
-[`helix-agent-prompt.md`](helix-agent-prompt.md).
+The recommended path, and a short one. The build is **one prompt** —
+[`helix-agent-prompt.md`](helix-agent-prompt.md). Paste it as a single message and
+replace the `<<...>>` values.
 
-Two acts. Act 1, get the mediation working with nothing in the way:
+It builds the mediation and nothing else, because the mediation is what this
+solution is. The shipped [`example/api-spec.yaml`](example/api-spec.yaml) carries
+more than that — a `/oauth/token` route and token validation on `/locations` —
+because the composed configuration is what was deployed and functionally tested
+(§ *Validation status*). That second layer is [solution 02](../02-oauth-jwt/), and
+you add it the same way, with 02's prompt, once the mediation is working. Keeping
+them apart is deliberate: a mediation failure and an auth failure look alike from
+the outside, and the seam is where you find out which one broke. To get both in
+one move, import the spec instead — see § *Install it directly*.
+[AGENT-GUIDE.md](../../AGENT-GUIDE.md) carries the standing rules the prompt
+assumes.
 
+> **Check what was stored, not what the agent said.** Three of the four known
+> agent-mode defects report success at every step the agent shows you — a run can
+> end "success" having deployed a route carrying no plugins at all. Ask for the
+> applied plugins on `/locations` and read them back.
+>
+> **A JSON call must come back as JSON with no angle brackets in the body.** A
+> content-type header is a claim; a body with no markup is evidence. Check that
+> before you add anything on top of it.
+
+### Why the prompt is worded the way it is
+
+It names no plugin, no field and no secret, and that is the point. Ask for an
+outcome and the agent reads the real plugin schema your org ships; ask for field
+names and it pattern-matches them from some other gateway's documentation. That
+matters more here than anywhere else in this library, because **`xml-to-json`'s
+schema varies by build more than most** — see § *The one thing everybody gets
+wrong*. Three phrases in it are doing real work:
+
+- **"Neither side changes to make that work."** This is the whole outcome stated
+  as a constraint: partners get JSON, the backend keeps its XML, and no code is
+  written at either end. It leaves the agent to pick the mechanism, which is the
+  part that differs between builds.
+- **"Anything in the JSON shape I wouldn't have designed by hand."** The JSON is
+  **derived** from the XML — `PascalCase` names, vendor prefixes and
+  single-element collections all come through — and those become your public
+  contract the moment a partner integrates against them. Better to hear it now
+  than at the first rename.
+- **"Ask me rather than guessing the handler path or the request field names."**
+  These are the two things the agent cannot know and will otherwise invent. A
+  wrong handler path is a 404 you will chase; wrong field names are an empty
+  `{}` from a handler that looks healthy.
+
+It carries exactly one build-specific guard — **don't set `Content-Type` when you
+rewrite the path** — and that one is there because it was measured, not assumed.
+Without it, a live run put `Content-Type: application/xml` in `proxy-rewrite`,
+which is applied before the body is converted: the request transform never saw a
+JSON body, and the backend was handed JSON it could not parse. The route still
+answered **HTTP 200 with `content-type: application/json` and a JSON body**, so
+nothing looked wrong. See § *Validation status*.
+
+Notably still absent: any instruction about where plugins go, which direction
+needs enabling, or what the `Accept` header does. On 01 and 02, removing guards of
+that kind made the result better rather than worse, and nothing here contradicts
+that — but the Content-Type trap is the one that does not announce itself, which
+is why it stays.
+
+> **Two rounds, not one.** Because the prompt tells the agent to ask rather than
+> guess, a run stops and asks — about the handler path, how your JSON maps to the
+> backend's elements, and what shape you want back. That is the prompt working,
+> not failing. Answer, and it builds. Read the revision back rather than trusting
+> the run: it is also where you confirm nothing set `Content-Type` on the rewrite.
+
+## Variations
+
+Paste any of these as a follow-up in the same session.
+
+**Add the OAuth layer** — this is [solution 02](../02-oauth-jwt/), and the shipped
+spec's second half. Expect the deploy to need a clone or an undeploy first; an
+ACTIVE revision rejects edits.
 ```text
-Create a REST API "<<Partner Locations API>>" fronting a SOAP backend at
-<<SOAP_UPSTREAM_URL>>. POST /locations proxies to the upstream path
-<<SOAP_HANDLER_PATH>>, and a plugin transforms request and response bodies so
-partners send and receive JSON while the backend keeps speaking XML.
-
-Read get_plugin_config for the transform plugin first — I want the schema this org
-actually has, not field names from another gateway. On this build transform_request
-defaults to false, so set it true explicitly; the response direction only fires
-when the client sends Accept: application/json; and don't set Content-Type in
-proxy-rewrite, which runs first and would hide the JSON body. One plugin handles
-both directions — don't add json-to-xml alongside it.
-
-Plugins go in a top-level "plugins" map on the route object, each under its own
-plugin name. No "x-helix-gateway" wrapper — a live route discards it silently and
-still reports success.
-
-Show me the spec, run dry_run_deploy, then read the revision back so I can see
-which plugins actually landed. Wait before deploying.
-
-Tell me anything in the derived JSON shape I wouldn't have designed by hand, and
-whether my handler needs a SOAPAction header. Ask me rather than guessing the
-handler path or the request field names.
+Add a route POST /oauth/token, so an app can trade its client credentials for a
+token generated by the gateway. Update /locations to validate the token generated
+by this endpoint, and to reject an unauthenticated call before it does any work on
+the body. Then create a developer, a product and an app, and give me the app's
+client id and secret.
 ```
 
-Deploy that and confirm you get JSON back at all. Then act 2, the auth layer:
-
+**Your envelope is namespaced or attribute-heavy**
 ```text
-Deploy a NEW REVISION that adds OAuth 2.0:
-
-- POST /oauth/token issues a signed JWT from an app's client id and secret,
-  15-minute lifetime (helix-auth generate)
-- POST /locations requires a valid Bearer token, rejected in the access phase
-  BEFORE the transform runs (helix-auth validate, jwt-auth)
-
-Both use the SAME signing secret, a literal value — this build does not resolve
-<ENV:...>. Apply validate on /locations only, never API-wide, or /oauth/token
-would be protected and nobody could get a first token. Clone the active revision
-so I keep a rollback, or undeploy first — an ACTIVE revision rejects edits. Tell
-me which you did.
+The upstream XML uses namespaces and puts significant data in attributes, and the
+default transform is flattening them. Show me the namespace and attribute fields
+this plugin actually has, explain what each does to my payload, and let me choose
+before you change anything.
 ```
 
-Then create the app:
-
+**Single-element collections are breaking partner code**
 ```text
-Create a developer "<<Partner Integrations>>" with an app subscribed to this API
-and give me the client id and secret. Then curl commands showing, in order: no
-token → 401; client credentials → 200 with an access_token; that token → 200 with
-a JSON body; a garbage token → 401 — and confirm the 401 never reached the SOAP
-backend.
+One <Site> gives partners an object, several give an array, and their clients
+break on the single case. Tell me honestly whether the transform can force a
+consistent array, and if it can't, what my options are.
 ```
 
-**Two acts, not one.** If mediation and auth go in one prompt and something breaks,
-you don't know which half broke. See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the
-confirm gate and what to say when the agent adds `json-to-xml` anyway.
+**Reject bad requests at the edge**
+```text
+Validate the body of POST /locations against a JSON Schema derived from the fields
+the handler actually reads, so malformed input is a clean 400 from the gateway
+instead of a 500 from the handler.
+```
+
+**The legacy handler is slow**
+```text
+The SOAP handler regularly takes 8-10 seconds and I'm seeing 504s. Tell me the
+current gateway timeout on this route, what raising it costs me, and whether
+there's a better answer than waiting longer.
+```
+
+**Add a second operation**
+```text
+Add POST /sites proxying to the same upstream but operation <<GetSites>>, reusing
+the same transform. Keep the routes independent so I can meter them separately
+later.
+```
+
+**Meter the partners**
+```text
+I want to sell access to this API in tiers and enforce the limits per app.
+```
+(That's [solution 01](../01-api-products/).)
+
+**Document it**
+```text
+Write the developer-portal documentation for POST /locations, with real example
+payloads for BOTH a single-result and a multi-result response.
+```
+
+Reading the traffic afterwards is not a follow-up here — that's the metrics API,
+covered in [solution 04](../04-analytics/).
+
+## When the agent goes wrong
+
+| Symptom | Cause |
+|---|---|
+| Handler 500s, but curling it directly works | A second transform plugin is converting the body twice; or a missing `SOAPAction`; or the request element names don't match what the handler reads. |
+| The response is still XML | The client isn't sending `Accept: application/json`, or `proxy-rewrite` is overriding `Content-Type` ahead of the transform. Both were real failures. |
+| XML body with a JSON content-type | The transform is running on the request direction only. Ask for the applied plugins on that route. |
+| 200, a JSON body, and the backend's own "bad input" error inside it | The agent set `Content-Type` in `proxy-rewrite`. It is applied before the body is converted, so the backend received raw JSON. Every outward sign is healthy — 200, `application/json`, well-formed JSON — and the mediation is dead. **Observed on a live run**; see § *Validation status*. |
+| The JSON body is `{}` | The handler returned an empty envelope — usually the request field names don't match its elements. Ask what XML it is actually generating. |
+| 415 from the handler | Confirm `proxy-rewrite` sets `text/xml`; SOAP 1.2 wants `application/soap+xml`. |
+| 504 on every call | The handler is slower than the gateway timeout. Looks like an outage, isn't. |
+| The agent adds a second plugin for the reverse direction | One plugin covers both directions here. See § *The one thing everybody gets wrong*. |
+| The agent puts a `description` key in a plugin block | Only schema fields plus `_meta` are legal. Move it to a YAML comment. |
+| Everything 401s once you add the auth layer, token endpoint included | Validation was applied API-wide. Move it to `/locations` only. |
+| Deploy fails: `Only INACTIVE revisions can be updated` | Expected on any revision after the first — clone the revision or undeploy first. |
+| The agent writes `<ENV:...>` as the signing secret | Only reachable once you add auth. This build resolves no such indirection and uses the string **verbatim** as the HMAC key, so every test passes and the tokens are forgeable. [Solution 02](../02-oauth-jwt/#build-it-with-the-helix-agent) has the full account. |
 
 ## Install it directly
 
@@ -410,9 +498,8 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 
 ## Validation status
 
-**Validated end to end against a real SOAP backend.** The configuration here
-passes `verify.sh` including the case-4 no-XML-markup proof (JSON→XML→backend→XML→JSON
-round-trip).
+**Validated end to end against a real SOAP backend**, including the case-4
+no-XML-markup proof (JSON→XML→backend→XML→JSON round-trip).
 
 | Stage | Status | Provenance |
 |---|---|---|
@@ -421,15 +508,16 @@ round-trip).
 | Gateway dry-run | **PASS** | Non-destructive validation on a gateway. |
 | Gateway deployed | **DEPLOYED** | Deployed against a real SOAP backend; the ACTIVE-revision 409 and clone/undeploy flow were exercised for real. |
 | Functional tests | **PASS (5/5)** | `example/verify.sh` exit 0 — request JSON→XML and response XML→JSON both proven round-trip. |
-| Agent-mode run | **PASS** (2026-09-21) | Read back from the deployed revision, not just from the agent's transcript. |
+| Agent-mode run | **PASS** (2026-09-21) · **weaker on a later run** (2026-10-05) | Read back from the deployed revision, not just from the agent's transcript. See below. |
 
-Overall: **READY (post-fix).** What the run corrected, and now works:
+Overall: **READY (post-fix)** — the run corrected all three traps in § *The one
+thing everybody gets wrong*.
 
-- `transform_request: true` is now set — the empty block never converted the request.
-- The `Content-Type: text/xml` override was removed from `proxy-rewrite` — it ran
-  before the transform and hid the JSON body from it.
-- `verify.sh` now sends `Accept: application/json` — the response transform is
-  content-negotiated and did nothing without it.
+**Two agent runs, two outcomes.** On 2026-10-05 the agent set `Content-Type` on
+the rewrite — the route answered 200 with well-formed JSON while the backend
+reported input it could not parse, and removing only that field fixed it. On
+2026-10-06 the shorter prompt now shipped built it in one pass. Read the revision
+back either way: a 200 is not evidence the transform ran.
 
 ## Related solutions
 
