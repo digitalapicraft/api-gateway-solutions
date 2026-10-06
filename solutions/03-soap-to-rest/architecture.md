@@ -19,18 +19,11 @@ representation.
 └────┬────┘        │                                            │    │(unchanged)│
      │             │                                            │    └─────┬─────┘
      │ POST /locations                                          │          │
-     │ Bearer eyJ...                                            │          │
      │ {"region":"EMEA"} │                                      │          │
-     ├────────────────►  │  ┌──────── access phase ──────────┐  │          │
-     │                   │  │ helix-auth (validate,jwt-auth) │  │          │
-     │                   │  │ signature + expiry             │  │          │
-     │  401              │  └───────┬───────────────┬────────┘  │          │
-     │◄──────────────────┼──────────┘ fail          │ pass      │          │
-     │  nothing was      │                          ▼           │          │
-     │  transformed,     │  ┌──────── rewrite phase ─────────┐  │          │
-     │  nothing was      │  │ proxy-rewrite                  │  │          │
-     │  called           │  │ uri → <SOAP_HANDLER_PATH>            │  │          │
-     │                   │  │ Content-Type → text/xml        │  │          │
+     ├────────────────►  │  ┌──────── rewrite phase ─────────┐  │          │
+     │                   │  │ proxy-rewrite                  │  │          │
+     │                   │  │ uri → <SOAP_HANDLER_PATH>      │  │          │
+     │                   │  │ NO Content-Type — see below    │  │          │
      │                   │  └──────────────┬─────────────────┘  │          │
      │                   │                 ▼                    │          │
      │                   │  ┌─── xml-to-json, request dir. ──┐  │          │
@@ -53,10 +46,11 @@ representation.
 
 Two structural properties, both deliberate:
 
-**Rejection precedes translation.** `helix-auth` runs in the access phase, so an
-unauthenticated request costs one signature verification and stops. No body
-conversion, no SOAP call, no backend connection. If your configuration transforms
-first and authenticates second, every scan against your endpoint does real work.
+**Nothing rejects the caller.** This package is the mediation and carries no
+identity plugin, so every request that reaches the gateway reaches the SOAP
+system. Identity is [solution 02](../02-oauth-jwt/); when you compose it, it runs
+in the access phase, ahead of everything below, so a rejected request costs no
+transform work and never opens a backend connection.
 
 **One plugin performs both conversions.** `xml-to-json` is bidirectional. This is
 the single most important fact in the solution and it's covered in its own section
@@ -68,11 +62,10 @@ Plugins run by **priority**, not in the order they appear in the document.
 
 | Order | Plugin | Phase | Does | Depends on |
 |---|---|---|---|---|
-| 1 | `helix-auth` (validate) | access | Verifies the JWT; resolves the calling app | the `Authorization` header, `JWT_SIGNING_SECRET` |
-| 2 | `proxy-rewrite` | rewrite | Retargets `/locations` → `<SOAP_HANDLER_PATH>`; sets `Content-Type: text/xml` | nothing |
-| 3 | `xml-to-json` | request body | JSON → XML | the rewritten content type being consistent with what it emits |
-| 4 | *(upstream call)* | — | — | — |
-| 5 | `xml-to-json` | response body | XML → JSON | the upstream having returned XML |
+| 1 | `proxy-rewrite` | rewrite | Retargets `/locations` → `<SOAP_HANDLER_PATH>`. **Path only** — setting `Content-Type` here hides the JSON body from the transform below | nothing |
+| 2 | `xml-to-json` | request body | JSON → XML | the request body still being `application/json` when it runs |
+| 3 | *(upstream call)* | — | — | — |
+| 4 | `xml-to-json` | response body | XML → JSON | the upstream having returned XML, and the client having sent `Accept: application/json` |
 | — | `request-id` | rewrite/log | Stamps `X-Request-Id` | nothing |
 | — | analytics | log | Per-request telemetry | identity resolved at step 1 |
 
@@ -155,8 +148,6 @@ Everything here is native plugin configuration. **No custom code is required.**
 | JSON → XML on the request | `xml-to-json` (request direction) | A hand-written converter is easy to start and hard to finish — namespaces, encoding, entity escaping, CDATA. |
 | XML → JSON on the response | `xml-to-json` (response direction) | Same, plus streaming and size limits. |
 | Retarget the path | `proxy-rewrite` | — |
-| Set the handler's content type | `proxy-rewrite.headers.set` | — |
-| Reject before translating | `helix-auth` in the access phase | Custom code would run in the same phase with more ways to be wrong. |
 | Correlate across the hop | `request-id` | — |
 
 Where custom logic **would** be justified — and is deliberately out of scope here:
@@ -174,10 +165,6 @@ wouldn't make the mediation better. Keep the layers separate.
 ## Where the pieces live
 
 ```
-Environment variable on the gateway environment
-   JWT_SIGNING_SECRET  ──► helix-auth generate  on POST /oauth/token   (signs)
-                       └─► helix-auth validate  on POST /locations     (verifies)
-
 Service binding (set at import/bind time, NOT in the OpenAPI paths)
    <SOAP_UPSTREAM_URL>  ──► the SOAP system
 
@@ -229,19 +216,16 @@ Don't use it when:
 - `xml-to-json` exists in your org, and you have checked its schema with
   `get_plugin_config`. The whole solution rests on this plugin — confirm it before
   designing around it.
-- `JWT_SIGNING_SECRET` exists on the environment before the revision is deployed.
 - You know the element names the handler reads, so the request body's field names
   can match them.
-- One developer with one app, for a `client_id`/`client_secret` to test with.
 
 ## Failure behaviour
 
 | Condition | Result | Reached the SOAP handler? |
 |---|---|---|
-| No or invalid Bearer token | 401 | No — and no transform ran either |
 | Handler unreachable | 502 | Attempted |
 | Handler slower than the gateway timeout | 504 | Yes, but the answer arrived too late |
-| Handler rejects the content type | 415 | Yes — check `text/xml` vs `application/soap+xml` |
+| Handler rejects the content type | 415 | Yes — check whether it needs `SOAPAction`, **not** a `Content-Type` override on `proxy-rewrite` |
 | Missing `SOAPAction` (where required) | 500, often with an unhelpful envelope | Yes |
 | Request field names don't match the elements read | 200 with an empty result, or 500 | Yes |
 | A second transform plugin added | 500 — handler received JSON labelled as XML | Yes |

@@ -31,10 +31,8 @@ implementation:
   gateway_capabilities:
     - xml-to-json (transform_request + transform_response)  # request needs transform_request:true (default false); response is content-negotiated on Accept: application/json
     - proxy-rewrite                         # retarget /locations -> <SOAP_HANDLER_PATH> (path ONLY — no Content-Type override)
-    - helix-auth (mode generate)            # POST /oauth/token — see solution 02
-    - helix-auth (mode validate, jwt-auth)  # POST /locations — rejects in the access phase, BEFORE any transform
     - request-id                            # correlate the client's JSON with the handler's XML across the hop
-    - cors                                  # browser access; authorization must be in allow_headers
+    - cors                                  # browser access
   custom_code_required: false
   notes: >-
     How this build behaves (the three things that must be set correctly):
@@ -45,16 +43,18 @@ implementation:
     xml-to-json (997) and hides the JSON body from the request transform, so
     proxy-rewrite must retarget the path ONLY. json-to-xml is NOT the request-side
     counterpart — it is a separate plugin converting a JSON upstream response to XML
-    for XML-wanting clients. Confirm fields with get_plugin_config. Authentication
-    runs before the transform, deliberately: no point converting a body about to be
-    discarded.
+    for XML-wanting clients. Confirm fields with get_plugin_config. There is NO
+    identity plugin here: the package is the mediation, and the route is open to
+    anyone who can reach it until solution 02 is composed in front.
 
 validation:
   # Stage statuses only. What was checked and what happened is folded into the README/Changelog directly.
   local: PASS
-  gateway_dry_run: PASS
-  deployment: DEPLOYED
-  functional_test: PASS
+  gateway_dry_run: WITHDRAWN   # passed on the composed spec; not re-run since auth was removed
+  deployment: WITHDRAWN        # deployed against a real SOAP backend, composed spec; not re-run
+  functional_test: WITHDRAWN   # was 5/5 on the composed spec; verify.sh is now 2 cases and unrun
+  agent_run: PASS              # 2026-10-06, the shipped prompt, one pass
+  overall: UNVALIDATED         # for the configuration as it now stands
   record: README.md § Validation status
 
 artifacts:
@@ -70,9 +70,7 @@ assumptions:
   - The handler does NOT require a SOAPAction header. Many classic SOAP 1.1 and .asmx
     endpoints DO; add it in proxy-rewrite.headers.set if yours is one of them.
   - The request body's field names match the element names the handler reads.
-  - Authentication is wanted. Remove the helix-auth blocks if this API is internal-only.
-  - token_ttl 900 is a deliberate choice, not a platform default. See solution 02.
-  - The signing secret is a LITERAL value filled into the spec (this build does not resolve <ENV:...>). Replace <YOUR_JWT_SIGNING_SECRET> and keep it out of git.
+  - The API is reachable without a credential. Compose solution 02 before it is partner-facing.
   - The upstream is bound on the service at import/bind time, not in the OpenAPI paths.
 
 limitations:

@@ -3,10 +3,11 @@
 **Partners send JSON. A twenty-year-old system answers. Neither knows about the
 other.**
 
-> **Validated end to end against a real SOAP backend.** The subtlety that matters:
-> `xml-to-json` is not "bidirectional by default", and a `Content-Type` override on
-> `proxy-rewrite` defeats it — this page reflects the working config. The short
-> version is in *The one thing everybody gets wrong*, below.
+> **The mediation was proven round-trip against a real SOAP backend; this exact
+> spec has not been re-deployed since authentication was removed from it.** See
+> *Validation status*. The subtlety that matters: `xml-to-json` is not
+> "bidirectional by default", and a `Content-Type` override on `proxy-rewrite`
+> defeats it. The short version is in *The one thing everybody gets wrong*.
 
 > **You supply the SOAP backend.** Unlike the other solutions, this one can't run
 > on a public sample upstream — SOAP→REST needs a SOAP service. Replace
@@ -17,8 +18,8 @@ other.**
 |---|---|
 | **Setup time** | ~25 minutes |
 | **Difficulty** | 🟡 Intermediate |
-| **Needs** | **Your own SOAP endpoint** reachable from the gateway (this is a SOAP use case — a REST placeholder like jsonplaceholder can't stand in) and its handler path · a real signing-secret value (literal — see solution 02) · one developer + app · `xml-to-json` in your org · a **test** environment |
-| **Plugins** | `xml-to-json` (`transform_request` + `transform_response`) · `proxy-rewrite` · `helix-auth` (generate + validate) · `request-id` · `cors` |
+| **Needs** | **Your own SOAP endpoint** reachable from the gateway (this is a SOAP use case — a REST placeholder like jsonplaceholder can't stand in) and its handler path · `xml-to-json` in your org · a **test** environment |
+| **Plugins** | `xml-to-json` (`transform_request` + `transform_response`) · `proxy-rewrite` · `request-id` · `cors` |
 | **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`example/api-spec.yaml`](example/api-spec.yaml) |
 | **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](example/) · ✅ [Tests](tests/) · ✅ [Manifest](solution.yaml) |
 
@@ -76,26 +77,20 @@ sequenceDiagram
     participant GW as Gateway
     participant S as SOAP system
 
-    P->>GW: POST /locations, JSON body, Bearer token
-    Note over GW: helix-auth validate — access phase, runs FIRST
-    alt token invalid
-        GW--xP: 401 — no transform, no SOAP call
-    else token valid
-        Note over GW: proxy-rewrite — /locations to the SOAP handler path<br/>do NOT set Content-Type here, it defeats the transform
-        Note over GW: xml-to-json, REQUEST direction<br/>JSON body becomes XML
-        GW->>S: POST the SOAP handler path, text/xml
-        S-->>GW: XML response
-        Note over GW: xml-to-json, RESPONSE direction<br/>XML becomes JSON
-        GW-->>P: 200 application/json
-    end
+    P->>GW: POST /locations, JSON body
+    Note over GW: proxy-rewrite — /locations to the SOAP handler path<br/>do NOT set Content-Type here, it defeats the transform
+    Note over GW: xml-to-json, REQUEST direction<br/>JSON body becomes XML
+    GW->>S: POST the SOAP handler path, text/xml
+    S-->>GW: XML response
+    Note over GW: xml-to-json, RESPONSE direction<br/>XML becomes JSON
+    GW-->>P: 200 application/json
 ```
 
-Two things to notice, because both are load-bearing:
-
-**Authentication runs before the transform.** An unauthenticated request costs you
-one signature check and nothing else — no body conversion, no SOAP call. If you
-ever find yourself transforming a body you're about to reject, the plugins are on
-the wrong route.
+**Nothing authenticates this call.** The route is open to anyone who can reach the
+gateway. That is this package's scope rather than an oversight — identity is
+[solution 02](../02-oauth-jwt/), and § *Variations* composes the two. Put it in
+front of this before partners call it. When you do, it lands in the access phase,
+ahead of both plugins below, so a rejected request costs no transform work.
 
 **One plugin covers both conversions — but neither is on the way you'd assume.**
 `xml-to-json` does the response by default and the request only when you enable
@@ -146,15 +141,12 @@ The recommended path, and a short one. The build is **one prompt** —
 [`helix-agent-prompt.md`](helix-agent-prompt.md). Paste it as a single message and
 replace the `<<...>>` values.
 
-It builds the mediation and nothing else, because the mediation is what this
-solution is. The shipped [`example/api-spec.yaml`](example/api-spec.yaml) carries
-more than that — a `/oauth/token` route and token validation on `/locations` —
-because the composed configuration is what was deployed and functionally tested
-(§ *Validation status*). That second layer is [solution 02](../02-oauth-jwt/), and
-you add it the same way, with 02's prompt, once the mediation is working. Keeping
-them apart is deliberate: a mediation failure and an auth failure look alike from
-the outside, and the seam is where you find out which one broke. To get both in
-one move, import the spec instead — see § *Install it directly*.
+It builds the mediation and nothing else, and so does
+[`example/api-spec.yaml`](example/api-spec.yaml) — the prompt and the spec
+describe the same API. Identity is [solution 02](../02-oauth-jwt/); add it with
+02's prompt once the mediation is working. Keeping them apart is deliberate: a
+mediation failure and an auth failure look alike from the outside, and the seam
+is where you find out which one broke.
 [AGENT-GUIDE.md](../../AGENT-GUIDE.md) carries the standing rules the prompt
 assumes.
 
@@ -214,9 +206,12 @@ is why it stays.
 
 Paste any of these as a follow-up in the same session.
 
-**Add the OAuth layer** — this is [solution 02](../02-oauth-jwt/), and the shipped
-spec's second half. Expect the deploy to need a clone or an undeploy first; an
-ACTIVE revision rejects edits.
+**Add the OAuth layer** — this is [solution 02](../02-oauth-jwt/), and the thing
+to do before partners call this API. Expect the deploy to need a clone or an
+undeploy first; an ACTIVE revision rejects edits. Two things that package covers
+and this one does not: the signing secret is a **literal** on this build, so a
+`<ENV:...>` placeholder is used verbatim as the HMAC key; and validation goes on
+`/locations` only, never API-wide, or the token endpoint locks itself out.
 ```text
 Add a route POST /oauth/token, so an app can trade its client credentials for a
 token generated by the gateway. Update /locations to validate the token generated
@@ -285,13 +280,11 @@ covered in [solution 04](../04-analytics/).
 | XML body with a JSON content-type | The transform is running on the request direction only. Ask for the applied plugins on that route. |
 | 200, a JSON body, and the backend's own "bad input" error inside it | The agent set `Content-Type` in `proxy-rewrite`. It is applied before the body is converted, so the backend received raw JSON. Every outward sign is healthy — 200, `application/json`, well-formed JSON — and the mediation is dead. **Observed on a live run**; see § *Validation status*. |
 | The JSON body is `{}` | The handler returned an empty envelope — usually the request field names don't match its elements. Ask what XML it is actually generating. |
-| 415 from the handler | Confirm `proxy-rewrite` sets `text/xml`; SOAP 1.2 wants `application/soap+xml`. |
+| 415 from the handler | Do **not** fix this by setting `Content-Type` in `proxy-rewrite` — it runs first and hides the JSON body from the transform. Check whether the handler needs a `SOAPAction` header instead. |
 | 504 on every call | The handler is slower than the gateway timeout. Looks like an outage, isn't. |
 | The agent adds a second plugin for the reverse direction | One plugin covers both directions here. See § *The one thing everybody gets wrong*. |
 | The agent puts a `description` key in a plugin block | Only schema fields plus `_meta` are legal. Move it to a YAML comment. |
-| Everything 401s once you add the auth layer, token endpoint included | Validation was applied API-wide. Move it to `/locations` only. |
 | Deploy fails: `Only INACTIVE revisions can be updated` | Expected on any revision after the first — clone the revision or undeploy first. |
-| The agent writes `<ENV:...>` as the signing secret | Only reachable once you add auth. This build resolves no such indirection and uses the string **verbatim** as the HMAC key, so every test passes and the tokens are forgeable. [Solution 02](../02-oauth-jwt/#build-it-with-the-helix-agent) has the full account. |
 
 ## Install it directly
 
@@ -305,38 +298,25 @@ H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
 #    Ask the agent get_plugin_config, or query the control plane's
 #    plugin-schema endpoint. Do not assume the field names in this spec.
 
-# 2. Replace <YOUR_JWT_SIGNING_SECRET> in the spec with a real secret (literal
-#    HMAC key on this build — no <ENV:...> resolution). Same value both routes.
+# 2. Import example/api-spec.yaml and bind <SOAP_UPSTREAM_URL> to the service.
 
-# 3. Import example/api-spec.yaml and bind <SOAP_UPSTREAM_URL> to the service.
+# 3. Deploy the revision.
 
-# 4. Deploy the revision.
-
-# 5. Create a developer and an app; keep the client_id and client_secret.
-
-# 6. Prove it — including that the body is really converted, not just relabelled
-GATEWAY=https://<YOUR_GATEWAY_HOST> \
-CLIENT_ID=<CLIENT_ID> CLIENT_SECRET=<CLIENT_SECRET> \
-./example/verify.sh
+# 4. Prove it — including that the body is really converted, not just relabelled
+GATEWAY=https://<YOUR_GATEWAY_HOST> ./example/verify.sh
 ```
 
 ## Configuration
 
-Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml). Three blocks on
+Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml). Two blocks on
 `/locations` carry the mediation:
 
 ```yaml
-# 1. reject first — no point transforming a body you're about to discard
-helix-auth:
-  mode: validate
-  validate_auth_type: jwt-auth
-  signing_secret: "<YOUR_JWT_SIGNING_SECRET>"
-
-# 2. path only — NO Content-Type override (it runs before the transform and defeats it)
+# 1. path only — NO Content-Type override (it runs before the transform and defeats it)
 proxy-rewrite:
   uri: <SOAP_HANDLER_PATH>
 
-# 3. request conversion is OFF by default — turn it on; response fires on Accept: application/json
+# 2. request conversion is OFF by default — turn it on; response fires on Accept: application/json
 xml-to-json:
   transform_request: true
   transform_response: true
@@ -355,11 +335,15 @@ Request — plain JSON, no envelope, no WSDL:
 
 ```http
 POST /locations
-Authorization: Bearer eyJ...
 content-type: application/json
+accept: application/json
 
 {"region":"EMEA","activeOnly":true}
 ```
+
+`accept: application/json` is not optional. The response transform is
+content-negotiated — without that header the upstream XML passes straight through
+as `text/xml`, and no gateway configuration changes it.
 
 Response — JSON, shaped by how the XML was structured:
 
@@ -392,21 +376,20 @@ not a setting in it.
 ## Testing
 
 ```bash
-GATEWAY=https://<YOUR_GATEWAY_HOST> \
-CLIENT_ID=<CLIENT_ID> CLIENT_SECRET=<CLIENT_SECRET> ./example/verify.sh
+GATEWAY=https://<YOUR_GATEWAY_HOST> ./example/verify.sh
 ```
 
-Exit 0 means all five held:
+Exit 0 means both held:
 
 | # | Case | Expected |
 |---|---|---|
-| 1 | No token | `401` — before the transform, before the SOAP call |
-| 2 | Client credentials | `200` + `access_token` |
-| 3 | Valid token | `200` + `content-type: application/json` |
-| 4 | **The body contains no XML markup** | proof the transform actually ran |
-| 5 | Forged token | `401` |
+| 1 | A JSON call to `/locations` | `200` + `content-type: application/json` |
+| 2 | **The body contains no XML markup** | proof the transform actually ran |
 
-**Case 4 is the one that matters and the one people skip.** A content-type header
+If you have composed this with [solution 02](../02-oauth-jwt/), pass the token
+through `CURL_OPTS`; `verify.sh` does not exercise that layer.
+
+**Case 2 is the one that matters and the one people skip.** A content-type header
 is a *claim*; a body with no angle brackets is *evidence*. Relabelling unconverted
 XML as `application/json` is a real and easy misconfiguration, and it sails past
 any check that only looks at headers. Partners then receive XML with a JSON
@@ -447,8 +430,9 @@ Full plan, including the XML-edge cases worth checking by hand:
 - **Element names leak into your public contract.** Your partner-facing JSON now
   contains the internal element names of a 2004 system. Renaming them later is a
   breaking change for partners, so decide now whether you're happy publishing them.
-- **The signing secret must match** on `/oauth/token` and `/locations`. See
-  [solution 02](../02-oauth-jwt/) § *Gotchas*.
+- **Nothing authenticates the route.** Anyone who can reach the gateway can call
+  the legacy system through it. Compose with [solution 02](../02-oauth-jwt/)
+  before this is partner-facing — see § *Variations*.
 
 ## When to use it
 
@@ -498,35 +482,32 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 
 ## Validation status
 
-**Validated end to end against a real SOAP backend**, including the case-4
-no-XML-markup proof (JSON→XML→backend→XML→JSON round-trip).
+**The deployed and functionally-tested results are withdrawn.** They were obtained
+against a configuration that also carried a token endpoint and token validation.
+This package no longer ships those, so reporting them here would report a result
+for a different spec.
 
 | Stage | Status | Provenance |
 |---|---|---|
-| Configuration generated | **YES** | [`example/api-spec.yaml`](example/api-spec.yaml) (corrected) |
-| Local validation | **PASS** | Structural review of the spec and tests |
-| Gateway dry-run | **PASS** | Non-destructive validation on a gateway. |
-| Gateway deployed | **DEPLOYED** | Deployed against a real SOAP backend; the ACTIVE-revision 409 and clone/undeploy flow were exercised for real. |
-| Functional tests | **PASS (5/5)** | `example/verify.sh` exit 0 — request JSON→XML and response XML→JSON both proven round-trip. |
-| Agent-mode run | **PASS** (2026-09-21) · **weaker on a later run** (2026-10-05) | Read back from the deployed revision, not just from the agent's transcript. See below. |
+| Configuration generated | **YES** | [`example/api-spec.yaml`](example/api-spec.yaml) |
+| Local validation | **PASS** | Structural review of the spec and tests, 2026-10-06. |
+| Gateway dry-run | **WITHDRAWN** | Passed on the composed spec. Not re-run since auth was removed. |
+| Gateway deployed | **WITHDRAWN** | Deployed against a real SOAP backend, composed spec. Not re-run. |
+| Functional tests | **WITHDRAWN** | `verify.sh` was 5/5 on the composed spec; it is now 2 cases and has not been run. |
+| Agent-mode run | **PASS** (2026-10-06) | Built the mediation in one pass. An earlier run (2026-10-05) set `Content-Type` on the rewrite and the transform silently never fired — a 200 is not evidence it ran, so read the revision back. |
 
-Overall: **READY (post-fix)** — the run corrected all three traps in § *The one
-thing everybody gets wrong*.
-
-**Two agent runs, two outcomes.** On 2026-10-05 the agent set `Content-Type` on
-the rewrite — the route answered 200 with well-formed JSON while the backend
-reported input it could not parse, and removing only that field fixed it. On
-2026-10-06 the shorter prompt now shipped built it in one pass. Read the revision
-back either way: a 200 is not evidence the transform ran.
+Overall: **UNVALIDATED** as it now stands. The mediation is unchanged and was
+proven round-trip on the composed spec; what is unproven is this spec deployed on
+its own. Restoring those rows needs a live SOAP backend and one `verify.sh` run.
 
 ## Related solutions
 
-- **[02 — OAuth 2.0 with JWT](../02-oauth-jwt/)** — the auth layer used here,
-  covered properly: token lifetimes, the signing-secret trap, the external-issuer
-  fork.
+- **[02 — OAuth 2.0 with JWT](../02-oauth-jwt/)** — the identity layer this
+  package does not carry, and the one to add before partners call it: token
+  lifetimes, the signing-secret trap, the external-issuer fork.
 - **[01 — API Products](../01-api-products/)** — meter the partners now calling
-  your legacy system, and sell tiers. Add `api-product-enforcer` behind the
-  `helix-auth` block.
+  your legacy system, and sell tiers. It needs identity first, so compose 02
+  before 01.
 - **[04 — Analytics](../04-analytics/)** — find out which partner is calling the
   legacy system how often, which is usually the first question asked after this
   goes live.

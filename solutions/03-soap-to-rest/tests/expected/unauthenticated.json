@@ -1,8 +1,0 @@
-{
-  "status": 401,
-  "headers": {
-    "present": [
-      "X-Request-Id"
-    ]
-  }
-}
