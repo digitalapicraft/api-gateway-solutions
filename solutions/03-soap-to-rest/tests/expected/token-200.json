@@ -1,8 +1,0 @@
-{
-  "status": 200,
-  "body": {
-    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.<payload>.<signature>",
-    "token_type": "Bearer",
-    "expires_in": 900
-  }
-}
