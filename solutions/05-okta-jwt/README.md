@@ -144,7 +144,7 @@ and what happens without it: [`helix-agent-prompt.md`](helix-agent-prompt.md).
 First, confirm the openid-connect plugin exists in this org and show me its
 schema. If it is not present, stop and tell me — do not substitute another plugin.
 
-Then create a REST API "<<Partner Posts API>>" on upstream <<UPSTREAM_URL>>, with
+Then create a REST API "{{api_name}}" on upstream {{upstream_url}}, with
 routes GET /posts, GET /posts/{postId} and POST /posts proxied straight through,
 protected by access tokens issued by Okta. The gateway must only VERIFY these
 tokens, never issue any. Not helix-auth — it only verifies tokens it minted
@@ -154,9 +154,9 @@ Apply openid-connect at the API level, not per route: every route here needs a
 token and there is no token endpoint to leave open.
 
 Configure it with:
-  discovery: <<OKTA_DISCOVERY_URL>>
-  client_id: <<OKTA_CLIENT_ID>>
-  client_secret: <<OKTA_CLIENT_SECRET>>
+  discovery: {{okta_discovery_url}}
+  client_id: {{okta_client_id}}
+  client_secret: {{okta_client_secret}}
   bearer_only: true and unauth_action: deny   (unauth_action's default REDIRECTS
     API callers to the IdP's login page instead of refusing them; bearer_only
     cannot be omitted either — the deploy is rejected without it, asking for
@@ -168,7 +168,7 @@ Configure it with:
   ssl_verify: true
   accept_unsupported_alg: false and accept_none_alg: false
   token_signing_alg_values_expected: RS256
-  claim_validator.issuer.valid_issuers: [ <<OKTA_ISSUER_URL>> ]
+  claim_validator.issuer.valid_issuers: [ {{okta_issuer_url}} ]
   claim_validator.audience.required: true
   jwk_expires_in: 3600
   set_id_token_header: false and set_userinfo_header: false

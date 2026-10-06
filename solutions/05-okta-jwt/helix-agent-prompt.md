@@ -1,6 +1,6 @@
 # Agent-mode prompt — verifying Okta-issued tokens
 
-Works from a fresh, empty org. Replace the `<<...>>` values. These prompts mirror
+Works from a fresh, empty org. Replace the `{{...}}` values. These prompts mirror
 the ones in the [README](README.md#build-it-with-the-helix-agent) — that is the
 copy the verification tooling runs, so the two are kept identical on purpose.
 [AGENT-GUIDE.md](../../AGENT-GUIDE.md) carries the standing rules these prompts
@@ -19,7 +19,7 @@ hardening fields — they come last. So paste Step 1, then Step 2.
 First, confirm the openid-connect plugin exists in this org and show me its
 schema. If it is not present, stop and tell me — do not substitute another plugin.
 
-Then create a REST API "<<Partner Posts API>>" on upstream <<UPSTREAM_URL>>, with
+Then create a REST API "{{api_name}}" on upstream {{upstream_url}}, with
 routes GET /posts, GET /posts/{postId} and POST /posts proxied straight through,
 protected by access tokens issued by Okta. The gateway must only VERIFY these
 tokens, never issue any. Not helix-auth — it only verifies tokens it minted
@@ -29,9 +29,9 @@ Apply openid-connect at the API level, not per route: every route here needs a
 token and there is no token endpoint to leave open.
 
 Configure it with:
-  discovery: <<OKTA_DISCOVERY_URL>>
-  client_id: <<OKTA_CLIENT_ID>>
-  client_secret: <<OKTA_CLIENT_SECRET>>
+  discovery: {{okta_discovery_url}}
+  client_id: {{okta_client_id}}
+  client_secret: {{okta_client_secret}}
   bearer_only: true and unauth_action: deny   (unauth_action's default REDIRECTS
     API callers to the IdP's login page instead of refusing them; bearer_only
     cannot be omitted either — the deploy is rejected without it, asking for
@@ -43,7 +43,7 @@ Configure it with:
   ssl_verify: true
   accept_unsupported_alg: false and accept_none_alg: false
   token_signing_alg_values_expected: RS256
-  claim_validator.issuer.valid_issuers: [ <<OKTA_ISSUER_URL>> ]
+  claim_validator.issuer.valid_issuers: [ {{okta_issuer_url}} ]
   claim_validator.audience.required: true
   jwk_expires_in: 3600
   set_id_token_header: false and set_userinfo_header: false
@@ -99,13 +99,13 @@ and stop there.
 
 **Require a scope, not just a valid token**
 ```text
-Add required_scopes so only tokens carrying "<<orders.read>>" are accepted, and
+Add required_scopes so only tokens carrying "{{required_scope}}" are accepted, and
 tell me what a token without it now returns.
 ```
 
 **Point at my real upstream**
 ```text
-Change the upstream to <<https://api.internal.example.com>> and re-run the
+Change the upstream to {{upstream_url}} and re-run the
 dry-run. Leave the auth configuration untouched.
 ```
 
@@ -119,7 +119,7 @@ what happens when Okta is unreachable.
 
 **Use the org authorization server instead of a custom one**
 ```text
-Switch discovery to https://<<your-okta-domain>>/.well-known/openid-configuration
+Switch discovery to https://{{okta_domain}}/.well-known/openid-configuration
 and update valid_issuers to match the issuer that document reports.
 ```
 

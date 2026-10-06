@@ -4,7 +4,7 @@ Two steps, from a **fresh, empty org** to routes that only accept signed request
 The agent creates the API on a public upstream, puts `hmac-auth` on the routes,
 dry-runs, and hands you an app credential to sign with.
 
-Paste one step at a time and confirm between them. Replace the `<<...>>` values.
+Paste one step at a time and confirm between them. Replace the `{{...}}` values.
 [AGENT-GUIDE.md](../../AGENT-GUIDE.md) carries the standing rules these prompts
 assume.
 
@@ -13,7 +13,7 @@ assume.
 ## Step 1 — create the API and sign its routes
 
 ```text
-Create a REST API "<<Partner Events API>>" on upstream
+Create a REST API "{{api_name}}" on upstream
 https://jsonplaceholder.typicode.com, environment test, with routes POST /posts
 and GET /posts/{postId} proxied straight through. Fresh org — nothing exists yet.
 
@@ -51,7 +51,7 @@ which plugins actually landed. Wait before deploying.
 ```text
 Create an API product for this API with authMethods ["hmac-auth"] and a quota of
 10000 per hour, deploy it to the same environment, then create a developer
-"<<Settlement Partner>>" with an app subscribed to that product using
+"{{developer_name}}" with an app subscribed to that product using
 plugins {"hmac-auth": {}} so key_id and secret_key are generated. Give me both —
 I know they are only returned once.
 
@@ -118,7 +118,7 @@ than working around it.
 
 **Let unsigned callers through as an anonymous consumer**
 ```text
-Set anonymous_consumer on the GET route to <<a consumer you have created>> so
+Set anonymous_consumer on the GET route to {{anonymous_consumer_name}} so
 unsigned reads are allowed but attributed, while POST stays strictly signed.
 ```
 

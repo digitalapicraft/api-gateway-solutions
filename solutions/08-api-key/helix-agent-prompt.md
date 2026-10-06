@@ -3,7 +3,7 @@
 Two steps, from a **fresh, empty org** to two routes behind an API key, plus the
 product and app whose credential you test with.
 
-Paste one step at a time and confirm between them. Replace the `<<...>>` values.
+Paste one step at a time and confirm between them. Replace the `{{...}}` values.
 [AGENT-GUIDE.md](../../AGENT-GUIDE.md) carries the standing rules these prompts
 assume.
 
@@ -12,7 +12,7 @@ assume.
 ## Step 1 — create and protect the API
 
 ```text
-Create a REST API "<<Terminal API>>" on upstream
+Create a REST API "{{api_name}}" on upstream
 https://jsonplaceholder.typicode.com, environment test, with routes
 GET /fleet/price-list and POST /fleet/takings. Fresh org — nothing exists yet.
 
@@ -45,7 +45,7 @@ which plugins actually landed. Wait before deploying.
 
 ```text
 Create a product containing this API with a generous quota, deploy it to test,
-then create a developer "<<Forecourt Estate>>" with one app subscribed to it and
+then create a developer "{{developer_name}}" with one app subscribed to it and
 give me the app's API key.
 
 Then curl commands showing, in order: no key → 401; the key in X-Device-Key → 200;

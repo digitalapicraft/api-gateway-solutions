@@ -7,7 +7,7 @@ public upstream that serves XML and echoes what it receives.
 > [solution 03](../03-soap-to-rest/helix-agent-prompt.md) — the two produce
 > incompatible documents.
 
-Replace the `<<...>>` values. [AGENT-GUIDE.md](../../AGENT-GUIDE.md) carries the
+Replace the `{{...}}` values. [AGENT-GUIDE.md](../../AGENT-GUIDE.md) carries the
 standing rules these prompts assume.
 
 ---
@@ -15,7 +15,7 @@ standing rules these prompts assume.
 ## Step 1 — create the API and configure both directions
 
 ```text
-Create a REST API "<<Catalog API>>" putting a JSON front door on an XML backend.
+Create a REST API "{{api_name}}" putting a JSON front door on an XML backend.
 Upstream https://httpbin.org — its /xml returns an XML document and its /post
 echoes what it received, so both directions are visible. Environment test. Fresh
 org — nothing exists yet.
@@ -85,7 +85,7 @@ sent as text/plain, which passes through unconverted with no error.
 
 **My backend sends a different Content-Type**
 ```text
-My backend replies with <<application/soap+xml>>, not application/xml. Add it to
+My backend replies with {{backend_content_type}}, not application/xml. Add it to
 content_types on both routes and tell me what else in the config assumes the
 default.
 ```

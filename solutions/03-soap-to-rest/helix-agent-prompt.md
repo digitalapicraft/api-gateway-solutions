@@ -1,6 +1,6 @@
 # Agent-mode prompt — serve a SOAP backend as REST/JSON
 
-Paste this to the Helix Agent as one message, replacing the `<<...>>` values.
+Paste this to the Helix Agent as one message, replacing the `{{...}}` values.
 Bring your own SOAP endpoint, the handler path it answers on, and the REST
 route you want partners to call.
 
@@ -15,8 +15,8 @@ agent decides on its own, and what to check before you trust it are in the
 ## Prompt
 
 ```text
-Create a REST API called "<<03-soap-to-rest>>" in the <<test>> environment,
-fronting a SOAP backend at <<SOAP_UPSTREAM_URL>>. One route — POST <</locations>>
-— proxying to the upstream path <<SOAP_HANDLER_PATH>>. Partners send and receive
+Create a REST API called "{{api_name}}" in the {{environment}} environment,
+fronting a SOAP backend at {{soap_upstream_url}}. One route — POST {{rest_route_path}}
+— proxying to the upstream path {{soap_handler_path}}. Partners send and receive
 JSON; the backend keeps speaking XML, and neither side changes to make that work.
 ```
