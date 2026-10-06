@@ -10,8 +10,8 @@ the standard way this project fails.**
 | **Difficulty** | 🟢 Beginner |
 | **Needs** | A fresh org (its default **test** environment). The upstream is public jsonplaceholder, whose customer records carry email, phone and precise coordinates — so the masking is visible with no backend of your own. A logger plugin and a sink you can read, if you want to verify the log half too. |
 | **Plugins** | `response-rewrite` · `log-data-mask` · `proxy-rewrite` · `request-id` |
-| **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Manifest](solution.yaml) |
+| **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`example/api-spec.yaml`](example/api-spec.yaml) |
+| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](example/) · ✅ [Tests](tests/) · ✅ [Manifest](solution.yaml) |
 
 ---
 
@@ -84,7 +84,7 @@ the full record except the gateway itself.
 
 ## Configuration
 
-Source of truth: [`gateway/api-spec.yaml`](gateway/api-spec.yaml).
+Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml).
 
 What the caller sees:
 
@@ -239,7 +239,7 @@ NOT do.
 
 > **If step 4 ends in `stream closed with reason: error`, that's the defect above,
 > not your prompt.** The route spec is now large enough to trigger it reliably.
-> Import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) instead — same
+> Import [`example/api-spec.yaml`](example/api-spec.yaml) instead — same
 > configuration, complete, and the agent has already done the parts that teach you
 > anything.
 
@@ -250,12 +250,12 @@ export ORG=<ORG_ID>
 export TOKEN=<control-plane bearer token>      # short-lived
 export BASE=https://<YOUR_GATEWAY_HOST>/api
 
-# 1. Import gateway/api-spec.yaml. Nothing in it needs filling in.
+# 1. Import example/api-spec.yaml. Nothing in it needs filling in.
 # 2. Bind your upstream and deploy the revision to "test".
 # 3. Adjust the field names in BOTH plugin blocks to your payload, and the
 #    proxy-rewrite paths to your backend.
 # 4. Prove it
-GATEWAY=https://<YOUR_GATEWAY_HOST> ./gateway/verify.sh
+GATEWAY=https://<YOUR_GATEWAY_HOST> ./example/verify.sh
 ```
 
 ## Testing
@@ -347,15 +347,14 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 
 | Stage | Status | Provenance |
 |---|---|---|
-| Configuration generated | **YES** | [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| Local validation | **PASS** | [`validation/local-validation.yaml`](validation/local-validation.yaml) |
+| Configuration generated | **YES** | [`example/api-spec.yaml`](example/api-spec.yaml) |
+| Local validation | **PASS** | Structural review of the spec and tests |
 | Gateway dry-run | **PASS** | Non-destructive, against a temporary import. |
 | Gateway deployed | **DEPLOYED** | Revision ACTIVE in a test environment. |
 | Functional tests | **PASS (6/6)** | Response side by `verify.sh`; the log side verified separately against a real logger and a readable sink. |
 
 Overall: **READY.** The `scope: once` behaviour and the independence of the two
-masks were both reproduced deliberately and are recorded in
-[`validation/gateway-validation.yaml`](validation/gateway-validation.yaml).
+masks were both reproduced deliberately, not inferred.
 
 ## Related solutions
 

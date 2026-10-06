@@ -80,7 +80,14 @@ and a curl that proves a client cannot spoof X-Tenant-Plan.
   per-route decision rather than an inherited default. It's the most consequential
   choice in this solution.
 - **Read the revision back.** Nested plugins on a live route are silently
-  discarded — the write reports success and the dry-run passes.
+  discarded — the write reports success and the dry-run passes. Verified: a
+  weaker wording ("put the plugins in a flat plugins map, do not nest them
+  under x-helix-gateway") was tried five times and ignored five times — the
+  agent nested them anyway every time, after reading the spec generator's
+  document-shaped examples immediately beforehand. What actually worked was
+  naming the live route object explicitly, telling the agent not to follow
+  those examples, and showing the literal route-object shape — that's the
+  wording in Step 1 above.
 
 ## Tweak knobs
 

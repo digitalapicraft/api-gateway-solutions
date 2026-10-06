@@ -9,8 +9,8 @@ authentication happened.**
 | **Difficulty** | 🟢 Beginner |
 | **Needs** | A fresh org (its default **test** environment) · a real signing-secret value to paste into the spec (used literally — see below) · one developer + app to test with. The upstream is public jsonplaceholder, so no backend of your own. |
 | **Plugins** | `helix-auth` (generate + validate) · `request-id` · `cors` |
-| **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Manifest](solution.yaml) |
+| **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`example/api-spec.yaml`](example/api-spec.yaml) |
+| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](example/) · ✅ [Tests](tests/) · ✅ [Manifest](solution.yaml) |
 
 ---
 
@@ -263,7 +263,7 @@ H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
 #    is not resolved. Use the SAME value on the token route and every protected
 #    route. Do not commit the filled-in spec.
 
-# 2. Import gateway/api-spec.yaml (OpenAPI import in the portal, or Agent Mode)
+# 2. Import example/api-spec.yaml (OpenAPI import in the portal, or Agent Mode)
 #    and bind the upstream https://jsonplaceholder.typicode.com to the service
 #    (swap in your own backend later). Importing assigns service_id automatically.
 
@@ -275,7 +275,7 @@ H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
 # 5. Prove it
 GATEWAY=https://<YOUR_GATEWAY_HOST> \
 CLIENT_ID=<CLIENT_ID> CLIENT_SECRET=<CLIENT_SECRET> EXPECT_TTL=900 \
-./gateway/verify.sh          # defaults to /posts and /oauth/token
+./example/verify.sh          # defaults to /posts and /oauth/token
 ```
 
 > An **ACTIVE** revision will not accept edits — you'll get `Only INACTIVE
@@ -284,7 +284,7 @@ CLIENT_ID=<CLIENT_ID> CLIENT_SECRET=<CLIENT_SECRET> EXPECT_TTL=900 \
 
 ## Configuration
 
-Source of truth: [`gateway/api-spec.yaml`](gateway/api-spec.yaml). Two blocks
+Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml). Two blocks
 carry the whole solution.
 
 On the token endpoint:
@@ -362,7 +362,7 @@ genuinely awkward for integrators. Two consequences to design around:
 
 ```bash
 GATEWAY=https://<YOUR_GATEWAY_HOST> \
-CLIENT_ID=<CLIENT_ID> CLIENT_SECRET=<CLIENT_SECRET> ./gateway/verify.sh
+CLIENT_ID=<CLIENT_ID> CLIENT_SECRET=<CLIENT_SECRET> ./example/verify.sh
 ```
 
 Exit 0 means all six cases held:
@@ -394,8 +394,6 @@ partner needs no engineer to email anything; and the backend service's code is
 unchanged, with its team never on the critical path.
 
 ## Gotchas
-
-Each of these has cost somebody an afternoon.
 
 - **The signing secret must be identical on the issue route and every validate
   route.** A mismatch means every freshly issued token is rejected with an
@@ -474,16 +472,16 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 
 | Stage | Status | Provenance |
 |---|---|---|
-| Configuration generated | **YES** | [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| Local validation | **PASS** | Structural review — [`validation/local-validation.yaml`](validation/local-validation.yaml) |
+| Configuration generated | **YES** | [`example/api-spec.yaml`](example/api-spec.yaml) |
+| Local validation | **PASS** | Structural review of the spec and tests. |
 | Gateway dry-run | **PASS** | Non-destructive; a missing upstream binding is reported here, before any deploy. |
 | Gateway deployed | **DEPLOYED** | Revision ACTIVE in a test environment; `service_id` auto-assigned on import. |
-| Functional tests | **PASS (6/6)** | `gateway/verify.sh` exit 0 — including the wrong-secret and forged-token cases. |
+| Functional tests | **PASS (6/6)** | `example/verify.sh` exit 0 — including the wrong-secret and forged-token cases. |
 | Agent path | **MODEL-DEPENDENT** | Driven live 2026-09-29. On the agent's normal model the prompt built and deployed the whole solution, credentials included. On a small free-tier model it stored an unauthenticated API more often than not. Either way the signing secret needs checking. See § *When the agent goes wrong*. |
 
 Overall: **READY** — for the specification, which is what those rows cover and
 what `verify.sh` exercises. Importing
-[`gateway/api-spec.yaml`](gateway/api-spec.yaml) gets you this configuration
+[`example/api-spec.yaml`](example/api-spec.yaml) gets you this configuration
 deterministically; the agent path is the weaker one today, and § *When the agent
 goes wrong* opens with why.
 

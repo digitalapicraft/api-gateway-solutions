@@ -10,8 +10,9 @@ it, and an honest record of what was and wasn't validated.
 
 > **Every solution here has been implemented and validated against our
 > gateway** — imported, dry-run, deployed, and exercised with its `verify.sh`.
-> Each package's `validation/` records the outcome, including the cases that are
-> deliberately left manual because no response code can establish them.
+> Each package's own README carries the outcome directly, in its **Validation
+> status** section, including the cases that are deliberately left manual
+> because no response code can establish them.
 
 ---
 
@@ -71,7 +72,7 @@ that decide whether it suits your data.
 ## Agent-first, on purpose
 
 Every solution here is written to be built by conversation, not by hand-editing
-YAML. The gateway configuration in `gateway/api-spec.yaml` is the **source of
+YAML. The gateway configuration in `example/api-spec.yaml` is the **source of
 truth** for what the solution does — but it is the *output* you should expect,
 not the input you should type.
 
@@ -95,28 +96,41 @@ handful of wrong turns a general-purpose model reliably takes on this platform.
 ```
 solutions/<NN>-<slug>/
 ├── README.md               # problem, business need, how it works, gotchas, validation
-├── solution.yaml           # the manifest — one version across every artifact
 ├── business-need.md        # why it matters
 ├── architecture.md         # request flow, native-vs-custom, when not to use it
 ├── helix-agent-prompt.md   # the paste-into-Agent-Mode prompt, and why it's shaped that way
-├── gateway/
+├── example/
 │   ├── api-spec.yaml       # importable OpenAPI 3.0.3 + x-helix-gateway.plugins
 │   ├── products.json       # API Products, where the solution needs them
 │   └── verify.sh           # exits 0 against a live environment
-├── tests/                  # test-plan.yaml + request fixtures + expected responses
-└── validation/             # what was checked, by whom, and what wasn't
+└── tests/                  # test-plan.yaml + request fixtures + expected responses
 ```
 
 Diagrams live inside `README.md` as mermaid blocks, which GitHub renders inline —
 there is no separate image to open, and nothing to build.
+
+There's no separate `validation/` folder. For most solutions, what was checked,
+when, and by what method — dates, provenance, case-by-case results, and any
+finding worth knowing, including a run that didn't go cleanly — lives directly
+in the README's own **Validation status** section, right next to the claim it
+backs. Solutions in the split layout (solution 01 today) keep that record
+internally and the package carries no status table; what you can rely on there
+is the spec, the tests and `example/verify.sh`, which you run yourself.
 
 Only files that apply are present — a solution needing no API Products has no
 `products.json`. Some packages carry an extra file where the subject warrants it:
 solution 04 has [`charts.md`](solutions/04-analytics/charts.md), a catalogue of
 the real analytics-API queries for the library, which is that package's deliverable.
 
+Some packages split their docs further, one file per topic instead of one long
+`README.md` — `guides.md`, `tests.md`, `api-reference.md` — with `README.md` left as a short landing page and every page sharing the same row of links so
+you can jump between them. Solution 01 uses this layout; it's being rolled out
+to the rest of the library over time, so don't assume every solution has these
+files yet — some older packages may still carry a `solution.yaml` manifest,
+which is no longer part of the standard layout.
+
 Two ways in: paste `helix-agent-prompt.md` into Agent Mode, or import
-`gateway/api-spec.yaml` directly through OpenAPI import. Both land in the same
+`example/api-spec.yaml` directly through OpenAPI import. Both land in the same
 place; the first one teaches you more.
 
 ## The platform model — read this before configuring anything
@@ -168,12 +182,13 @@ These are five different things and this library never blurs them:
 `Configuration generated` · `Locally validated` · `Gateway dry-run passed` ·
 `Gateway deployed` · `Functional test passed`
 
-Every package's `validation/` directory records which of these actually happened,
-who performed it, and whether it was re-run when the package was last touched.
-Where a status came from an earlier run rather than the current one, it says so.
-**Nothing in this repo claims a result that wasn't produced by a real gateway.**
+A solution README's **Validation status** section, where it has one, records
+which of these actually happened, who performed it, and whether it was re-run
+when the package was last touched. Where a status came from an earlier run rather than
+the current one, it says so. **Nothing in this repo claims a result that
+wasn't produced by a real gateway.**
 
-Each solution README carries the same table:
+Those READMEs carry the same table:
 
 | Stage | Status | Provenance |
 |---|---|---|
@@ -182,7 +197,7 @@ Overall status is one of **READY** · **READY WITH WARNINGS** · **UNVALIDATED**
 (generated and structurally reviewed, but not confirmed against a gateway) ·
 **NOT READY** (a dry-run failed).
 
-Whatever a package says, **re-run `gateway/verify.sh` against your own
+Whatever a package says, **re-run `example/verify.sh` against your own
 environment before you rely on it.** Plugin builds differ between orgs.
 
 ## Placeholders

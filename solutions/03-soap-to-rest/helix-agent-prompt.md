@@ -5,7 +5,7 @@ Bring your own SOAP endpoint and the handler path it answers on.
 
 This builds the mediation, which is what this solution is. **Authentication is
 [solution 02](../02-oauth-jwt/)** — add it afterwards with that package's prompt
-if you want it, or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml), which
+if you want it, or import [`example/api-spec.yaml`](example/api-spec.yaml), which
 ships both layers already composed. Why the prompt is worded this way, what the
 agent decides on its own, and what to check before you trust it are in the
 [README](README.md#build-it-with-the-helix-agent).

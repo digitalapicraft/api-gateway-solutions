@@ -46,7 +46,7 @@ flowchart LR
 ## The upstream is not in the spec
 
 This package is shaped differently from every other one in the library, and it is
-worth saying plainly: **`gateway/api-spec.yaml` is only half the configuration.**
+worth saying plainly: **`example/api-spec.yaml` is only half the configuration.**
 
 OpenAPI has no way to express "this upstream speaks gRPC". That lives on the
 upstream object in the control plane:
@@ -170,7 +170,7 @@ success at every step the agent shows you.
 ```bash
 GATEWAY=<your-gateway-host> \
 UNIT_KEY=<app credential key> \
-./gateway/verify.sh
+./example/verify.sh
 ```
 
 No `.proto` file is needed — this package routes reflection, so the schema is
@@ -231,6 +231,10 @@ its connections:
 /timing.TimingUnit/Ping           9      <- a unary call
 ```
 
+Grouped by `app_name` instead of by method, the same traffic validated at 26
+requests attributed to one app, with a 24521 ms max — multiple streams from one
+caller aggregate under their app, which is the point of grouping this way.
+
 The dimensions are the same ones every other API has: `app_name`, `developer`,
 `product_name`, `api_path`, `route_name`, `response_status_code`. A streaming API
 is a first-class citizen in the analytics you already run.
@@ -256,15 +260,16 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 ## Validation status
 
 - **Locally validated** — structure, plugin fields against the live schema, route
-  paths, both reflection versions, and the absence of body-touching plugins. See
-  [`validation/local-validation.yaml`](validation/local-validation.yaml).
+  paths, both reflection versions, and the absence of body-touching plugins.
 - **Gateway dry-run passed** — the spec imports and dry-runs clean.
 - **Gateway deployed** — deployed ACTIVE against a real bidirectional gRPC service.
-- **Functional test passed** — `gateway/verify.sh` **6/6**: unauthenticated and
+- **Functional test passed** — `example/verify.sh` **6/6**: unauthenticated and
   invalid credentials refused at stream initiation, an authenticated unary call,
   an authenticated bidirectional stream, a held-open stream that closes cleanly,
-  and reflection resolving with no descriptor file. Verified on two environments.
+  and reflection resolving with no descriptor file. Verified on two
+  environments with different fronting infrastructure — the second run also
+  held a stream open 30s against server-pushed keepalives every 10s, and the
+  package deployed unmodified on both.
 - **Connection telemetry confirmed** — `requests-count` returned one row per
   stream and `response-time` returned 24,235 ms for a stream held open ~25s,
-  grouped by method and by app. See
-  [`validation/gateway-validation.yaml`](validation/gateway-validation.yaml).
+  grouped by method and by app.

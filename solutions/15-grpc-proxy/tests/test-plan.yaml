@@ -1,6 +1,6 @@
 # Test plan — a bidirectional-streaming gRPC service fronted by the gateway.
 #
-# All five cases are executed in order by ../gateway/verify.sh, which exits 0
+# All five cases are executed in order by ../example/verify.sh, which exits 0
 # only if every one of them holds.
 #
 # Substitute your own values:
@@ -14,7 +14,7 @@
 meta:
   solution: 15-grpc-proxy
   version: 1.0.0
-  executor: gateway/verify.sh
+  executor: example/verify.sh
   note: >-
     Requires grpcurl. No descriptor file is needed: this package routes gRPC
     reflection, so the schema is discovered over the connection. Set PROTOSET

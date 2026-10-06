@@ -9,8 +9,8 @@ in XML, and four client teams who each wrote their own parser.**
 | **Difficulty** | 🟢 Beginner |
 | **Needs** | A fresh org (its default **test** environment). The upstream is the public httpbin service, so no backend of your own — and because it echoes requests, you can *see* the XML your backend would have received. |
 | **Plugins** | `xml-to-json` (both directions) · `proxy-rewrite` · `request-id` · `cors` |
-| **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Manifest](solution.yaml) |
+| **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`example/api-spec.yaml`](example/api-spec.yaml) |
+| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](example/) · ✅ [Tests](tests/) · ✅ [Manifest](solution.yaml) |
 
 ---
 
@@ -115,7 +115,7 @@ failures, not on gateway status codes.
 
 ## Configuration
 
-Source of truth: [`gateway/api-spec.yaml`](gateway/api-spec.yaml).
+Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml).
 
 Response direction — the minimum useful block:
 
@@ -235,15 +235,15 @@ export ORG=<ORG_ID>
 export TOKEN=<control-plane bearer token>      # short-lived
 export BASE=https://<YOUR_GATEWAY_HOST>/api
 
-# 1. Import gateway/api-spec.yaml. Nothing in it needs filling in.
+# 1. Import example/api-spec.yaml. Nothing in it needs filling in.
 # 2. Bind your XML backend as the upstream and deploy the revision to "test".
 # 3. Adjust the proxy-rewrite paths to your backend's, and content_types to the
 #    Content-Type your backend actually sends (check it — text/html and
 #    application/soap+xml do not match the defaults).
 # 4. Prove it
-GATEWAY=https://<YOUR_GATEWAY_HOST> ./gateway/verify.sh
+GATEWAY=https://<YOUR_GATEWAY_HOST> ./example/verify.sh
 #    Against your own backend (which probably does not echo requests):
-GATEWAY=https://<YOUR_GATEWAY_HOST> ECHOES_REQUEST=0 ./gateway/verify.sh
+GATEWAY=https://<YOUR_GATEWAY_HOST> ECHOES_REQUEST=0 ./example/verify.sh
 ```
 
 ## Testing
@@ -331,15 +331,14 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 
 | Stage | Status | Provenance |
 |---|---|---|
-| Configuration generated | **YES** | [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| Local validation | **PASS** | [`validation/local-validation.yaml`](validation/local-validation.yaml) |
+| Configuration generated | **YES** | [`example/api-spec.yaml`](example/api-spec.yaml) |
+| Local validation | **PASS** | Structural review of the spec and tests |
 | Gateway dry-run | **PASS** | Non-destructive, against a temporary import. |
 | Gateway deployed | **DEPLOYED** | Revision ACTIVE in a test environment. |
 | Functional tests | **PASS (5/5)** | Both directions, both silent-passthrough assertions, and the malformed-body rejection. |
 
 Overall: **READY.** The `pretty: true` defect and the conversion-fidelity
-observations were both produced by this run and are recorded in
-[`validation/gateway-validation.yaml`](validation/gateway-validation.yaml).
+observations were both produced by this actual run, not read off a schema.
 
 ## Related solutions
 

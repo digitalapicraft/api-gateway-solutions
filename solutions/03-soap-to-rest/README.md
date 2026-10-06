@@ -19,8 +19,8 @@ other.**
 | **Difficulty** | 🟡 Intermediate |
 | **Needs** | **Your own SOAP endpoint** reachable from the gateway (this is a SOAP use case — a REST placeholder like jsonplaceholder can't stand in) and its handler path · a real signing-secret value (literal — see solution 02) · one developer + app · `xml-to-json` in your org · a **test** environment |
 | **Plugins** | `xml-to-json` (`transform_request` + `transform_response`) · `proxy-rewrite` · `helix-auth` (generate + validate) · `request-id` · `cors` |
-| **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`gateway/api-spec.yaml`](gateway/api-spec.yaml) |
-| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](gateway/) · ✅ [Tests](tests/) · ✅ [Validation](validation/) · ✅ [Manifest](solution.yaml) |
+| **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`example/api-spec.yaml`](example/api-spec.yaml) |
+| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](example/) · ✅ [Tests](tests/) · ✅ [Manifest](solution.yaml) |
 
 ---
 
@@ -147,7 +147,7 @@ The recommended path, and a short one. The build is **one prompt** —
 replace the `<<...>>` values.
 
 It builds the mediation and nothing else, because the mediation is what this
-solution is. The shipped [`gateway/api-spec.yaml`](gateway/api-spec.yaml) carries
+solution is. The shipped [`example/api-spec.yaml`](example/api-spec.yaml) carries
 more than that — a `/oauth/token` route and token validation on `/locations` —
 because the composed configuration is what was deployed and functionally tested
 (§ *Validation status*). That second layer is [solution 02](../02-oauth-jwt/), and
@@ -308,7 +308,7 @@ H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
 # 2. Replace <YOUR_JWT_SIGNING_SECRET> in the spec with a real secret (literal
 #    HMAC key on this build — no <ENV:...> resolution). Same value both routes.
 
-# 3. Import gateway/api-spec.yaml and bind <SOAP_UPSTREAM_URL> to the service.
+# 3. Import example/api-spec.yaml and bind <SOAP_UPSTREAM_URL> to the service.
 
 # 4. Deploy the revision.
 
@@ -317,12 +317,12 @@ H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
 # 6. Prove it — including that the body is really converted, not just relabelled
 GATEWAY=https://<YOUR_GATEWAY_HOST> \
 CLIENT_ID=<CLIENT_ID> CLIENT_SECRET=<CLIENT_SECRET> \
-./gateway/verify.sh
+./example/verify.sh
 ```
 
 ## Configuration
 
-Source of truth: [`gateway/api-spec.yaml`](gateway/api-spec.yaml). Three blocks on
+Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml). Three blocks on
 `/locations` carry the mediation:
 
 ```yaml
@@ -393,7 +393,7 @@ not a setting in it.
 
 ```bash
 GATEWAY=https://<YOUR_GATEWAY_HOST> \
-CLIENT_ID=<CLIENT_ID> CLIENT_SECRET=<CLIENT_SECRET> ./gateway/verify.sh
+CLIENT_ID=<CLIENT_ID> CLIENT_SECRET=<CLIENT_SECRET> ./example/verify.sh
 ```
 
 Exit 0 means all five held:
@@ -503,14 +503,15 @@ no-XML-markup proof (JSON→XML→backend→XML→JSON round-trip).
 
 | Stage | Status | Provenance |
 |---|---|---|
-| Configuration generated | **YES** | [`gateway/api-spec.yaml`](gateway/api-spec.yaml) (corrected) |
-| Local validation | **PASS** | [`validation/local-validation.yaml`](validation/local-validation.yaml) |
+| Configuration generated | **YES** | [`example/api-spec.yaml`](example/api-spec.yaml) (corrected) |
+| Local validation | **PASS** | Structural review of the spec and tests |
 | Gateway dry-run | **PASS** | Non-destructive validation on a gateway. |
-| Gateway deployed | **DEPLOYED** | Against a real SOAP backend; the ACTIVE-revision 409 and clone/undeploy flow exercised for real. |
-| Functional tests | **PASS (5/5)** | `gateway/verify.sh` exit 0 — request JSON→XML and response XML→JSON both proven round-trip. |
+| Gateway deployed | **DEPLOYED** | Deployed against a real SOAP backend; the ACTIVE-revision 409 and clone/undeploy flow were exercised for real. |
+| Functional tests | **PASS (5/5)** | `example/verify.sh` exit 0 — request JSON→XML and response XML→JSON both proven round-trip. |
+| Agent-mode run | **PASS** (2026-09-21) · **weaker on a later run** (2026-10-05) | Read back from the deployed revision, not just from the agent's transcript. See below. |
 
 Overall: **READY (post-fix)** — the run corrected all three traps in § *The one
-thing everybody gets wrong*. Full account: [`validation/gateway-validation.yaml`](validation/gateway-validation.yaml).
+thing everybody gets wrong*.
 
 **The agent path is weaker, measured 2026-10-05.** Driven once live it reached
 `Configuration generated` and `Gateway deployed`, in **two rounds** (it asks before

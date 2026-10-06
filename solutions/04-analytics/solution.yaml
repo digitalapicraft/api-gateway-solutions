@@ -52,19 +52,18 @@ limits:
   - No request/response bodies — metadata only, by design.
 
 validation:
-  # Stage statuses only. What was checked and what happened is in validation/.
+  # Stage statuses only. What was checked and what happened is folded into the README/Changelog directly.
   local: PASS
   live_queries: VERIFIED
-  record: validation/
+  record: README.md § Validation status
 
 artifacts:
   documentation: [README.md, charts.md, architecture.md, business-need.md]
   agent_prompt: helix-agent-prompt.md
   script: scripts/query-analytics.sh
   diagrams: [README.md]   # mermaid blocks, rendered inline by GitHub
-  validation: [validation/local-validation.yaml, validation/gateway-validation.yaml]
   note: >-
-    No gateway/api-spec.yaml and no tests/ — this solution changes no API and builds
+    No example/api-spec.yaml and no tests/ — this solution changes no API and builds
     nothing. helix-agent-prompt.md, charts.md and scripts/query-analytics.sh are the
     deliverable (agent / raw API / CLI — same data).
 

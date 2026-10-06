@@ -1,6 +1,6 @@
 # Test plan — HTTP to Kafka ingest at the edge.
 #
-# Cases 1-4 are executed in order by ../gateway/verify.sh, which exits 0 only if
+# Cases 1-4 are executed in order by ../example/verify.sh, which exits 0 only if
 # all of them hold. Cases 5-8 are MANUAL and are verified in your own Kafka topic
 # browser, because nothing observable from the caller's side can establish them.
 #
@@ -14,7 +14,7 @@
 meta:
   solution: 07-http-to-kafka
   version: 1.0.0
-  executor: gateway/verify.sh
+  executor: example/verify.sh
   note: >-
     Cases 1-4 are automated. Cases 5-8 need a running broker and a topic browser,
     and three of them need the broker deliberately broken, so all four are manual.
@@ -104,7 +104,7 @@ cases:
       code can tell you.
     type_of_execution: manual
     procedure: >-
-      1) Run gateway/verify.sh and keep the event_id and X-Request-Id it prints.
+      1) Run example/verify.sh and keep the event_id and X-Request-Id it prints.
       2) Open your topic browser (Kafka UI, Redpanda Console, or
          `kafka-console-consumer.sh --from-beginning`) on the configured topic.
       3) Find the newest messages and locate the one whose request_id matches.
