@@ -6,7 +6,7 @@ Two steps, from a **fresh, empty org** to a route that validates an event, answe
 **Create the Kafka topic first.** Auto-creation drops the message that triggers
 it, and the caller still gets a 202.
 
-Replace the `<<...>>` values. [AGENT-GUIDE.md](../../AGENT-GUIDE.md) carries the
+Replace the `{{...}}` values. [AGENT-GUIDE.md](../../AGENT-GUIDE.md) carries the
 standing rules these prompts assume.
 
 ---
@@ -19,7 +19,7 @@ serialiser corrupts its own arguments and writes nothing — reproducibly, 5 run
 out of 5. Handing it the object to copy is the form that was verified to work.
 
 ```text
-Create a REST API "<<Event Ingest API>>" with a single route POST /events that
+Create a REST API "{{api_name}}" with a single route POST /events that
 validates an event, answers 202 from the gateway itself, and publishes the body to
 Kafka. There is no backend service for this route. Fresh org — nothing exists yet.
 
@@ -53,8 +53,8 @@ reproduced verbatim except for service_id, which is the API id:
         "with_mock_header": false
       },
       "kafka-logger": {
-        "brokers": [{"host": "<<YOUR_BROKER_HOST>>", "port": 9092}],
-        "kafka_topic": "<<events>>",
+        "brokers": [{"host": "{{kafka_broker_host}}", "port": 9092}],
+        "kafka_topic": "{{kafka_topic}}",
         "_meta": {"filter": [["status", "==", 202]]},
         "include_req_body": true,
         "log_format": {
@@ -158,7 +158,7 @@ their app credential. It doesn't touch the body, so request-validation can stay.
 **A real acknowledgement instead of at-most-once**
 ```text
 Replace mocking and kafka-logger with a service-callout to our Kafka REST Proxy at
-<<http://kafka-rest:8082/topics/events>>, access phase, synchronous,
+{{kafka_rest_url}}, access phase, synchronous,
 error_handling.policy fail-close — so the caller gets a 503 when Kafka rejects the
 message rather than a 202 it cannot trust.
 ```
@@ -166,7 +166,7 @@ message rather than a 202 it cannot trust.
 **A second event type**
 ```text
 Add POST /events/telemetry with the same three plugins but kafka_topic
-"<<telemetry>>" and a body_schema whose required list is ["device_id","reading"].
+"{{telemetry_topic}}" and a body_schema whose required list is ["device_id","reading"].
 Keep the body_schema to type and required only — no properties map.
 ```
 

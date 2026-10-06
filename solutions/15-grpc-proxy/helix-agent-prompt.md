@@ -9,7 +9,7 @@ prompts assume.
 ```text
 Create an upstream in my environment called "timing-grpc" whose specification has
 scheme "grpc", type "roundrobin", pass_host "node", and one node with host
-<<GRPC_UPSTREAM_HOST>>, port <<GRPC_UPSTREAM_PORT>>, weight 1 and priority 1.
+{{grpc_upstream_host}}, port {{grpc_upstream_port}}, weight 1 and priority 1.
 Tell me the upstream id when it is created.
 
 The scheme must be exactly "grpc" — not "http", not "https". That field is the
@@ -60,7 +60,7 @@ v1 call gets a clean gRPC answer.
 ## Step 4 — bind, deploy, and read it back
 
 ```text
-Bind upstream <<UPSTREAM_ID>> to the current revision of the Timing Unit Stream
+Bind upstream {{upstream_id}} to the current revision of the Timing Unit Stream
 API in my environment, then deploy that revision. Then read the revision back and
 show me the plugins stored on each route, and the upstream binding.
 ```

@@ -93,7 +93,7 @@ and a curl that proves a client cannot spoof X-Tenant-Plan.
 
 **Point it at my real profile service**
 ```text
-Change the callout uri to <<https://profile.internal/api/tenants/current>> and
+Change the callout uri to {{callout_uri}} and
 forward the caller's authorization header to it with forwarded_headers. Then tell
 me what the profile service now has to handle that it didn't before.
 ```
@@ -109,7 +109,7 @@ the forward-auth version of this route instead.
 ```text
 This adds a round trip to every request. Show me what caching the callout response
 would look like, what the invalidation story is, and be honest about whether it's
-worth it at <<200>> requests per second.
+worth it at {{requests_per_second}} requests per second.
 ```
 
 **Identify the caller first**
