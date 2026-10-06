@@ -513,12 +513,11 @@ no-XML-markup proof (JSON→XML→backend→XML→JSON round-trip).
 Overall: **READY (post-fix)** — the run corrected all three traps in § *The one
 thing everybody gets wrong*.
 
-**The agent path is weaker, measured 2026-10-05.** Driven once live it reached
-`Configuration generated` and `Gateway deployed`, in **two rounds** (it asks before
-guessing) and **with one correction**: it avoided the `transform_request` trap
-unprompted, then set `Content-Type` on the rewrite — so the route answered 200 with
-well-formed JSON while the backend reported input it could not parse. Removing only
-that field made the transform work; the prompt now guards against it.
+**Two agent runs, two outcomes.** On 2026-10-05 the agent set `Content-Type` on
+the rewrite — the route answered 200 with well-formed JSON while the backend
+reported input it could not parse, and removing only that field fixed it. On
+2026-10-06 the shorter prompt now shipped built it in one pass. Read the revision
+back either way: a 200 is not evidence the transform ran.
 
 ## Related solutions
 
