@@ -1,16 +1,20 @@
 # Analytics query catalogue — read what your gateway already captured
 
-Analytics is captured for **every** request through **every** API, automatically —
-you add nothing to your APIs. This file is the practical part: the queries that
-answer the common questions, each one a real request against the analytics metrics
-API, plus what the API can and cannot do.
+> [Overview](README.md) · [Business need](business-need.md) · [Architecture](architecture.md) · [Guides](guides.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · **API reference**
+
+---
+
+Part of the [API reference](api-reference.md): the full request for each everyday
+question. Analytics is captured for **every** request through **every** API,
+automatically — you add nothing to your APIs. This page is the practical part: the
+queries that answer the common questions, each one a real request against the
+analytics metrics API, plus what the API can and cannot do.
 
 > **Three ways to read analytics: ask the agent, run the script, or POST the API.**
 > The agent understands plain-English asks and calls this same metrics API for you,
 > rendering a chart ([agent prompt](helix-agent-prompt.md)); the runnable
 > [`scripts/query-analytics.sh`](scripts/query-analytics.sh) prints the headline
-> views; and everything below is the raw API. All queries here were run against a
-> live gateway.
+> views; and everything below is the raw API.
 
 ---
 

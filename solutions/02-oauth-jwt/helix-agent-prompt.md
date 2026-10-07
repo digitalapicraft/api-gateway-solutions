@@ -1,9 +1,16 @@
 # Agent-mode prompt — OAuth 2.0 with gateway-issued JWTs
 
-Paste this to the Helix Agent as one message, replacing the `{{...}}` values. Why
-it is worded this way, what the agent adds on its own, and what to check before
-you trust it are in the
-[README](README.md#build-it-with-the-helix-agent).
+> [Overview](README.md) · [Business need](business-need.md) · [Architecture](architecture.md) · [Guides](guides.md) · **Agent prompt** · [Tests](tests.md) · [API reference](api-reference.md)
+
+---
+
+Paste this to the Helix Agent as one message, replacing the `{{...}}` values. It
+builds and deploys the whole solution, credentials included.
+
+Before you trust the result, check that the signing secret is a real random value
+rather than a placeholder, and read the stored routes back. What to look for, and
+what the agent decides on its own, is in
+[Build it with the Helix Agent](guides.md#build-it-with-the-helix-agent).
 
 ## Prompt
 
