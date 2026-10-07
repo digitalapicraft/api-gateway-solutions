@@ -37,7 +37,7 @@
 #   GATEWAY=https://<YOUR_GATEWAY_HOST> ACCESS_TOKEN=<paste> ./verify.sh
 #
 # Optional:
-#   API_PATH            default /posts
+#   API_PATH            default /albums
 #   TOKEN_AUDIENCE      audience parameter for the token request (see above)
 #   OTHER_ISSUER_TOKEN  a valid token from a DIFFERENT authorization server;
 #                       enables case 7, the issuer-pinning check
@@ -55,7 +55,7 @@
 set -uo pipefail
 
 GATEWAY="${GATEWAY:?set GATEWAY to the gateway base URL, e.g. https://<YOUR_GATEWAY_HOST>}"
-API_PATH="${API_PATH:-/posts}"
+API_PATH="${API_PATH:-/albums}"
 ACCESS_TOKEN="${ACCESS_TOKEN:-}"
 OKTA_TOKEN_URL="${OKTA_TOKEN_URL:-}"
 OKTA_CLIENT_ID="${OKTA_CLIENT_ID:-}"

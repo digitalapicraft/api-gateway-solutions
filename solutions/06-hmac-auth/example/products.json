@@ -12,8 +12,8 @@
   "products": [
     {
       "name": "partner-events",
-      "displayName": "Partner Events API",
-      "description": "Signed access to the Partner Events API. One app per partner integration, each with its own key_id and secret_key, so a compromised secret is rotated for one partner rather than all of them.",
+      "displayName": "Partner Albums API",
+      "description": "Signed access to the Partner Albums API. One app per partner integration, each with its own key_id and secret_key, so a compromised secret is rotated for one partner rather than all of them.",
       "apiIds": ["<API_ID>"],
       "authMethods": ["hmac-auth"],
       "quota": { "limit": 10000, "interval": 1, "interval_unit": "hour" }

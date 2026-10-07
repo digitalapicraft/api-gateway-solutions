@@ -10,7 +10,7 @@ crossing the wire — and binds the proof to one request's method, path and body
 | **Difficulty** | 🟢 Beginner. One API, one product, one app, a public upstream |
 | **Needs** | An org whose build includes **`hmac-auth`** · one upstream. The upstream here is the public jsonplaceholder, so no backend of your own. |
 | **Plugins** | `hmac-auth` · `request-id` |
-| **Build it with** | 🤖 **[the Agent](helix-agent-prompt.md)** — recommended · or import [`example/api-spec.yaml`](example/api-spec.yaml) |
+| **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`example/api-spec.yaml`](example/api-spec.yaml) |
 | **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](example/) · ✅ [Products](example/products.json) · ✅ [Tests](tests/) · ✅ [Manifest](solution.yaml) |
 
 ---
@@ -44,24 +44,44 @@ never moves.
 
 ## Business need
 
-Accept traffic from partners, devices and webhook senders in a way that survives
-the credential being observed, and that detects a payload altered in transit —
-without a client-side release to rotate anything, and without the backend
-learning about authentication at all.
+The thirty-second version: [`business-need.md`](business-need.md).
 
-- **A captured request is worth one request.** The signature covers that method,
-  that path, that body, and a timestamp. Replaying it after `clock_skew` seconds
-  fails; altering any part of it fails immediately.
-- **The secret is never transmitted, so it cannot be captured in transit.** The
-  exposure surface shrinks from "every request, forever" to "the two places the
-  secret is stored".
-- **Per-partner blast radius.** One app per integration means one `key_id` and
-  one `secret_key` per integration, rotated independently.
-- **It is what the other side already built.** Stripe, GitHub, Shopify, Slack and
-  Twilio all sign their webhooks. Partners integrating with you have written this
-  client before.
+| | Bearer credential | Signed request |
+|---|---|---|
+| **Secret on the wire** | Every request | Never |
+| **A captured request yields** | The credential — reusable forever | One signature — valid for that request, until `clock_skew` |
+| **Payload integrity** | Not addressed | Bound by the signature |
+| **Detects a modified body** | No | Yes, before the upstream is contacted |
+| **Backend code changed** | — | None. It never learns about authentication |
+| **What one leak exposes** | Every request that credential can make | One request, for at most `clock_skew` seconds |
+| **Per-partner isolation** | Often one shared key | One app, one `key_id`/`secret_key`, rotated alone |
+| **Cost to the caller** | Send a header | Canonicalise, hash, HMAC on every call |
 
-Quantified in [business-need.md](business-need.md). No ROI figures are invented here.
+The mechanism that matters commercially: a bearer token answers *"I am allowed to
+call this API"*; a signature answers *"I, holder of this secret, composed **this
+exact request** at **this time**"*. The second is strictly stronger, and it is the
+one an auditor is actually asking for. Three things follow: interception stops
+being credential theft, tampering is detected at the edge before anything acts on
+it, and the exposure window collapses to `clock_skew` seconds — without a token
+TTL to trade against re-authentication, because there is none.
+
+What this does **not** buy you:
+
+- **Authorization.** Who called and that the message is intact — not what they
+  may do.
+- **Replay protection inside the window.** A captured request replays until its
+  `Date` falls outside `clock_skew`. The plugin has no nonce; closing it needs
+  idempotency upstream.
+- **Non-repudiation.** The secret is symmetric, so the verifier can forge what it
+  verifies.
+- **A browser story.** A secret shipped to a device a user controls is not a
+  secret — use [02](../02-oauth-jwt/) or [05](../05-okta-jwt/).
+- **Credential expiry**, or a free ride for the caller. A `secret_key` is valid
+  until rotated, and the partner carries the canonicalisation and debugging cost —
+  budget for the support load on the first two or three integrations.
+
+No ROI figure is claimed anywhere in this package. What is quantified is the
+mechanism — what crosses the wire, and for how long a capture is useful.
 
 ## Signature or token — decide this first
 
@@ -107,9 +127,9 @@ sequenceDiagram
     participant UP as Upstream
 
     Note over C: secret_key never leaves here
-    C->>C: build signing base<br/>keyId + "POST /posts" + date + digest
+    C->>C: build signing base<br/>keyId + "POST /albums" + date + digest
     C->>C: signature = HMAC-SHA256(secret_key, base)
-    C->>GW: POST /posts + Date + Digest + Authorization: Signature ...
+    C->>GW: POST /albums + Date + Digest + Authorization: Signature ...
 
     Note over GW: rewrite phase, priority 2530
     GW->>GW: 1. headers= must contain every signed_headers entry
@@ -118,7 +138,7 @@ sequenceDiagram
     GW->>GW: 4. rehash the received body, compare to Digest
 
     alt all four hold
-        GW->>UP: POST /posts (Authorization stripped)
+        GW->>UP: POST /albums (Authorization stripped)
         UP-->>GW: 201
         GW-->>C: 201 with the upstream body
     else any one fails
@@ -145,7 +165,7 @@ Join these with `\n`, **and terminate with a final `\n`**:
 
 ```text
 demo-key\n
-POST /posts\n
+POST /albums\n
 date: Wed, 16 Sep 2026 11:12:37 GMT\n
 digest: SHA-256=bSNUn7HvRElwnpOx6RaAXbApBPNta7M0chZgmYaCEFI=\n
 ```
@@ -184,18 +204,18 @@ example below instead of reaching for a library.
 ### Worked example
 
 ```bash
-BODY='{"title":"order-created","body":"sku-1","userId":1}'
+BODY='{"title":"order-created","userId":1}'
 DATE=$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S GMT')
 DIGEST="SHA-256=$(printf '%s' "$BODY" | openssl dgst -sha256 -binary | openssl base64 -A)"
 
 # printf is piped straight into openssl on purpose: the signing base ends with a
 # newline, and $( ) strips trailing newlines. Capturing the base in a variable
 # first signs a different string, and every request 401s.
-SIGNATURE=$(printf '%s\nPOST /posts\ndate: %s\ndigest: %s\n' \
+SIGNATURE=$(printf '%s\nPOST /albums\ndate: %s\ndigest: %s\n' \
               "$KEY_ID" "$DATE" "$DIGEST" \
             | openssl dgst -sha256 -hmac "$SECRET_KEY" -binary | openssl base64 -A)
 
-curl -i -X POST "https://<YOUR_GATEWAY_HOST>/posts" \
+curl -i -X POST "https://<YOUR_GATEWAY_HOST>/albums" \
   -H 'Content-Type: application/json' \
   -H "Date: $DATE" -H "Digest: $DIGEST" \
   -H "Authorization: Signature keyId=\"$KEY_ID\",algorithm=\"hmac-sha256\",headers=\"@request-target date digest\",signature=\"$SIGNATURE\"" \
@@ -205,10 +225,155 @@ curl -i -X POST "https://<YOUR_GATEWAY_HOST>/posts" \
 [`example/verify.sh`](example/verify.sh) contains the same construction as a
 reusable shell function, handling both the with-digest and no-digest signed sets.
 
-## Build it with the Agent
+## Build it with the Helix Agent
 
-See [helix-agent-prompt.md](helix-agent-prompt.md) for the step-by-step prompts,
-verified on the default agent model.
+Recommended path, about twenty minutes. The whole build is **one prompt** —
+[`helix-agent-prompt.md`](helix-agent-prompt.md). Paste it as a single message and
+replace the `{{...}}` values.
+
+It goes all the way: the API and its two routes, signing on both, then a
+developer, a product and an app whose key id and secret you sign with. Then send
+one signed request using the [worked example](#worked-example) — or ask for a
+script, the last entry under [Variations](#variations).
+[AGENT-GUIDE.md](../../AGENT-GUIDE.md) carries the standing rules the prompt
+assumes.
+
+> **This prompt has not been driven against a live agent in its current wording.**
+> The two-step, field-by-field prompt it replaces was, on 2026-09-21 — see
+> [Validation status](#validation-status). The spec-import path below is the
+> deterministic one; if you take the agent path, the checks in this callout are
+> how you find out whether it worked.
+>
+> **Check what was stored, not what the agent said.** Read the revision back.
+> Each route should carry `hmac-auth` with **`signed_headers` set** —
+> `@request-target`, `date`, `digest` on `POST /albums` with
+> `validate_request_body: true`; `@request-target`, `date` on the `GET`. A route
+> with `hmac-auth` and no `signed_headers` validates, deploys and accepts signed
+> requests, and is wide open. The product's `authMethods` should name `hmac-auth`.
+
+### Why the prompt is worded the way it is
+
+It names no plugin, no field and no secret. Ask for an outcome and the agent reads
+the real `hmac-auth` schema your org ships. One sentence in it is a guard, phrased
+as an outcome, and it is the reason the package is secure at all:
+
+- **"Each route decides what the signature must cover, not the caller."** This is
+  `signed_headers`, and it has no default. Omitted, the *client* chooses what its
+  own signature covers — a signature over nothing but its `keyId` then
+  authenticates any body on any path, indefinitely. It is the most damaging wrong
+  turn in this package and nothing about it looks wrong: it imports, dry-runs,
+  deploys and accepts properly signed requests. See [Configuration](#configuration).
+- **"Called @request-target, not (request-target)."** The one name the prompt
+  spells out, because the agent gets it wrong unprompted. `(request-target)` is
+  the draft-cavage spelling; this plugin treats it as an ordinary header name,
+  finds no such header, and **leaves it out of the signing base**. The route then
+  rejects correct clients *and* accepts a signature that covers neither method nor
+  path — verified on an agent-built route, where one `GET` signature returned 200
+  on two different paths. It deploys cleanly.
+- **`/albums/:albumId`, not `/albums/{albumId}`.** The gateway's route syntax is
+  `/:param`. Spec import rewrites `{albumId}` for you; a route the agent writes
+  directly is not rewritten, never matches, and returns `404 Route Not Found`.
+- **The two routes get different lists, spelled out.** `GET` has no body, so it has
+  no digest to bind. Said once for both routes, an agent hoists one block API-wide
+  and every bodyless `GET` must then send the digest of an empty string or 401.
+- **"Rejected if the body doesn't match its digest."** That is
+  `validate_request_body`. Without it the `Digest` header is signed but never
+  compared to the body that actually arrived.
+- **"An app that signs its requests"**, in step 3. The product's `authMethods`
+  defaults to `["helix-auth"]`, and an app under a product that doesn't name
+  `hmac-auth` is refused with an unhelpful error about an unsupported auth plugin.
+  Stating what the app is for is what leads the agent to the right product.
+- **Step 3 asks for a product, not just a developer and an app** — the same reason
+  as [02](../02-oauth-jwt/): an app subscribes to an API *through* a product, and
+  here creating the app is also what mints the key id and secret.
+
+What the prompt no longer carries, and why: `clock_skew`, `allowed_algorithms`,
+`hide_credentials`, `realm` and `request-id` by name; the warning against
+`request-validation` (nothing here asks for body validation, so nothing invites
+it — it lives in the failure table below); "no secret on the route"; the
+`plugins`-map and `x-helix-gateway` instructions; and a signing script. On
+[01](../01-api-products/) and [02](../02-oauth-jwt/), removing guards of that
+kind made the result better rather than worse. That is a reading applied here,
+**not a measurement on this package** — check the revision.
+
+### What the agent decides for you
+
+Whatever the prompt leaves open, the agent picks. Compare what it stored against
+this package's spec, which is what was deployed and tested:
+
+| | The prompt says | This package's spec |
+|---|---|---|
+| Clock skew | 5 minutes | `clock_skew: 300` |
+| Algorithms | nothing | `hmac-sha256`, `hmac-sha512` |
+| Signature headers forwarded upstream | nothing | stripped — `hide_credentials: true` |
+| `WWW-Authenticate` realm | nothing | `partner-events` |
+| Correlation id | nothing | `request-id`, API-wide, `X-Request-Id` |
+| Product quota | nothing | 10,000 per hour — not enforced; there is no `api-product-enforcer` on the routes |
+
+None of these decides whether the routes are secure; `signed_headers` does.
+
+## Variations
+
+Follow-ups for the same session, once the build above is standing. Same register
+as the prompt — say what you want to be true.
+
+**Tighter replay window**
+```text
+Cut the allowed clock skew to 60 seconds on both routes. Our callers are servers
+with NTP, so a one-minute window is realistic.
+```
+
+**Fail safe instead of per route**
+```text
+Make signing API-wide with the POST route's rules, so any route I add later is
+signed by default. Tell me the exact Digest header my GET callers must now send
+for an empty body.
+```
+The answer should be `SHA-256=47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=`.
+
+**Meter the partners as well**
+```text
+Enforce the product's quota per app on both routes. If the quota can't identify
+the app from a signed request, tell me rather than working around it.
+```
+Tested, and it composes — see [Limitations](#limitations).
+
+**Let unsigned reads through, attributed**
+```text
+Allow unsigned GET /albums/{albumId} calls, attributed to {{anonymous_consumer_name}},
+while POST /albums stays strictly signed.
+```
+
+**Prove it with a script**
+```text
+Write me a bash script that signs and sends requests with the app's key id and
+secret, showing in order: no signature → 401; a correct signature → 201; the same
+headers with a modified body → 401; a Date 20 minutes old → 401; a signature that
+leaves the digest out of what it covers → 401.
+```
+Check the script pipes `printf` straight into `openssl` — `$( )` strips the
+signing base's trailing newline, and every request then 401s with a signature that
+looks right. See [the signing base](#the-signing-base).
+
+## When the agent goes wrong
+
+**Read the stored revision before you trust any of it.** The most dangerous
+failure here — no `signed_headers` — succeeds at every step the agent shows you.
+
+| Symptom | Cause |
+|---|---|
+| A correctly signed request 401s, but one listing `(request-target)` is accepted | `signed_headers` says `(request-target)`, the draft-cavage spelling. It is skipped when the gateway builds the base, so the path is not signed at all. Change every entry to `@request-target` and check a signature for one path is rejected on another. |
+| The read route returns `404 Route Not Found` | It was written as `/albums/{albumId}`. Live routes take `/albums/:albumId`. |
+| A request signed over only `keyId` is accepted | `signed_headers` was dropped. The client is choosing what it signs. Ask for each route to fix what the signature must cover, and read it back. |
+| A signature that looks correct always 401s | The signing base lost its trailing newline — `$( )` strips it. Pipe `printf` straight into `openssl`. |
+| Every bodyless GET 401s | `hmac-auth` was hoisted to the API level, so the GET now requires a digest. |
+| A modified body is accepted | `validate_request_body` is off on `POST /albums`, or `digest` is missing from its `signed_headers`. |
+| The digest stops matching after a "hardening" change | `request-validation` landed on the route. It runs earlier in the same phase and re-encodes the body before `hmac-auth` hashes it. |
+| App creation fails on an unsupported auth plugin | The product's `authMethods` is still the `["helix-auth"]` default. |
+| The agent invents a `secret_key` or `signing_secret` field on the route | There is none — the route schema has no secret field. The app credential carries it. |
+| The routes exist with **no plugins**, at exit 0 | The agent wrapped them in `x-helix-gateway` inside the live route object, which a live route silently discards. Ask for a plain top-level `plugins` map and read the revision back; if it will not, import the spec. |
+| `"stream closed with reason: error"` mid-run | Seen on 2026-09-21: the config had landed correctly before the session died on a later step. Read the revision back to see what actually landed, then resume from there. |
+| You need the secret again | It's returned once and stored encrypted. Rotate instead. |
 
 ## Install it directly
 
@@ -264,8 +429,8 @@ Two routes, two different signed sets, and that is the point.
 
 | Route | `signed_headers` | `validate_request_body` | Why |
 |---|---|---|---|
-| `POST /posts` | `@request-target`, `date`, `digest` | `true` | There is a body, so the signature must cover it |
-| `GET /posts/{postId}` | `@request-target`, `date` | `false` | No body. Requiring a digest of the empty string is ceremony, not security |
+| `POST /albums` | `@request-target`, `date`, `digest` | `true` | There is a body, so the signature must cover it |
+| `GET /albums/{albumId}` | `@request-target`, `date` | `false` | No body. Requiring a digest of the empty string is ceremony, not security |
 
 `hmac-auth` is therefore **per route, not at the document root** — a single root
 block cannot express both. The cost is real: **a route added later with no
@@ -354,6 +519,14 @@ Full plan, including two manual cases (a cavage client, and removing
   strips trailing newlines. Pipe `printf` straight into `openssl`; never capture
   the base in a variable first. This is the single most common cause of "my
   signature is definitely right and I get 401".
+- **`validate_request_body` checks the digest matches the body — not that there
+  is a body.** A `POST` with no body and the empty-body digest
+  (`SHA-256=47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=`) passes and reaches the
+  upstream; a digest for a body that was not sent is rejected. Requiring a body is
+  schema validation, and `request-validation` breaks the digest here (below).
+- **A bodyless `GET` needs no `Digest`** unless the route's `signed_headers` lists
+  `digest` — or the caller lists it in `headers=`, which makes the gateway expect
+  one. Copying the `POST` signing code to a `GET` is the usual way that happens.
 - **Off-the-shelf draft-cavage libraries do not interoperate.** Three deliberate
   differences, each sufficient on its own. See the table above.
 - **`request-validation` cannot share a route with `validate_request_body`.** It
@@ -370,7 +543,7 @@ Full plan, including two manual cases (a cavage client, and removing
   from the signing base rather than erroring. `signed_headers` catches the cases
   you require; anything else you list is on you.
 - **`@request-target` includes the query string.** A signature for
-  `/posts?page=1` does not verify against `/posts?page=2`, and any proxy that
+  `/albums?page=1` does not verify against `/albums?page=2`, and any proxy that
   normalises, reorders or appends query parameters between the client and the
   gateway breaks every signature it touches.
 - **Clock drift is a real outage.** `clock_skew` is 300 seconds here. A device
@@ -434,14 +607,14 @@ supported configuration in this package and is not covered by its validation.
 |---|---|---|
 | Configuration generated | **YES** | [`example/api-spec.yaml`](example/api-spec.yaml) |
 | Local validation | **PASS** | Structural review of the spec and tests |
-| Gateway dry-run | **PASS** | `{"success":true,"message":"Dry-run validation successful"}` |
-| Gateway deployed | **DEPLOYED** | Revision ACTIVE on a temporary test API, since torn down |
-| Functional tests | **PASS (8/8)** | `example/verify.sh` exit 0 — including the weak-signed-set and replay cases |
-| Agent-mode run | **PASS (config), run ended on a tool-call defect** (2026-09-21) | See below |
+| Gateway dry-run | **PASS on 1.0.0** | `{"success":true,"message":"Dry-run validation successful"}` — the `/posts` routes. Not re-run on 1.1.0 |
+| Gateway deployed | **DEPLOYED on 1.0.0** | Revision ACTIVE on a temporary test API, since torn down. 1.1.0 not imported |
+| Functional tests | **PASS (8/8), twice** | 1.0.0: `example/verify.sh` exit 0 against this spec, imported. 2026-10-07: the 1.1.0 `verify.sh`, unmodified, exit 0 against `POST /albums` and `GET /albums/:albumId` on a second gateway — an **agent-built** route with the same `signed_headers` and `validate_request_body`, not this spec imported |
+| Agent-mode run | **PASS (config) for the previous prompt**, run ended on a tool-call defect (2026-09-21) | That prompt was two steps naming every field; **the current outcome-worded prompt has not been driven yet** |
 
 Overall: **READY.** Every claim was exercised against a deployed route with a real app credential: the signing base is the one the gateway builds, the digest binds the body, `clock_skew`/`signed_headers` are enforced, a wrong secret is rejected, `@request-target` binds the path, and the replay case passed by being **accepted** — the documented limitation, demonstrated.
 
-**The agent-mode run itself didn't finish cleanly:** correct config, confirmed by reading the revision back, but the session then hit `"stream closed with reason: error"` — see [`helix-agent-prompt.md`](helix-agent-prompt.md) § *When it goes wrong*.
+**The agent-mode run itself didn't finish cleanly:** correct config, confirmed by reading the revision back, but the session then hit `"stream closed with reason: error"` — see [When the agent goes wrong](#when-the-agent-goes-wrong).
 
 ## Related solutions
 

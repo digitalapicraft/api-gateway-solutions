@@ -1,89 +1,37 @@
-# Business need — bringing APIs under the identity provider you already own
+# Verify Okta-issued JWTs at the API gateway
 
-## The situation
+> Your company already uses Okta to sign people and apps in. Your APIs don't —
+> they still check a fixed key that someone emailed out years ago, never expires,
+> and is hard to take back. Everyone agrees the APIs should check Okta's tokens
+> instead. It never gets done, because every service would need its own code to
+> do the checking.
+>
+> **The gateway can check Okta's tokens for every API at once, and no service has
+> to change.**
 
-The organisation runs Okta. Joiners, movers and leavers flow through it. Access
-reviews are run against it. Auditors are shown it.
+- **How long a stolen credential works: forever → minutes.** Okta hands out
+  short-lived tokens on request, and they expire by themselves.
+- **Cutting off a caller: track down every copy of the key → switch the app off in
+  Okta.** One place decides who can call your APIs.
+- **Code that checks tokens: one copy per service → one place, the gateway.** No
+  service is changed.
 
-The APIs are not in it. They authenticate with static keys handed out by email or
-ticket, held in wikis, config files, Postman collections and a partner's CI
-system. Nobody can say with confidence how many are live, who holds them, or
-which ones stopped being needed in 2023.
+Checking the token's signature is the easy part. The real choice is what else to
+check, because out of the box the gateway behaves as if a person were logging in
+through a browser, not a program calling an API:
 
-The gap is not ideological. Every team agrees the APIs should check Okta tokens.
-It requires JWKS fetching, key caching, signature verification, issuer and expiry
-checking — in every service, in every language, maintained forever. So it is
-scheduled, deferred, and scheduled again.
-
-## What changes
-
-| | Before | After |
+| What to check | Out of the box | What an API needs |
 |---|---|---|
-| Who authenticates the caller | each service, separately | the gateway, once |
-| Credential | a static key with no expiry | an Okta token measured in minutes |
-| Deprovisioning | find every copy of the key | disable the app in Okta |
-| Adding a caller | issue and email a key | an Okta assignment |
-| Access review evidence | a spreadsheet | the existing Okta review |
-| Rotating a signing key | not a concept | Okta's schedule, absorbed by the gateway |
-| Code to change to adopt it | every service | none |
-| Where auth bugs live | N services, N implementations | one configuration block |
+| A call with no token | sent to Okta's login page | turned away with a 401 |
+| Whose tokens to trust | any that pass the signature check, whichever server issued them | only your Okta server's |
+| That the keys really come from Okta | not checked | checked, and refreshed hourly |
+| Which API the token was meant for | **never checked** — a token for another of your APIs gets in | tell them apart with scopes |
 
-## The mechanism that matters
+It checks who is calling. It doesn't decide what they may do, count their calls,
+or cancel a token before it expires — and your gateway needs the `openid-connect`
+plugin. [The full comparison, how it works, and what this does not buy you are in
+the README](README.md#business-need).
 
-Strip away the standards vocabulary and one thing changes:
-
-> **The credential stops being a secret you distribute and starts being a token
-> the identity provider mints on demand.**
-
-Everything else follows. You cannot lose track of a token that expires in an
-hour. You cannot fail to deprovision a caller whose tokens stop being issued. You
-do not have to find every copy of a thing that was never copied.
-
-## Business outcomes
-
-- **Deprovisioning becomes real.** Today the honest answer to "is that 2021 key
-  still live?" is usually "probably". After, revoking access is an Okta action
-  bounded by the token lifetime.
-- **Access review covers the API estate.** The APIs join the review that already
-  runs, rather than needing a separate one that does not exist.
-- **The static-key backlog can actually be closed.** Retiring keys stops being
-  per-service work and becomes one gateway change.
-- **No backend release.** The services do not learn that authentication changed.
-- **Crypto is not written N times.** Signature verification, JWKS caching and
-  clock handling are configuration, not code you own and patch.
-
-## What this does not buy you
-
-No numbers are claimed here. The costs above are the ones teams describe, not
-measured figures, and this document quantifies the *mechanism* — credential
-lifetime, number of implementations, deprovisioning path — rather than inventing
-an ROI.
-
-Specifically out of scope:
-
-- **Authorization.** The token proves identity. It does not decide which caller
-  may do what. That is `required_scopes` or a policy engine, and it is a separate
-  piece of work.
-- **Metering and quotas.** An Okta-issued token does not resolve an app
-  credential, so per-caller quotas do not follow from this. That is solution 01's
-  model, and the two do not compose for free.
-- **Revocation before expiry.** Disabling a caller in Okta stops new tokens. The
-  one it already holds stays valid until it expires. Closing that gap means
-  introspection, which puts the identity provider on the request path and changes
-  the availability and latency story.
-- **End-user identity, if you use client credentials.** That grant authenticates
-  an application, not a person.
-
-## Success criteria
-
-You'd call this done when:
-
-- A call with no token returns **401** — and specifically not a 302 to a login
-  page (`verify.sh` case 1).
-- A token minted by Okta seconds earlier returns **200** (case 3).
-- A token with a tampered signature returns **401** (case 4).
-- A token from a *different* Okta authorization server returns **401** (case 7).
-  This is the one that proves the token is specific to this API.
-- No service in the estate has had a line of code changed.
-- A caller disabled in Okta stops working within one token lifetime, and someone
-  has actually observed that rather than assumed it.
+*Also searched as: Okta JWT validation at the API gateway · verify external IdP
+tokens · JWKS signature verification · OIDC bearer-only API auth · Auth0 / Entra ID
+/ Keycloak token verification · replace API keys with Okta · bring APIs under SSO.*

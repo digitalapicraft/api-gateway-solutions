@@ -38,7 +38,7 @@ them.
 ┌──────────┐            ┌────────────────────────┐          ┌──────────┐
 │  CLIENT  │            │        GATEWAY         │          │ UPSTREAM │
 └────┬─────┘            └───────────┬────────────┘          └────┬─────┘
-     │  GET /posts                  │                            │
+     │  GET /albums                 │                            │
      │  authorization: Bearer <jwt> │                            │
      ├─────────────────────────────►│                            │
      │                              │ ACCESS PHASE               │

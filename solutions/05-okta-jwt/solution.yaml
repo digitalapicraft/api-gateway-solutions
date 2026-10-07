@@ -6,7 +6,7 @@
 solution:
   name: OAuth with Okta — verify the token, don't issue it
   slug: 05-okta-jwt
-  version: 1.0.0
+  version: 1.1.0   # 1.1.0: routes moved from /posts* to GET/POST /albums to match the agent prompt; auth block unchanged
   category:
     - Security & Access
   tags: [oauth2, oidc, okta, jwt, jwks, rs256, external-idp, openid-connect, authentication]
@@ -66,9 +66,9 @@ implementation:
 validation:
   # Stage statuses only. What was checked and what happened is folded into the README/Changelog directly.
   local: PASS
-  gateway_dry_run: PASS
-  deployment: DEPLOYED
-  functional_test: PASS
+  gateway_dry_run: PASS      # on 1.0.0 (/posts routes); not re-run on 1.1.0
+  deployment: DEPLOYED       # on 1.0.0; not re-run on 1.1.0
+  functional_test: PASS      # 7/7 on 1.0.0; verify.sh not yet run against 1.1.0
   record: README.md § Validation status
 
 artifacts:
@@ -79,7 +79,7 @@ artifacts:
   tests: [tests/test-plan.yaml, tests/requests/, tests/expected/]
 
 assumptions:
-  - API name is "Partner Posts API" and the protected paths are /posts* (illustrative — replace with yours).
+  - API name is "Partner Albums API" and the protected paths are GET and POST /albums (illustrative — replace with yours).
   - The target org's build includes openid-connect. This is NOT universal — see limitations.
   - The Okta authorization server issues JWT access tokens, not opaque ones.
   - Callers obtain tokens from Okta directly; the gateway exposes no token endpoint.
