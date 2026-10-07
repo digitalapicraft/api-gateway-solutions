@@ -1,22 +1,21 @@
 # Agent-mode prompt — HTTP to Kafka ingest
 
-Two steps, from a **fresh, empty org** to a route that validates an event, answers
-202 itself, and publishes the body to Kafka — with no backend service behind it.
-
-**Create the Kafka topic first.** Auto-creation drops the message that triggers
-it, and the caller still gets a 202.
-
-Replace the `{{...}}` values. [AGENT-GUIDE.md](../../AGENT-GUIDE.md) carries the
-standing rules these prompts assume.
+> [Overview](README.md) · [Business need](business-need.md) · [Architecture](architecture.md) · [Guides](guides.md) · **Agent prompt** · [Tests](tests.md) · [API reference](api-reference.md)
 
 ---
 
-## Step 1 — create the ingest route
+**Create the Kafka topic first** — auto-creation drops the message that triggers
+it, and the caller still gets a 202. Then paste step 1, replacing the `{{...}}`
+values and leaving the route JSON exactly as written, and paste step 2 once the
+revision has been read back.
 
-This is the one step in the library that hands the agent literal JSON rather than
-an outcome. Asked to compose this route from prose, the agent's tool-call
-serialiser corrupts its own arguments and writes nothing — reproducibly, 5 runs
-out of 5. Handing it the object to copy is the form that was verified to work.
+The optional prompts at the end are independent of each other; paste one after
+step 2 only if you need it. See [Guides](guides.md#build-it-with-the-helix-agent)
+if something looks off.
+
+## Prompt
+
+### Step 1 — create the ingest route
 
 ```text
 Create a REST API "{{api_name}}" with a single route POST /events that
@@ -86,13 +85,7 @@ Dry-run it, then read the revision back so I can see which plugins actually
 landed. Wait before deploying.
 ```
 
-**The schema here is deliberately shallow** — the three fields are required but
-their types aren't constrained. That is the most the agent path can carry on this
-build (see the failure table below). For the full property-level schema in
-[`example/api-spec.yaml`](example/api-spec.yaml), import the spec instead. Both
-routes end at the same config.
-
-## Step 2 — prove the edge contract
+### Step 2 — prove the edge contract
 
 ```text
 Give me curl commands showing, in order: a valid event → 202 {"accepted":true}
@@ -107,34 +100,8 @@ the log phase, after the response is flushed, so a 202 comes back whether or not
 the broker is reachable.
 ```
 
----
+### Optional — add signing (it replaces request-validation)
 
-## Why it's shaped this way
-
-- **The literal JSON route object.** See the failure table — composing it from
-  prose fails reproducibly.
-- **"Bind any upstream".** A model that understands `mocking` short-circuits will
-  conclude no upstream is needed, and the deploy then fails on a missing binding
-  with an error that looks unrelated.
-- **`$apisix_request_id`, not `$request_id`.** The bug this package shipped in its
-  first version. The `request-id` plugin overwrites `$apisix_request_id` with the
-  UUID the caller sees and never touches `$request_id`, so the obvious variable
-  produces a correlation field that correlates with nothing.
-- **`_meta.filter` on status 202.** Without it `kafka-logger` also runs for the
-  400, and rejected events reach the topic by the back door.
-- **`producer_type: sync`, `required_acks: -1`, `max_retry_count: 3`.** Three
-  defaults chosen for logging rather than producing — async fire-and-forget,
-  leader-only acks, and zero retries. None looks wrong until an event goes missing.
-- **`with_mock_header: false`.** Defaults to true and stamps every response with a
-  header naming the plugin and the gateway version.
-- **No auth in step 1.** An agent told the route is open will helpfully secure it,
-  and `hmac-auth`'s body validation collides with `request-validation`.
-- **"Don't tell me it reached Kafka based on the 202."** A model summarising a
-  successful test will write "the event was published". It doesn't know that.
-
-## Tweak knobs
-
-**Add signing** — it replaces `request-validation`
 ```text
 Add hmac-auth to POST /events with signed_headers ["@request-target","date",
 "digest"], validate_request_body true, clock_skew 300, allowed_algorithms
@@ -149,13 +116,15 @@ Then create a product with authMethods ["hmac-auth"], a developer, and an app wi
 plugins {"hmac-auth": {}} so I get a key_id and secret_key.
 ```
 
-**Identity without touching the body** — keeps `request-validation`
+### Optional — identity without touching the body (keeps request-validation)
+
 ```text
 Instead of hmac-auth, add helix-auth in validate mode so callers are identified by
 their app credential. It doesn't touch the body, so request-validation can stay.
 ```
 
-**A real acknowledgement instead of at-most-once**
+### Optional — a real acknowledgement instead of at-most-once
+
 ```text
 Replace mocking and kafka-logger with a service-callout to our Kafka REST Proxy at
 {{kafka_rest_url}}, access phase, synchronous,
@@ -163,25 +132,10 @@ error_handling.policy fail-close — so the caller gets a 503 when Kafka rejects
 message rather than a 202 it cannot trust.
 ```
 
-**A second event type**
+### Optional — a second event type
+
 ```text
 Add POST /events/telemetry with the same three plugins but kafka_topic
 "{{telemetry_topic}}" and a body_schema whose required list is ["device_id","reading"].
 Keep the body_schema to type and required only — no properties map.
 ```
-
----
-
-## When it goes wrong
-
-Observed on the default agent model against a live org, 2026-09-21, seven runs.
-
-| What you see | What is happening | What to do |
-|---|---|---|
-| `stream closed with reason: error`, and the revision shows **0 routes** | The serialiser emitted malformed JSON for `update_route_spec` and the call never reached the control plane. Nothing was written; the API exists, empty. | Check your route object matches the one above, and keep `properties` out of `body_schema` (next row). |
-| The same error every time, when `body_schema` carries a `properties` map | **Reproducible, not intermittent — 5 of 5.** The nesting depth makes the serialiser transpose its closing delimiters: `…1}}]}}` where `…1}}}]}` is valid, closing the `routeSpec` array before the route object. Removing that one level made the identical prompt succeed. | Use the required-only schema via the agent, or import [`example/api-spec.yaml`](example/api-spec.yaml) for the full one. Spec import is unaffected. |
-| The route deploys, but `plugins` contains `response_status`, `content_type`… as if they were plugin names | The agent dropped the plugin-name level and promoted one plugin's fields into the map. The write succeeds and the dry-run passes; the route carries several nonexistent plugins and none of the real one. | Read the revision back. The prompt states that level explicitly to prevent it. |
-| Success reported, dry-run passes, route has no plugins | The route object carried an `x-helix-gateway` wrapper, which a live route silently discards. | Re-send with `plugins` as a top-level key. |
-
-**Reading the revision back is not optional here.** Three of those four report
-success at every step the agent shows you.

@@ -115,11 +115,12 @@ H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
 
 # 1. Import the spec. It carries helix-auth and api-product-enforcer, and the
 #    import assigns the route a service_id. Keep both ids the response returns.
-curl -s "${H[@]}" -F "file=@example/api-spec.yaml" "$BASE/orgs/$ORG/apis/from-spec"
+curl -s -H "authorization: Bearer $TOKEN" -F "file=@example/api-spec.yaml" \
+  "$BASE/orgs/$ORG/apis/from-spec"     # multipart upload, so no JSON content-type
 # → {"api":{"id":"<API_ID>", ...}, "revision":{"id":"<REVISION_ID>", ...}}
 
-# 2. Import does NOT make the routes live. Create an upstream (no /api prefix on
-#    this one call), bind it to the revision, then deploy the revision.
+# 2. Import does NOT make the routes live. Create an upstream, bind it
+#    to the revision, then deploy the revision.
 curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/envs/<TEST_ENV_ID>/upstreams" \
   -d '{"name":"posts-upstream","specification":{"scheme":"https","nodes":[{"host":"jsonplaceholder.typicode.com","port":443,"weight":1}]}}'
 # → {"id":"<UPSTREAM_ID>", ...}

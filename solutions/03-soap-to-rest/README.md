@@ -1,31 +1,35 @@
-# Solution 03 — Serve a SOAP backend as REST/JSON
+# Solution 03 — SOAP to REST: let partners use JSON while your old system keeps speaking XML
 
-**Partners send JSON. A twenty-year-old system answers. Neither knows about the
-other.**
+> **Overview** · [Business need](business-need.md) · [Architecture](architecture.md) · [Guides](guides.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [API reference](api-reference.md)
 
-> **The mediation was proven round-trip against a real SOAP backend; this exact
-> spec has not been re-deployed since authentication was removed from it.** See
-> *Validation status*. The subtlety that matters: `xml-to-json` is not
-> "bidirectional by default", and a `Content-Type` override on `proxy-rewrite`
-> defeats it. The short version is in *The one thing everybody gets wrong*.
-
-> **You supply the SOAP backend.** Unlike the other solutions, this one can't run
-> on a public sample upstream — SOAP→REST needs a SOAP service. Replace
-> `<SOAP_UPSTREAM_URL>` with your backend and `<SOAP_HANDLER_PATH>` with the path
-> its handler answers on (e.g. `/Service.asmx`, `/soap/endpoint`).
+**In short:** partners send and receive JSON; your SOAP system keeps receiving and
+answering in XML. The gateway converts between the two on every call, so neither
+side changes and you run no adapter service in between.
 
 | | |
 |---|---|
-| **Setup time** | ~25 minutes |
-| **Difficulty** | 🟡 Intermediate |
-| **Needs** | **Your own SOAP endpoint** reachable from the gateway (this is a SOAP use case — a REST placeholder like jsonplaceholder can't stand in) and its handler path · `xml-to-json` in your org · a **test** environment |
-| **Plugins** | `xml-to-json` (`transform_request` + `transform_response`) · `proxy-rewrite` · `request-id` · `cors` |
-| **Build it with** | 🤖 **[the Helix Agent](helix-agent-prompt.md)** — recommended · or import [`example/api-spec.yaml`](example/api-spec.yaml) |
-| **Assets** | ✅ [Agent prompt](helix-agent-prompt.md) · ✅ [Architecture](architecture.md) · ✅ [Business need](business-need.md) · ✅ [Spec](example/) · ✅ [Tests](tests/) · ✅ [Manifest](solution.yaml) |
+| **Time to try it** | About 25 minutes |
+| **Difficulty** | 🟡 Intermediate — no coding, but you need your own SOAP service |
+| **What you'll need** | A free test account, a SOAP service the gateway can reach, and the path its handler answers on (for example `/Service.asmx`). A public sample backend can't stand in here — this needs real SOAP. |
 
 ---
 
-## The problem
+## What is SOAP-to-REST mediation?
+
+**SOAP** is an older style of web service: requests and responses are XML
+documents wrapped in an "envelope", described by a WSDL file. **REST/JSON** is
+what most developers expect today: a simple URL and a JSON body.
+
+**Mediation** means the gateway translates between the two in the middle. A
+partner sends JSON to a REST-style route. The gateway turns that JSON into XML,
+sends it to your SOAP service on its real path, then turns the XML answer back
+into JSON on the way out.
+
+It works like an interpreter at a meeting. Each side speaks its own language, and
+neither has to learn the other's. One call in means exactly one call to the SOAP
+service — only the format changes.
+
+## The use case
 
 > *"Our system of record is SOAP. It has been SOAP since 2004, it is correct, it
 > is fast, and it has never lost a transaction. Every fintech partner who wants to
@@ -34,304 +38,43 @@ other.**
 > have four adapters, two of which nobody owns. The alternative is rewriting the
 > system of record, which nobody will sign off, correctly."*
 
-Three bad options, which is why this sits still:
+There are three usual options, and none is good:
 
-1. **Rewrite the backend.** A quarter of engineering, a migration, and a real risk
-   of losing behaviour nobody documented. Nobody signs this off, and they're right
-   not to.
-2. **Write an adapter per partner.** Now you have N services to run, each one a
-   thin translation layer with its own deployment, monitoring, on-call rotation
-   and drift. The fourth one is where you notice the pattern.
-3. **Make partners speak SOAP.** Hand them a WSDL and ask them to construct
-   envelopes. Some will. Most will quietly deprioritise the integration, and
-   you'll never be told that's what happened.
+- **Rewrite the backend.** A big project, a migration, and a real risk of losing
+  behaviour nobody wrote down.
+- **Write an adapter for each partner.** Each one is another service to deploy,
+  monitor and keep in step with the WSDL.
+- **Make partners speak SOAP.** Some will. Most will quietly put the integration
+  at the bottom of their list.
 
-**Root cause:** protocol translation is being treated as application work. It
-isn't — it's a mediation concern, and mediation is what an edge is for. The
-mismatch is between the *wire format* your backend speaks and the one your
-partners speak. Nothing about resolving it requires knowing what a location is.
+## What this solution gives you
 
-## Business need
+- **One REST route**, `POST /locations`, that accepts and returns JSON.
+- **Conversion in both directions** by one plugin: JSON to XML on the way in, XML
+  to JSON on the way out.
+- **A path rewrite**, so partners call a clean route while your SOAP handler keeps
+  its own path.
+- **A tracking id on every call**, so you can match the JSON a partner saw with the
+  XML your system returned.
+- **No change to the SOAP system.** It doesn't know a REST client exists.
 
-The thirty-second version: [`business-need.md`](business-need.md).
+**What it does not include: sign-in.** As shipped, the route is open to anyone who
+can reach the gateway. Add [solution 02](../02-oauth-jwt/) in front of it before
+partners call it — [Variations](guides.md#variations) shows how.
 
-| Dimension | Adapter-per-partner | Mediated at the edge |
-|---|---|---|
-| **New services to operate** | One per integration pattern, each with deploys and on-call | Zero |
-| **Time to onboard a partner** | An adapter project | Create an app; they call the existing endpoint |
-| **Backend risk** | None from the adapter, but the rewrite alternative is severe | None. The SOAP service is byte-for-byte unchanged |
-| **Where the translation lives** | N codebases, drifting | One configuration block |
-| **Auth** | Implemented per adapter, subtly differently each time | Once, at the edge — see [solution 02](../02-oauth-jwt/) |
-| **Observability** | Per-adapter, if someone built it | Every call captured, attributed per app — [solution 04](../04-analytics/) |
+## Benefits
 
-The structural argument: **the number of things you operate stops growing with the
-number of partners you onboard.** That's not a performance claim, it's a topology
-claim, and it's the one that compounds.
+- **No new services to run.** The translation is a setting on a route, not a
+  deployment with its own monitoring and on-call.
+- **Onboarding a partner becomes an app record**, not an adapter project.
+- **Your system of record is untouched**, and its team is not on the critical path
+  for a commercial decision.
+- **One place for the translation**, instead of several adapters that slowly drift
+  apart.
 
-## How a request flows
+## Example
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant P as Partner
-    participant GW as Gateway
-    participant S as SOAP system
-
-    P->>GW: POST /locations, JSON body
-    Note over GW: proxy-rewrite — /locations to the SOAP handler path<br/>do NOT set Content-Type here, it defeats the transform
-    Note over GW: xml-to-json, REQUEST direction<br/>JSON body becomes XML
-    GW->>S: POST the SOAP handler path, text/xml
-    S-->>GW: XML response
-    Note over GW: xml-to-json, RESPONSE direction<br/>XML becomes JSON
-    GW-->>P: 200 application/json
-```
-
-**Nothing authenticates this call.** The route is open to anyone who can reach the
-gateway. That is this package's scope rather than an oversight — identity is
-[solution 02](../02-oauth-jwt/), and § *Variations* composes the two. Put it in
-front of this before partners call it. When you do, it lands in the access phase,
-ahead of both plugins below, so a rejected request costs no transform work.
-
-**One plugin covers both conversions — but neither is on the way you'd assume.**
-`xml-to-json` does the response by default and the request only when you enable
-`transform_request`, and even the response fires only on `Accept: application/json`.
-It is *not* "the XML→JSON one" with a `json-to-xml` counterpart. See the next
-section — this is where the shipped config was wrong.
-
-## The one thing everybody gets wrong
-
-**`xml-to-json` does not transform the request by default, and its response
-transform only fires when the client asks for JSON.** This is the part that cost a
-live debugging session to pin down, so here it is in full — all three points
-verified against a real gateway.
-
-1. **`transform_request` defaults to `false`.** An empty `xml-to-json: {}` block
-   converts the *response* only. Your client's JSON request body sails through to
-   the SOAP handler *as JSON*, and the handler rejects it. You must set
-   `transform_request: true` explicitly.
-
-2. **The response transform is content-negotiated.** It only runs when the client
-   sends `Accept: application/json`. Without that header the upstream XML comes
-   back untouched, as `text/xml`. Your integrators must send the header — tell them.
-
-3. **`proxy-rewrite` must not set `Content-Type`.** It runs at priority 1008,
-   *before* `xml-to-json` at 997. If it rewrites the content type to `text/xml`
-   first, the request body no longer matches the transform's `request_content_types`
-   (default `application/json`) and the request direction silently never fires.
-   Retarget the path in `proxy-rewrite`; let the transform own the content type.
-
-And a myth to retire: **`json-to-xml` is not the request-side counterpart of
-`xml-to-json`.** It is a separate plugin that converts a JSON *upstream response*
-into XML for clients that ask for XML — the opposite problem. You do not add it here.
-
-The corrected block:
-
-```yaml
-proxy-rewrite:
-  uri: <SOAP_HANDLER_PATH>          # path only — no Content-Type override
-
-xml-to-json:
-  transform_request: true     # DEFAULT IS false — the request is not converted without this
-  transform_response: true    # default true, but fires only on Accept: application/json
-```
-
-## Build it with the Helix Agent
-
-The recommended path, and a short one. The build is **one prompt** —
-[`helix-agent-prompt.md`](helix-agent-prompt.md). Paste it as a single message and
-replace the `{{...}}` values.
-
-It builds the mediation and nothing else, and so does
-[`example/api-spec.yaml`](example/api-spec.yaml) — the prompt and the spec
-describe the same API. Identity is [solution 02](../02-oauth-jwt/); add it with
-02's prompt once the mediation is working. Keeping them apart is deliberate: a
-mediation failure and an auth failure look alike from the outside, and the seam
-is where you find out which one broke.
-[AGENT-GUIDE.md](../../AGENT-GUIDE.md) carries the standing rules the prompt
-assumes.
-
-> **Check what was stored, not what the agent said.** Three of the four known
-> agent-mode defects report success at every step the agent shows you — a run can
-> end "success" having deployed a route carrying no plugins at all. Ask for the
-> applied plugins on `/locations` and read them back.
->
-> **A JSON call must come back as JSON with no angle brackets in the body.** A
-> content-type header is a claim; a body with no markup is evidence. Check that
-> before you add anything on top of it.
-
-### Why the prompt is worded the way it is
-
-It names no plugin, no field and no secret, and that is the point. Ask for an
-outcome and the agent reads the real plugin schema your org ships; ask for field
-names and it pattern-matches them from some other gateway's documentation. That
-matters more here than anywhere else in this library, because **`xml-to-json`'s
-schema varies by build more than most** — see § *The one thing everybody gets
-wrong*. Three phrases in it are doing real work:
-
-- **"Neither side changes to make that work."** This is the whole outcome stated
-  as a constraint: partners get JSON, the backend keeps its XML, and no code is
-  written at either end. It leaves the agent to pick the mechanism, which is the
-  part that differs between builds.
-- **"Anything in the JSON shape I wouldn't have designed by hand."** The JSON is
-  **derived** from the XML — `PascalCase` names, vendor prefixes and
-  single-element collections all come through — and those become your public
-  contract the moment a partner integrates against them. Better to hear it now
-  than at the first rename.
-- **"Ask me rather than guessing the handler path or the request field names."**
-  These are the two things the agent cannot know and will otherwise invent. A
-  wrong handler path is a 404 you will chase; wrong field names are an empty
-  `{}` from a handler that looks healthy.
-
-It carries exactly one build-specific guard — **don't set `Content-Type` when you
-rewrite the path** — and that one is there because it was measured, not assumed.
-Without it, a live run put `Content-Type: application/xml` in `proxy-rewrite`,
-which is applied before the body is converted: the request transform never saw a
-JSON body, and the backend was handed JSON it could not parse. The route still
-answered **HTTP 200 with `content-type: application/json` and a JSON body**, so
-nothing looked wrong. See § *Validation status*.
-
-Notably still absent: any instruction about where plugins go, which direction
-needs enabling, or what the `Accept` header does. On 01 and 02, removing guards of
-that kind made the result better rather than worse, and nothing here contradicts
-that — but the Content-Type trap is the one that does not announce itself, which
-is why it stays.
-
-> **Two rounds, not one.** Because the prompt tells the agent to ask rather than
-> guess, a run stops and asks — about the handler path, how your JSON maps to the
-> backend's elements, and what shape you want back. That is the prompt working,
-> not failing. Answer, and it builds. Read the revision back rather than trusting
-> the run: it is also where you confirm nothing set `Content-Type` on the rewrite.
-
-## Variations
-
-Paste any of these as a follow-up in the same session.
-
-**Add the OAuth layer** — this is [solution 02](../02-oauth-jwt/), and the thing
-to do before partners call this API. Expect the deploy to need a clone or an
-undeploy first; an ACTIVE revision rejects edits. Two things that package covers
-and this one does not: the signing secret is a **literal** on this build, so a
-`<ENV:...>` placeholder is used verbatim as the HMAC key; and validation goes on
-`/locations` only, never API-wide, or the token endpoint locks itself out.
-```text
-Add a route POST /oauth/token, so an app can trade its client credentials for a
-token generated by the gateway. Update /locations to validate the token generated
-by this endpoint, and to reject an unauthenticated call before it does any work on
-the body. Then create a developer, a product and an app, and give me the app's
-client id and secret.
-```
-
-**Your envelope is namespaced or attribute-heavy**
-```text
-The upstream XML uses namespaces and puts significant data in attributes, and the
-default transform is flattening them. Show me the namespace and attribute fields
-this plugin actually has, explain what each does to my payload, and let me choose
-before you change anything.
-```
-
-**Single-element collections are breaking partner code**
-```text
-One <Site> gives partners an object, several give an array, and their clients
-break on the single case. Tell me honestly whether the transform can force a
-consistent array, and if it can't, what my options are.
-```
-
-**Reject bad requests at the edge**
-```text
-Validate the body of POST /locations against a JSON Schema derived from the fields
-the handler actually reads, so malformed input is a clean 400 from the gateway
-instead of a 500 from the handler.
-```
-
-**The legacy handler is slow**
-```text
-The SOAP handler regularly takes 8-10 seconds and I'm seeing 504s. Tell me the
-current gateway timeout on this route, what raising it costs me, and whether
-there's a better answer than waiting longer.
-```
-
-**Add a second operation**
-```text
-Add POST /sites proxying to the same upstream but operation {{soap_operation}}, reusing
-the same transform. Keep the routes independent so I can meter them separately
-later.
-```
-
-**Meter the partners**
-```text
-I want to sell access to this API in tiers and enforce the limits per app.
-```
-(That's [solution 01](../01-api-products/).)
-
-**Document it**
-```text
-Write the developer-portal documentation for POST /locations, with real example
-payloads for BOTH a single-result and a multi-result response.
-```
-
-Reading the traffic afterwards is not a follow-up here — that's the metrics API,
-covered in [solution 04](../04-analytics/).
-
-## When the agent goes wrong
-
-| Symptom | Cause |
-|---|---|
-| Handler 500s, but curling it directly works | A second transform plugin is converting the body twice; or a missing `SOAPAction`; or the request element names don't match what the handler reads. |
-| The response is still XML | The client isn't sending `Accept: application/json`, or `proxy-rewrite` is overriding `Content-Type` ahead of the transform. Both were real failures. |
-| XML body with a JSON content-type | The transform is running on the request direction only. Ask for the applied plugins on that route. |
-| 200, a JSON body, and the backend's own "bad input" error inside it | The agent set `Content-Type` in `proxy-rewrite`. It is applied before the body is converted, so the backend received raw JSON. Every outward sign is healthy — 200, `application/json`, well-formed JSON — and the mediation is dead. **Observed on a live run**; see § *Validation status*. |
-| The JSON body is `{}` | The handler returned an empty envelope — usually the request field names don't match its elements. Ask what XML it is actually generating. |
-| 415 from the handler | Do **not** fix this by setting `Content-Type` in `proxy-rewrite` — it runs first and hides the JSON body from the transform. Check whether the handler needs a `SOAPAction` header instead. |
-| 504 on every call | The handler is slower than the gateway timeout. Looks like an outage, isn't. |
-| The agent adds a second plugin for the reverse direction | One plugin covers both directions here. See § *The one thing everybody gets wrong*. |
-| The agent puts a `description` key in a plugin block | Only schema fields plus `_meta` are legal. Move it to a YAML comment. |
-| Deploy fails: `Only INACTIVE revisions can be updated` | Expected on any revision after the first — clone the revision or undeploy first. |
-
-## Install it directly
-
-```bash
-export ORG=<ORG_ID>
-export TOKEN=<control-plane bearer token>      # short-lived
-export BASE=https://<YOUR_GATEWAY_HOST>/api
-H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
-
-# 1. Confirm xml-to-json exists in your org and check its schema.
-#    Ask the agent get_plugin_config, or query the control plane's
-#    plugin-schema endpoint. Do not assume the field names in this spec.
-
-# 2. Import example/api-spec.yaml and bind <SOAP_UPSTREAM_URL> to the service.
-
-# 3. Deploy the revision.
-
-# 4. Prove it — including that the body is really converted, not just relabelled
-GATEWAY=https://<YOUR_GATEWAY_HOST> ./example/verify.sh
-```
-
-## Configuration
-
-Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml). Two blocks on
-`/locations` carry the mediation:
-
-```yaml
-# 1. path only — NO Content-Type override (it runs before the transform and defeats it)
-proxy-rewrite:
-  uri: <SOAP_HANDLER_PATH>
-
-# 2. request conversion is OFF by default — turn it on; response fires on Accept: application/json
-xml-to-json:
-  transform_request: true
-  transform_response: true
-```
-
-`xml-to-json` needs `transform_request: true` explicitly — the default is
-`false`, so an empty block converts the response only (verified). The response
-side additionally requires the client to send `Accept: application/json`. For
-namespaced or attribute-heavy envelopes there are more fields
-(`property_naming`, `array_item_name`, `content_types`, …) — get them from
-`get_plugin_config` in your own org.
-
-## What the caller actually sees
-
-Request — plain JSON, no envelope, no WSDL:
+A partner sends plain JSON — no envelope, no WSDL:
 
 ```http
 POST /locations
@@ -341,173 +84,40 @@ accept: application/json
 {"region":"EMEA","activeOnly":true}
 ```
 
-`accept: application/json` is not optional. The response transform is
-content-negotiated — without that header the upstream XML passes straight through
-as `text/xml`, and no gateway configuration changes it.
+and gets JSON back, converted from your system's XML:
 
-Response — JSON, shaped by how the XML was structured:
-
-```http
-HTTP/1.1 200 OK
-content-type: application/json
-X-Request-Id: 7f3c...
-
+```json
 {"Locations":{"Site":[{"id":"1","name":"Frankfurt"},{"id":"2","name":"Dublin"}]}}
 ```
 
-**The JSON shape is derived from the XML, not designed.** This is the honest part
-that surprises people:
+Note the shape: names like `Locations` and `Site` come straight from the XML. The
+JSON is a mechanical copy of your system's XML, not a contract someone designed —
+[Architecture](architecture.md#why-the-json-shape-is-derived-not-designed) explains
+what that means for your partners.
 
-- **Element names come through as-is**, including `PascalCase` and any vendor
-  prefixes. You get `{"Locations":{"Site":[...]}}`, not the `{"locations":[...]}`
-  a REST API designer would have written.
-- **Single-element collections may not be arrays.** XML has no notion of an array,
-  so one `<Site>` can transform to an object where two transform to a list. This
-  breaks partner code that assumes a list, and it breaks it on the edge case
-  rather than the common one — which is the worst time to find out.
-- **Namespaces and attributes need handling.** Default settings often flatten or
-  drop them.
+**Setting this up in the gateway's UI takes three short steps:** put your SOAP
+handler's path into the spec and import it, point an upstream at your SOAP service,
+then deploy. [Full click-by-click walkthrough →](guides.md#build-it-in-the-ui)
 
-Tell integrators this is a *mediated* API and publish real example payloads for
-both the single-result and multi-result cases. If you need a hand-designed REST
-contract instead of a derived one, that's a response-shaping layer on top of this,
-not a setting in it.
+[Build it any of three ways, then see it work →](guides.md)
 
-## Testing
+## Where to go next
 
-```bash
-GATEWAY=https://<YOUR_GATEWAY_HOST> ./example/verify.sh
-```
-
-Exit 0 means both held:
-
-| # | Case | Expected |
-|---|---|---|
-| 1 | A JSON call to `/locations` | `200` + `content-type: application/json` |
-| 2 | **The body contains no XML markup** | proof the transform actually ran |
-
-If you have composed this with [solution 02](../02-oauth-jwt/), pass the token
-through `CURL_OPTS`; `verify.sh` does not exercise that layer.
-
-**Case 2 is the one that matters and the one people skip.** A content-type header
-is a *claim*; a body with no angle brackets is *evidence*. Relabelling unconverted
-XML as `application/json` is a real and easy misconfiguration, and it sails past
-any check that only looks at headers. Partners then receive XML with a JSON
-content-type, and their parser's error message won't point anywhere near your
-gateway.
-
-`verify.sh` also warns (rather than fails) when the JSON parses but is empty —
-usually the handler returned an empty envelope because your request body's element
-names didn't match what it reads.
-
-Full plan, including the XML-edge cases worth checking by hand:
-[`tests/test-plan.yaml`](tests/test-plan.yaml).
-
-## Gotchas
-
-- **`xml-to-json` needs `transform_request: true`, and the response needs
-  `Accept: application/json`.** The defaults do neither the way you'd expect
-  (verified). `json-to-xml` is a *separate* plugin for the opposite job (JSON
-  upstream → XML for XML-wanting clients), not the request-side counterpart. See
-  § *The one thing everybody gets wrong*.
-- **Your handler may require a `SOAPAction` header.** Many classic SOAP 1.1 and
-  `.asmx` endpoints return a 500 with an unhelpful envelope without it. Add it in
-  `proxy-rewrite.headers.set`. Check what your handler wants rather than assuming
-  it wants nothing.
-- **Single-element collections may not be arrays.** XML can't distinguish one item
-  from a list of one. Test both cases explicitly, and warn integrators.
-- **Namespaced or attribute-heavy envelopes need configuration.** The empty
-  `xml-to-json` block takes defaults, which often flatten namespaces or drop
-  attributes. Confirm the fields available in your build.
-- **Confirm `xml-to-json` exists in your org before designing around it.** Builds
-  differ, and this plugin is the one the whole solution rests on.
-- **A 500 from a handler that works under curl is almost never the handler.**
-  Suspect, in order: double conversion, a missing `SOAPAction`, or request field
-  names that don't match the elements the handler reads.
-- **Legacy handlers are often slow.** SOAP systems built for batch use can take
-  seconds. Check the gateway timeout before you conclude the upstream is down —
-  the symptom is a 504 that looks like an outage.
-- **Element names leak into your public contract.** Your partner-facing JSON now
-  contains the internal element names of a 2004 system. Renaming them later is a
-  breaking change for partners, so decide now whether you're happy publishing them.
-- **Nothing authenticates the route.** Anyone who can reach the gateway can call
-  the legacy system through it. Compose with [solution 02](../02-oauth-jwt/)
-  before this is partner-facing — see § *Variations*.
-
-## When to use it
-
-Use it when:
-
-- **A SOAP system of record is correct and stable and you have no mandate to
-  rewrite it.** That's most of them.
-- **Partners want JSON**, and the number of partners is growing.
-- **You're on adapter number two or three** and can see where this goes.
-- **You want to expose a legacy system without exposing the legacy system** — auth,
-  mediation and metering all land at the edge.
-
-Don't use it when:
-
-- **You need a hand-designed REST contract.** The JSON shape here is *derived*
-  from the XML. If the public contract must be clean and stable independent of
-  the backend's element names, you need a response-shaping layer, and possibly a
-  real facade service.
-- **The SOAP operation is genuinely complex** — multi-part MIME, WS-Security
-  headers, attachments, stateful sessions. Mediation handles body translation, not
-  the whole WS-* stack.
-- **One partner call needs several backend calls.** That's composition, not
-  mediation.
-- **The backend is being replaced anyway.** If a REST service ships next quarter,
-  a facade you'll delete may not be worth the configuration.
-
-## Limitations
-
-- **The JSON shape is derived, not designed.** Element names, casing and structure
-  come from the XML. Publishing them makes them part of your public contract.
-- **XML has no arrays.** One-element collections may transform to objects rather
-  than lists. Design your client guidance around this.
-- **Namespaces and attributes need explicit configuration** and may be flattened
-  or dropped by default.
-- **Body translation only.** WS-Security, SOAP headers, attachments and MTOM are
-  not addressed.
-- **No schema validation of the transformed request.** A partner can send JSON
-  that converts to XML the handler rejects; the error surfaces as a 500 from the
-  handler rather than a 400 from the gateway. Add `request-validation` if you want
-  a clean rejection at the edge.
-- **`xml-to-json`'s schema varies by build**, and the empty block here takes
-  defaults. Confirm with `get_plugin_config`.
-- **Latency is added.** Two conversions per request. Small, but not zero, and it
-  compounds on large payloads.
-
-Full list: [`solution.yaml`](solution.yaml) § `limitations`.
-
-## Validation status
-
-**The deployed and functionally-tested results are withdrawn.** They were obtained
-against a configuration that also carried a token endpoint and token validation.
-This package no longer ships those, so reporting them here would report a result
-for a different spec.
-
-| Stage | Status | Provenance |
-|---|---|---|
-| Configuration generated | **YES** | [`example/api-spec.yaml`](example/api-spec.yaml) |
-| Local validation | **PASS** | Structural review of the spec and tests, 2026-10-06. |
-| Gateway dry-run | **WITHDRAWN** | Passed on the composed spec. Not re-run since auth was removed. |
-| Gateway deployed | **WITHDRAWN** | Deployed against a real SOAP backend, composed spec. Not re-run. |
-| Functional tests | **WITHDRAWN** | `verify.sh` was 5/5 on the composed spec; it is now 2 cases and has not been run. |
-| Agent-mode run | **PASS** (2026-10-06) | Built the mediation in one pass. An earlier run (2026-10-05) set `Content-Type` on the rewrite and the transform silently never fired — a 200 is not evidence it ran, so read the revision back. |
-
-Overall: **UNVALIDATED** as it now stands. The mediation is unchanged and was
-proven round-trip on the composed spec; what is unproven is this spec deployed on
-its own. Restoring those rows needs a live SOAP backend and one `verify.sh` run.
+- **Want the business case first?** [Business need](business-need.md) explains why
+  this matters, in plain terms.
+- **Want to understand how it works?** [Architecture](architecture.md) covers the
+  conversion, the one setting everybody gets wrong, and when *not* to use this.
+- **Ready to build it?** [Guides](guides.md) walks you through it step by step.
+- **Want the full product documentation?** Every plugin, screen and API call is
+  covered at [docs.digitalapi.ai/api-gateway](https://docs.digitalapi.ai/api-gateway).
 
 ## Related solutions
 
-- **[02 — OAuth 2.0 with JWT](../02-oauth-jwt/)** — the identity layer this
-  package does not carry, and the one to add before partners call it: token
-  lifetimes, the signing-secret trap, the external-issuer fork.
-- **[01 — API Products](../01-api-products/)** — meter the partners now calling
-  your legacy system, and sell tiers. It needs identity first, so compose 02
-  before 01.
-- **[04 — Analytics](../04-analytics/)** — find out which partner is calling the
-  legacy system how often, which is usually the first question asked after this
-  goes live.
+- **[02 — OAuth 2.0 with JWT](../02-oauth-jwt/)** — the sign-in layer this package
+  doesn't include, and the one to add before partners call it.
+- **[01 — API Products](../01-api-products/)** — give each partner calling your old
+  system a usage limit, and sell tiers. It needs sign-in first, so add 02 before 01.
+- **[04 — Analytics](../04-analytics/)** — see which partner calls the old system,
+  and how often.
+- **[09 — XML to JSON](../09-xml-to-json/)** — for an XML backend that isn't SOAP.
+  Choose between the two before you start.

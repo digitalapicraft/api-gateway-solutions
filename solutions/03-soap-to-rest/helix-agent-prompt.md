@@ -1,16 +1,18 @@
 # Agent-mode prompt — serve a SOAP backend as REST/JSON
 
-Paste this to the Helix Agent as one message, replacing the `{{...}}` values.
-Bring your own SOAP endpoint, the handler path it answers on, and the REST
-route you want partners to call.
+> [Overview](README.md) · [Business need](business-need.md) · [Architecture](architecture.md) · [Guides](guides.md) · **Agent prompt** · [Tests](tests.md) · [API reference](api-reference.md)
 
-This builds the mediation, which is what this solution is — the same thing
-[`example/api-spec.yaml`](example/api-spec.yaml) carries, so the prompt and the
-spec describe one API. **It is unauthenticated.** Identity is
-[solution 02](../02-oauth-jwt/); add it with that package's prompt before
-partners call this. Why the prompt is worded this way, what the
-agent decides on its own, and what to check before you trust it are in the
-[README](README.md#build-it-with-the-helix-agent).
+---
+
+Paste this to the Helix Agent as one message, replacing the `{{...}}` values. Bring
+your own SOAP endpoint, the handler path it answers on, and the REST route you want
+partners to call.
+
+It builds the translation only — the same API as
+[`example/api-spec.yaml`](example/api-spec.yaml) — and **it is unauthenticated**:
+add [solution 02](../02-oauth-jwt/) before partners call it. What to check before
+you trust the result is in
+[Build it with the Helix Agent](guides.md#build-it-with-the-helix-agent).
 
 ## Prompt
 

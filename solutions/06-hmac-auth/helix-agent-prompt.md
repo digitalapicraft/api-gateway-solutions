@@ -1,16 +1,19 @@
 # Agent-mode prompt — HMAC request signing
 
-Two steps, from a **fresh, empty org** to routes that only accept signed requests.
-The agent creates the API on a public upstream, puts `hmac-auth` on the routes,
-dry-runs, and hands you an app credential to sign with.
-
-Paste one step at a time and confirm between them. Replace the `{{...}}` values.
-[AGENT-GUIDE.md](../../AGENT-GUIDE.md) carries the standing rules these prompts
-assume.
+> [Overview](README.md) · [Business need](business-need.md) · [Architecture](architecture.md) · [Guides](guides.md) · **Agent prompt** · [Tests](tests.md) · [API reference](api-reference.md)
 
 ---
 
-## Step 1 — create the API and sign its routes
+Two steps, from a **fresh, empty org** to routes that only accept signed requests,
+plus an app credential to sign with. Replace the `{{...}}` values, then **paste
+Step 1, confirm, and paste Step 2**. The four optional follow-ups after them each
+make one separate change; paste one only if you want it. Why the prompt is worded
+this way, and what to check before you trust the result, are in
+[Guides](guides.md#build-it-with-the-helix-agent).
+
+## Prompt
+
+### Step 1 — create the API and sign its routes
 
 ```text
 Create a REST API "{{api_name}}" on upstream
@@ -46,7 +49,7 @@ Show me the spec, run dry_run_deploy, then read the revision back so I can see
 which plugins actually landed. Wait before deploying.
 ```
 
-## Step 2 — a credential, and the five calls that prove it
+### Step 2 — a credential, and the five calls that prove it
 
 ```text
 Create an API product for this API with authMethods ["hmac-auth"] and a quota of
@@ -65,41 +68,15 @@ joined by \n AND terminated with a final \n. Pipe printf straight into openssl �
 $( ) strips the trailing newline and the signature will be wrong.
 ```
 
----
+### Optional follow-up — Tighter replay window
 
-## Why it's shaped this way
-
-- **`signed_headers` is stated as mandatory.** It has no default, so a model
-  writing "a reasonable hmac-auth config" omits it — and the result validates,
-  deploys, and is wide open. This is the most damaging wrong turn here.
-- **Per route, not API-wide.** The two routes need different signed sets. Hoist one
-  block to the root and every bodyless GET must send a digest of the empty string
-  or 401.
-- **No `request-validation`.** A model asked to harden an ingest endpoint reaches
-  for schema validation. At priority 2800 it re-encodes the body before `hmac-auth`
-  hashes it at 2530, and the digest silently stops matching.
-- **No secret on the route.** Stops the agent inventing a `secret_key` or
-  `signing_secret` field by analogy with `helix-auth`. The route schema has neither.
-- **`authMethods: ["hmac-auth"]`.** It defaults to `["helix-auth"]`, and app
-  creation then fails with an unhelpful error about an unsupported auth plugin.
-- **`plugins {"hmac-auth": {}}`.** The empty object is the instruction to
-  auto-generate. A model may invent values instead — which works, but gives you a
-  secret of its choosing.
-- **"Pipe printf straight into openssl".** A model writing idiomatic bash assigns
-  the base to a variable first, `$( )` eats the trailing newline, and every request
-  401s with a signature that looks correct.
-- **The `headers=` omits-digest test.** The one that proves `signed_headers` is
-  enforced rather than decorative.
-
-## Tweak knobs
-
-**Tighter replay window**
 ```text
 Reduce clock_skew to 60 seconds on both routes. Our callers are servers with NTP,
 so a one-minute window is realistic and it cuts the replay window fivefold.
 ```
 
-**Fail safe instead of per-route**
+### Optional follow-up — Fail safe instead of per-route
+
 ```text
 Move hmac-auth to the API level with the POST configuration (signed_headers
 ["@request-target","date","digest"], validate_request_body true) so any route I
@@ -108,7 +85,8 @@ Digest: SHA-256=47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU= — the digest of a
 empty body — since the route will now require it.
 ```
 
-**Add per-app quota on top**
+### Optional follow-up — Add per-app quota on top
+
 ```text
 Also put api-product-enforcer on both routes so the product quota is enforced per
 app. Confirm first that it resolves the credential from an hmac-auth consumer — if
@@ -116,20 +94,9 @@ it returns 401 "no ctx.consumer" or 403 "missing credential_id", tell me rather
 than working around it.
 ```
 
-**Let unsigned callers through as an anonymous consumer**
+### Optional follow-up — Let unsigned callers through as an anonymous consumer
+
 ```text
 Set anonymous_consumer on the GET route to {{anonymous_consumer_name}} so
 unsigned reads are allowed but attributed, while POST stays strictly signed.
 ```
-
-## When it goes wrong
-
-| Symptom | Cause |
-|---|---|
-| A signature that looks correct always 401s | The signing base lost its trailing newline — `$( )` strips it. Pipe `printf` straight into `openssl`. |
-| Every bodyless GET 401s | `hmac-auth` was hoisted to the API level, so the GET now requires a digest. |
-| The digest stops matching after a "hardening" change | `request-validation` landed on the route and re-encoded the body. |
-| App creation fails on an unsupported auth plugin | The product's `authMethods` is still the `["helix-auth"]` default. |
-| The agent invents a `secret_key` field on the route | It has none. The credential carries it. |
-| You need the secret again | It's returned once and stored encrypted. Rotate instead. |
-| The session ends with `"stream closed with reason: error"` mid-run | Seen in verification: the config landed correctly (both routes, per-method `signed_headers`, `validate_request_body` on the write route) before the session died on a later step. Read the revision back to confirm what actually landed rather than trusting the transcript, then resume from there. |
