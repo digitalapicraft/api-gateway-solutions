@@ -4,10 +4,10 @@
 # Sign with the OLD date, not the current one — signing with one date and sending
 # another fails on the signature instead, which tests something else.
 
-POST {{GATEWAY}}/posts
+POST {{GATEWAY}}/albums
 Content-Type: application/json
 Date: {{DATE_20_MINUTES_AGO}}
 Digest: {{DIGEST}}
 Authorization: Signature keyId="{{KEY_ID}}",algorithm="hmac-sha256",headers="@request-target date digest",signature="{{SIGNATURE_OVER_OLD_DATE}}"
 
-{"title":"order-created","body":"sku-1","userId":1}
+{"title":"order-created","userId":1}

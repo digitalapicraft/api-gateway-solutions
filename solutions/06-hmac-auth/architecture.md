@@ -15,9 +15,9 @@ sequenceDiagram
     participant UP as Upstream
 
     Note over C: secret_key is stored here and never sent
-    C->>C: canonicalise: keyId, "POST /posts", Date, Digest(body)
+    C->>C: canonicalise: keyId, "POST /albums", Date, Digest(body)
     C->>C: signature = base64(HMAC-SHA256(secret_key, base + "\n"))
-    C->>GW: POST /posts<br/>Date, Digest, Authorization: Signature keyId=...
+    C->>GW: POST /albums<br/>Date, Digest, Authorization: Signature keyId=...
 
     GW->>GW: parse the Authorization envelope
     GW->>GW: every signed_headers entry present in headers= ?
@@ -28,7 +28,7 @@ sequenceDiagram
 
     alt all checks hold
         GW->>GW: attach the consumer to the request context
-        GW->>UP: POST /posts (Authorization stripped by hide_credentials)
+        GW->>UP: POST /albums (Authorization stripped by hide_credentials)
         UP-->>GW: 201
         GW-->>C: 201
     else any check fails
@@ -131,8 +131,8 @@ to sign differs per route:
 
 | Route | `signed_headers` | `validate_request_body` |
 |---|---|---|
-| `POST /posts` | `@request-target`, `date`, `digest` | `true` |
-| `GET /posts/{postId}` | `@request-target`, `date` | `false` |
+| `POST /albums` | `@request-target`, `date`, `digest` | `true` |
+| `GET /albums/{albumId}` | `@request-target`, `date` | `false` |
 
 `hmac-auth` is therefore applied **per route**. The trade is explicit: a route
 added later without an `x-helix-gateway` block is unauthenticated. The fail-safe

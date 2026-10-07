@@ -37,19 +37,39 @@ signature is a configuration line, not a project.
 
 ## Business need
 
-Bring APIs under the identity provider the organisation has already bought and
-already governs, without a release in any backend service. What that buys:
+The thirty-second version: [`business-need.md`](business-need.md).
 
-- **Deprovisioning actually works.** Disable a service account in Okta and its
-  access ends when its current token expires. With an emailed static key,
-  deprovisioning means finding every place the key was pasted.
-- **One place to answer "who can call this".** Access is an Okta assignment, not
-  a spreadsheet of keys.
-- **Token lifetime replaces key lifetime.** A leaked bearer token is useful for
-  minutes. A leaked static key is useful until someone notices.
+| | Static keys, checked per service | Okta tokens, verified at the edge |
+|---|---|---|
+| **Who authenticates the caller** | each service, separately | the gateway, once |
+| **Credential** | a static key with no expiry | an Okta token measured in minutes |
+| **Deprovisioning** | find every copy of the key | disable the app in Okta |
+| **Adding a caller** | issue and email a key | an Okta assignment |
+| **Access review evidence** | a spreadsheet | the Okta review that already runs |
+| **Rotating a signing key** | not a concept | Okta's schedule, absorbed by the gateway |
+| **Code changed to adopt it** | every service | none |
+| **Where auth bugs live** | N services, N implementations | one configuration block |
 
-Quantified in [business-need.md](business-need.md). No ROI figures are invented
-here.
+The mechanism that matters commercially: **the credential stops being a secret
+you distribute and starts being a token the identity provider mints on demand.**
+You cannot lose track of a token that expires in an hour, and you do not have to
+find every copy of a thing that was never copied.
+
+What this does **not** buy you:
+
+- **Authorization.** The token proves identity, not which caller may do what.
+  That is `required_scopes` or a policy engine, and a separate piece of work.
+- **Metering.** An Okta-issued token resolves no app credential, so per-caller
+  quotas don't follow from it. That is [solution 01](../01-api-products/)'s model,
+  and the two do not compose for free.
+- **Revocation before expiry.** Disabling a caller in Okta stops *new* tokens; the
+  one it holds stays valid until it expires. Closing that gap means introspection,
+  which puts Okta on the request path.
+- **End-user identity**, if your callers use client credentials — that grant
+  authenticates an application, not a person.
+
+No ROI figure is claimed anywhere in this package. What is quantified is the
+mechanism — credential lifetime, number of implementations, deprovisioning path.
 
 ## Who issues the token — decide this first
 
@@ -107,13 +127,13 @@ sequenceDiagram
     IDP-->>C: RS256-signed JWT
 
     Note over C,GW: Step 2 — call the API
-    C->>GW: GET /posts, Authorization Bearer token
+    C->>GW: GET /albums, Authorization Bearer token
     GW->>IDP: fetch JWKS — once, then cached
     IDP-->>GW: public keys
     Note over GW: verify signature, issuer, expiry and alg<br/>locally. The IdP is NOT on the request path.
 
     alt token valid
-        GW->>UP: GET /posts
+        GW->>UP: GET /albums
         UP-->>GW: 200
         GW-->>C: 200 with the upstream body
     else rejected
@@ -133,73 +153,137 @@ one root-level block covers every route and there is no hole to leave open.
 
 ## Build it with the Helix Agent
 
-Recommended path, and it works on a **fresh org**. Two steps — a single
-mega-prompt pushes the default agent model into an oversized tool call, and the
-fields it drops are the hardening ones. Full prompt, with why each field is there
-and what happens without it: [`helix-agent-prompt.md`](helix-agent-prompt.md).
+Recommended path, about twenty minutes. The whole build is **one prompt** —
+[`helix-agent-prompt.md`](helix-agent-prompt.md). Paste it as a single message and
+replace the `{{...}}` values with your Okta authorization server's discovery URL
+and the client id and secret of an Okta application.
 
-**Step 1 — create the API and verify Okta's tokens on it**
+It builds the API, its two routes and token verification on all of them. There
+is no developer, product or app step, unlike [solution 02](../02-oauth-jwt/):
+Okta issues the tokens, so the gateway holds no credential to hand out. Get a
+token from Okta and call the API with it.
+[AGENT-GUIDE.md](../../AGENT-GUIDE.md) carries the standing rules the prompt
+assumes.
 
+> **The agent puts your secrets in as placeholders unless told not to.** Left to
+> itself it writes the client id and secret as `<ENV:...>`-style references
+> rather than the values you gave it. This build resolves no such reference — the
+> string is used verbatim, so the stored config holds a placeholder, not your
+> application. That is what *"use the literal
+> values for the configuration"* in the prompt is for; keep it. Do not commit the
+> filled-in prompt or anything the agent writes from it.
+>
+> **Check what was stored, not what the agent said.** Read the revision back and
+> confirm `openid-connect` is on every route or API-wide, carrying your real
+> `client_id` and `client_secret`, `bearer_only: true`, your
+> issuer in `claim_validator.issuer.valid_issuers` and `ssl_verify: true`. Then
+> call it with **no token** first: a `401` is right; a `302` means it was
+> configured for browser login.
+>
+> **Then add `use_jwks: true` yourself if it is missing — it usually will be.**
+> The agent does not reliably store it: the field is absent from the published
+> schema, and of two runs of this prompt on 2026-10-06 one left it out. Without
+> it every real token gets a `401` — after an import, a dry-run and a deploy that
+> all succeed. Ask the agent to add `use_jwks: true` to the `openid-connect`
+> config and read the revision back. See [Configuration](#configuration).
+
+### Why the prompt is worded the way it is
+
+It asks for outcomes and names no plugin and no field: the agent reads the
+`openid-connect` schema your org actually ships. Each sentence is there because
+leaving it out produced something that deploys and is wrong:
+
+- **"Use the literal values for the configuration."** Without it the agent swaps the
+  client id and secret you supplied for `<ENV:...>` placeholders, without asking.
+  This build uses that string verbatim, so what is stored is not your
+  application. Said once, it embeds the values you gave it — confirmed on the
+  2026-10-06 run.
+- **"Refuse … never redirect it to a login page."** The plugin's defaults are for
+  browser sign-in, where an unauthenticated visitor is sent to Okta. An API client
+  receiving a `302` to an HTML login page fails in a way that looks like anything
+  but an auth error. This is what leads to `bearer_only` — which the deploy
+  rejects without, so it cannot quietly go missing.
+- **"Verify each token locally against Okta's published jwks."** This is the
+  outcome `use_jwks: true` delivers. The agent does not reliably turn it into the
+  field — see the callout above — so it is the one setting to check and add by
+  hand. The prompt still states the outcome; naming a field the agent cannot find
+  in the schema is a workaround for an agent defect, not part of the solution.
+- **The issuer, the algorithm and the certificate, as outcomes.** Each is a default
+  that is wrong for an API and fails silently: without an issuer pin any correctly
+  signed token from any issuer is accepted, and `ssl_verify` defaults to fetching
+  the root of trust unverified. See [the four defaults you must
+  change](#the-four-defaults-you-must-change).
+- **No plugin-availability check.** `openid-connect` is not on every build — see
+  [Check the plugin exists](#check-the-plugin-exists-in-your-org-before-you-start).
+  Confirm it before you paste the prompt; an agent on a build without it may reach
+  for `helix-auth`, which cannot verify Okta's tokens.
+- **Verification arrives in step 2, not step 1.** The same shape as 02: the routes
+  exist first, then policy is attached to them. Here there is no token endpoint to
+  leave open, so the agent may put verification API-wide or on each route; both
+  are correct.
+
+What the prompt no longer carries: the `plugins`-map and `x-helix-gateway`
+instructions, the `jwk_expires_in`, `set_userinfo_header` and
+`claim_validator.audience` lines, and a second step asking the agent to re-audit
+its own fields. See [Validation status](#validation-status) for what has been run.
+
+## Variations
+
+Follow-ups for the same session, once the build above is standing. Same register
+as the prompt — say what you want to be true.
+
+**Require a scope, not just a valid token**
 ```text
-First, confirm the openid-connect plugin exists in this org and show me its
-schema. If it is not present, stop and tell me — do not substitute another plugin.
+Only accept tokens that carry the "{{required_scope}}" scope, and tell me what a
+token without it now returns.
+```
+This is also the only way to tell apart two APIs in the same Okta tenant — the
+audience is not checked by value. See [Gotchas](#gotchas).
 
-Then create a REST API "{{api_name}}" on upstream {{upstream_url}}, with
-routes GET /posts, GET /posts/{postId} and POST /posts proxied straight through,
-protected by access tokens issued by Okta. The gateway must only VERIFY these
-tokens, never issue any. Not helix-auth — it only verifies tokens it minted
-itself, and it has no JWKS, issuer or audience field.
-
-Apply openid-connect at the API level, not per route: every route here needs a
-token and there is no token endpoint to leave open.
-
-Configure it with:
-  discovery: {{okta_discovery_url}}
-  client_id: {{okta_client_id}}
-  client_secret: {{okta_client_secret}}
-  bearer_only: true and unauth_action: deny   (unauth_action's default REDIRECTS
-    API callers to the IdP's login page instead of refusing them; bearer_only
-    cannot be omitted either — the deploy is rejected without it, asking for
-    session.secret)
-  use_jwks: true   (REQUIRED, and NOT in the published schema — add it anyway, it
-    is accepted and persisted. Without it the plugin never checks the JWT against
-    the JWKS; it falls back to introspection, the IdP has no introspection
-    endpoint, and EVERY token gets a 401.)
-  ssl_verify: true
-  accept_unsupported_alg: false and accept_none_alg: false
-  token_signing_alg_values_expected: RS256
-  claim_validator.issuer.valid_issuers: [ {{okta_issuer_url}} ]
-  claim_validator.audience.required: true
-  jwk_expires_in: 3600
-  set_id_token_header: false and set_userinfo_header: false
-
-Also add request-id, and cors with authorization in the allowed headers.
-
-Plugins go in a top-level "plugins" map on the route object, each under its own
-plugin name. No "x-helix-gateway" wrapper — a live route discards it silently and
-still reports success.
-
-Show me the spec, then read the revision back so I can see which plugins actually
-landed. Do not deploy yet.
+**Point at my real upstream**
+```text
+Point this at {{upstream_url}} instead, and leave the token verification exactly
+as it is.
 ```
 
-**Step 2 — make the agent review its own work, then dry-run**
-
+**My authorization server issues opaque tokens, not JWTs**
 ```text
-Before deploying: re-read the openid-connect schema from this org and tell me,
-field by field, whether every value I asked for is a real field with a legal
-value. Call out anything you had to guess or drop.
-
-use_jwks will NOT be in that schema. Keep it anyway — confirm it is still in the
-spec you are about to deploy, and do not "clean it up".
-
-Then bind the upstream and run a dry-run deploy. Report exactly what it returns,
-and stop there.
+This Okta authorization server issues opaque access tokens, so there is no
+signature to verify locally. Change verification to ask Okta about each token
+instead, and tell me what that does to latency and what happens when Okta is
+unreachable.
 ```
 
-The agent fetches the real `openid-connect` schema from your org, proposes the
-spec, and stops. See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for what to do when it
-takes a wrong turn.
+**Use the org authorization server instead of a custom one**
+```text
+Switch to the org authorization server, whose discovery document is
+{{okta_org_discovery_url}}, and pin the issuer to the one that document reports.
+```
+
+**Meter the callers as well**
+```text
+I want to sell access to this API in tiers and enforce the limits per caller.
+```
+Read [solution 01](../01-api-products/) first: its quota counts per app credential,
+and an Okta-issued token resolves none. Expect the agent to have to tell you this.
+
+## When the agent goes wrong
+
+**Read the stored revision before you trust any of it.** Several of the failures
+below deploy cleanly and report success, and the first sign is a caller's 401 —
+or worse, a caller's 200.
+
+| Symptom | Cause |
+|---|---|
+| Every token 401s, though the spec deployed cleanly | `use_jwks` was dropped. Reply: it's absent from the schema but accepted and persisted — put it back and redeploy. |
+| The API redirects instead of refusing | `bearer_only` / `unauth_action` are at their defaults. Always test with no token first. |
+| A token from a *different* authorization server returns 200 | No issuer pin. Ask for tokens to be accepted only from the issuer the discovery document reports. |
+| The proposed config has `discovery`, `client_id`, `client_secret` and nothing else | The hardening was dropped. Ask the agent to compare what it stored, field by field, against the outcomes in the prompt. |
+| The agent reaches for `helix-auth` | Reply: it has no JWKS URL, issuer or audience field and its schema is `additionalProperties: false`, so it cannot verify Okta's tokens. If `openid-connect` isn't in this org, stop — see [Check the plugin exists](#check-the-plugin-exists-in-your-org-before-you-start). |
+| The agent proposes `jwt-auth` as a standalone plugin | It isn't one here — only a `validate_auth_type` of `helix-auth`, and it means a token *this* gateway signed. |
+| The agent invents an `audience` field with an expected value | There isn't one. `claim_validator.audience` has `required`, `claim` and `match_with_client_id`. |
+| The routes exist with **no plugins**, at exit 0 | The agent wrapped them in `x-helix-gateway` inside the live route object, which a live route silently discards. Ask for a plain top-level `plugins` map and read the revision back again; if it will not, import the spec. |
+| Deploy fails: `Only INACTIVE revisions can be updated` | The revision is already live. Clone it or undeploy, then apply. |
 
 ## Install it directly
 
@@ -398,10 +482,10 @@ Not this solution if: no IdP exists and you'd be deploying Okta *for* this
 |---|---|
 | Configuration generated | **YES** |
 | Local validation | **PASS** — every plugin block checked against the org's live schema |
-| Gateway dry-run | **PASS** |
-| Gateway deployed | **DEPLOYED** |
-| Functional tests | **PASS (7/7)** — this spec, deployed verbatim, exercised with a real IdP token |
-| Agent-mode run | **PASS** (2026-09-21) | Read back from the deployed revision, not just from the agent's transcript. |
+| Gateway dry-run | **PASS on 1.0.0** — the `/posts` routes. Not re-run on 1.1.0 |
+| Gateway deployed | **DEPLOYED on 1.0.0** — not re-run on 1.1.0 |
+| Functional tests | **PASS (7/7) on 1.0.0** — that spec, deployed verbatim, exercised with a real IdP token. 1.1.0 moved the routes to `GET`/`POST /albums` and dropped `GET /posts/{postId}`; the `openid-connect` block is unchanged, and `verify.sh` has not been run against it |
+| Agent-mode run | **PASS WITH ONE MANUAL FIX** (2026-10-06, operator-reported, Auth0 tenant) — every other field stored as asked, credentials as literals; `use_jwks: true` missing from 1 of 2 revisions and must be checked and added by hand. The earlier field-by-field prompt passed on 2026-09-21 |
 
 Overall: **READY WITH WARNINGS.** It works, and it rejects everything it should.
 The warning is the audience — not enforced by value, a property of the plugin

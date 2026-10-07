@@ -6,7 +6,7 @@
 solution:
   name: Signed requests — prove who is calling without sending a secret
   slug: 06-hmac-auth
-  version: 1.0.0
+  version: 1.1.0   # 1.1.0: routes moved from /posts to POST /albums and GET /albums/{albumId}; hmac-auth blocks unchanged
   category:
     - Security & Access
   tags: [hmac, request-signing, message-integrity, webhooks, partner-api, hmac-auth, replay]
@@ -56,9 +56,9 @@ implementation:
 validation:
   # Stage statuses only. What was checked and what happened is folded into the README/Changelog directly.
   local: PASS
-  gateway_dry_run: PASS
-  deployment: DEPLOYED
-  functional_test: PASS
+  gateway_dry_run: PASS      # on 1.0.0 (/posts); not re-run on 1.1.0
+  deployment: DEPLOYED       # on 1.0.0; 1.1.0 not imported
+  functional_test: PASS      # 8/8 on 1.0.0; 8/8 on /albums 2026-10-07 against an agent-built route
   record: README.md § Validation status
 
 artifacts:
@@ -69,7 +69,7 @@ artifacts:
   tests: [tests/test-plan.yaml, tests/requests/, tests/expected/]
 
 assumptions:
-  - API name is "Partner Events API" and the signed paths are POST /posts and GET /posts/{postId} (illustrative — replace with yours).
+  - API name is "Partner Albums API" and the signed paths are POST /albums and GET /albums/{albumId} (illustrative — replace with yours).
   - The caller is a server, device or partner backend that can hold a long-lived secret and run signing code. A browser or mobile app cannot, and needs a token flow instead.
   - Caller clocks are accurate to within clock_skew (300s here). A fleet without NTP produces 401s that look like credential failures.
   - One app per integration, so a compromised secret is rotated for one partner rather than all of them.
