@@ -114,7 +114,7 @@ them. Full prompt with the reasoning, tweak knobs and failure modes:
 [`helix-agent-prompt.md`](helix-agent-prompt.md).
 
 ```text
-Create a REST API "<<Terminal API>>" on upstream
+Create a REST API "{{api_name}}" on upstream
 https://jsonplaceholder.typicode.com, environment test, with routes
 GET /fleet/price-list and POST /fleet/takings. Fresh org — nothing exists yet.
 
@@ -147,7 +147,7 @@ Then, in the same session:
 
 ```text
 Create a product containing this API with a generous quota, deploy it to test,
-then create a developer "<<Forecourt Estate>>" with one app subscribed to it and
+then create a developer "{{developer_name}}" with one app subscribed to it and
 give me the app's API key.
 
 Then curl commands showing, in order: no key → 401; the key in X-Device-Key → 200;

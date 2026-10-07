@@ -132,7 +132,7 @@ open. That is why this package's two negative tests are plain `curl` calls.
 ```text
 Create an upstream in my environment called "timing-grpc" whose specification has
 scheme "grpc", type "roundrobin", pass_host "node", and one node with host
-<<GRPC_UPSTREAM_HOST>> and port <<GRPC_UPSTREAM_PORT>>. Tell me its id.
+{{grpc_upstream_host}} and port {{grpc_upstream_port}}. Tell me its id.
 ```
 
 ```text
@@ -157,7 +157,7 @@ normalise it, do not strip the dot, and do not add a leading segment.
 ```
 
 ```text
-Bind upstream <<UPSTREAM_ID>> to the current revision of the Timing Unit Stream
+Bind upstream {{upstream_id}} to the current revision of the Timing Unit Stream
 API in my environment, then deploy that revision. Then read the revision back and
 show me the plugins stored on each route.
 ```

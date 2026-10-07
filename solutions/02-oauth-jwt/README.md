@@ -115,7 +115,7 @@ database doesn't see it, and it doesn't consume a connection from your pool.
 
 Recommended path, about fifteen minutes. The whole build is **one prompt** —
 [`helix-agent-prompt.md`](helix-agent-prompt.md). Paste it as a single message and
-replace the `<<...>>` values.
+replace the `{{...}}` values.
 
 It goes all the way: the API and its routes, the token endpoint, validation on the
 protected routes, then a developer, a product, an app and its credentials. Unlike
@@ -195,7 +195,7 @@ endpoint traffic at 50 calls/min.
 
 **An external identity provider already issues the tokens**
 ```text
-Our tokens come from <<Keycloak>>, not the gateway — it issues them and we just
+Our tokens come from {{identity_provider}}, not the gateway — it issues them and we just
 need to accept them. Drop /oauth/token and verify the incoming tokens against
 that issuer instead. Reject unauthenticated callers outright rather than
 redirecting them to a login page, since these are API clients.
@@ -206,7 +206,7 @@ different plugin entirely.
 
 **Point at my real upstream**
 ```text
-Point this at <<https://my-backend.internal>> instead, and keep everything else
+Point this at {{upstream_url}} instead, and keep everything else
 as it is. My backend's paths differ from the route paths, so rewrite them on the
 way through.
 ```

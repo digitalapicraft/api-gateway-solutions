@@ -143,6 +143,12 @@ Get these right or the package is confidently misleading:
   `<ENV:...>` — a `signing_secret` is used verbatim. Use a `<YOUR_...>`-style
   placeholder that a contributor must replace, and never commit a real one. Do not
   imply that `<ENV:...>` resolves.
+- **Prompt placeholders are `{{snake_case}}`.** Anything a reader replaces in an
+  agent prompt is double curly braces around a lowercase snake_case name —
+  `{{api_name}}`, `{{upstream_url}}` — never `<<...>>`, `{{UPPER_CASE}}` or
+  `{{ spaced }}`. One form, so a reader can find every value to fill in at a
+  glance. It applies to prompts only; specs, test fixtures and prose keep their
+  own notation.
 - **Analytics is global.** Don't add a `helix-analytics` block to a spec and
   don't tell readers to. See [solution 04](solutions/04-analytics/).
 - **Prefer the simplest native capability.** Don't write custom code where a

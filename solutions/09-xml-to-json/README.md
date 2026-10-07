@@ -188,7 +188,7 @@ Two steps; confirm between them. Full prompt with the reasoning, tweak knobs and
 failure modes: [`helix-agent-prompt.md`](helix-agent-prompt.md).
 
 ```text
-Create a REST API "<<Catalog API>>" putting a JSON front door on an XML backend.
+Create a REST API "{{api_name}}" putting a JSON front door on an XML backend.
 Upstream https://httpbin.org — its /xml returns an XML document and its /post
 echoes what it received, so both directions are visible. Environment test. Fresh
 org — nothing exists yet.

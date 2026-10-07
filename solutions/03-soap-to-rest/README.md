@@ -139,7 +139,7 @@ xml-to-json:
 
 The recommended path, and a short one. The build is **one prompt** —
 [`helix-agent-prompt.md`](helix-agent-prompt.md). Paste it as a single message and
-replace the `<<...>>` values.
+replace the `{{...}}` values.
 
 It builds the mediation and nothing else, and so does
 [`example/api-spec.yaml`](example/api-spec.yaml) — the prompt and the spec
@@ -251,7 +251,7 @@ there's a better answer than waiting longer.
 
 **Add a second operation**
 ```text
-Add POST /sites proxying to the same upstream but operation <<GetSites>>, reusing
+Add POST /sites proxying to the same upstream but operation {{soap_operation}}, reusing
 the same transform. Keep the routes independent so I can meter them separately
 later.
 ```

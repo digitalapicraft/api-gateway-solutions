@@ -86,7 +86,7 @@ comes back empty or quietly approximated rather than as an error:
 Each of these refines the previous answer rather than starting again:
 
 ```text
-Filter that to just the <<checkout-api>> and re-draw it.
+Filter that to just the {{api_name}} and re-draw it.
 ```
 ```text
 Same chart, but for the last 7 days by day instead of the last hour.

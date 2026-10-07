@@ -124,7 +124,7 @@ base64-encoding it before the POST.
 
 **I have more than one counterparty**
 ```text
-I have <<fourteen>> partners, each with their own key. Tell me plainly what this
+I have {{partner_count}} partners, each with their own key. Tell me plainly what this
 route shape costs at that number, then show me the key-value-map version where the
 key is fetched per request from a partner id in the request.
 ```
@@ -132,7 +132,8 @@ key is fetched per request from a partner id in the request.
 
 **Write the counterparty's side for me**
 ```text
-My counterparty <<also runs this gateway / runs a cron job with gpg on it>>. Write
+My counterparty {{counterparty_setup}} (for example: also runs this
+gateway, or runs a cron job with gpg on it). Write
 the configuration THEY need, mirroring mine: they decrypt what I send with their
 own private key, and encrypt to my public key when they send to me. Be explicit
 about which of the four key halves each party holds, and don't assume my two

@@ -1,6 +1,6 @@
 # Agent-mode prompt — read your analytics by asking
 
-Paste any of these to the Helix Agent, replacing the `<<...>>` values. It pulls
+Paste any of these to the Helix Agent, replacing the `{{...}}` values. It pulls
 the numbers and renders a chart in the chat; nothing is added to your APIs and
 nothing is changed, because every one of these only reads. What the agent can and
 cannot answer, what to do when a result comes back empty or unattributed, and the
@@ -27,7 +27,7 @@ Show me requests in the last hour grouped by product.
 
 **For one specific API**
 ```text
-For the API <<orders-api>>, show me requests in the last hour broken down by app.
+For the API {{api_name}}, show me requests in the last hour broken down by app.
 ```
 
 **Slowest and fastest**

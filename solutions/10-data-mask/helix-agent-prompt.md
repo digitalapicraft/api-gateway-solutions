@@ -120,7 +120,7 @@ NOT do.
 
 **Also mask the logs for real**
 ```text
-Add http-logger to both routes pointing at <<https://my-log-sink.example/ingest>>,
+Add http-logger to both routes pointing at {{log_sink_url}},
 include_resp_body true, batch_max_size 1 so it flushes immediately. Then tell me
 how to compare the logged entry with and without log-data-mask — that comparison is
 the only way to know the log mask works.
