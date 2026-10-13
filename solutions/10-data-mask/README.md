@@ -36,6 +36,42 @@ Two exposures, one root cause, and they are usually treated as one ticket:
 whole. Narrowing it per consumer is a backend change nobody can schedule — so it
 does not happen, and the exposure is renewed every release.
 
+## Business need
+
+The thirty-second version: [`business-need.md`](business-need.md).
+
+| Dimension | Every consumer gets the whole record | Masked at the edge |
+|---|---|---|
+| **What a support agent sees** | Every field the backend returns | Only what the job needs |
+| **PII in the log aggregator** | A copy of every response | Redacted, with credentials stripped |
+| **Narrowing the response** | A backend schema change on someone else's release train | A configuration change and a revision deploy |
+| **"Is it masked?"** | Answered by reading config | Answered by a test over every record in a real response |
+| **A new consumer** | Inherits the full exposure | Inherits the masked view |
+
+The log aggregator is usually the audit finding, because it is searchable and an
+auditor can see it. The support screen is the larger exposure: a bigger audience,
+less access control, and no retention policy, because nobody thinks of a screen as
+storage.
+
+Masking projects fail in two ways, and this package is built against both. **The
+mask made the job harder**: replace the whole email and support can no longer tell
+customer organisations apart, so the control gets an exception, then a rollback.
+Here the local part goes and the domain stays. **It was never verified**: the
+default masks only the first match, which leaves the first record, the one in
+every screenshot, looking right. Here a test asserts every record.
+
+What this does **not** buy you:
+
+- **Access control.** A caller who should not see the record at all must be
+  stopped by identity. Masking narrows what a legitimate caller sees.
+- **Tokenisation.** The masked value is not reversible and not a valid identifier.
+- **Data that never leaves the backend.** The upstream still returns it, and the
+  gateway holds it in memory to rewrite it.
+- **Fields it was not told about.** The same value under another key, inside an
+  encoded string, or quoted in an error message passes through.
+
+No ROI figure is claimed anywhere in this package.
+
 ## Two masks. Do not confuse them.
 
 This is the whole solution, and getting it wrong is the standard failure.
@@ -154,94 +190,111 @@ the same field.
 
 ## Build it with the Helix Agent
 
-Four small steps. Full prompt with the reasoning, tweak knobs and failure modes:
-[`helix-agent-prompt.md`](helix-agent-prompt.md).
+Recommended path, about fifteen minutes. The whole build is **one prompt**:
+[`helix-agent-prompt.md`](helix-agent-prompt.md). Paste it as a single message and
+replace the `{{...}}` values. Then run [`example/verify.sh`](example/verify.sh)
+against it, as under [Testing](#testing). [AGENT-GUIDE.md](../../AGENT-GUIDE.md)
+carries the standing rules the prompt assumes.
 
-> **The four steps are measured, not stylistic.** `update_route_spec` is a *full
-> replace*, so every increment resends the whole route spec; past roughly a
-> kilobyte the agent emits malformed tool arguments and the run dies with `stream
-> closed with reason: error`. The one-prompt version failed four times out of four.
+> **Check what was stored, not what the agent said.** Read the revision back. Both
+> routes should carry `response-rewrite` with **`scope: global` on every filter**,
+> each pattern anchored on its own field name, and `log-data-mask` with the email
+> and phone body fields and both auth headers. The single-record route's
+> `proxy-rewrite` must carry the id through (a `regex_uri`), not a fixed `uri`.
+> Then run `verify.sh`: a bad pattern shows in one response.
 
-**Step 1 — the API and the collection route**
+### Why the prompt is worded the way it is
 
+It names no plugin, no field and no pattern. Earlier versions handed the agent
+four regular expressions verbatim, because one agent run had invented a
+replacement that would have written a literal `[^"]*` into every response. This one
+describes the result instead, and three sentences carry the guards:
+
+- **"In every record of every response, not just the first."** This is `scope:
+  global`. The default is `once`: one match, then stop. On a list it masks the
+  first record and leaves the rest, and the first record is the one in every
+  screenshot.
+- **"So `Sincere@april.biz` reads `***@april.biz`."** A worked example pins the
+  replacement more tightly than a description of it, and it is the check the
+  reader runs by eye.
+- **"If a logger is added to these routes."** This is `log-data-mask`, phrased so
+  the agent configures it without inventing a logger and a sink. It changes only
+  what a logger writes, does nothing without one, and never changes the response.
+  See [Two masks](#two-masks-do-not-confuse-them).
+
+The prompt is also **one block instead of four steps**. The split was a workaround
+for malformed tool arguments on large route writes, measured on an older agent
+model. On 2026-10-13, on `tencent/hy3`, the agent wrote both routes with all three
+plugins in a single write and `verify.sh` passed 6/6 against them. See
+[Validation status](#validation-status).
+
+What the prompt no longer carries: the patterns themselves; `scope`, `regex_uri`
+and `request-id` by name; the upstream-reuse note; the `plugins`-map and
+`x-helix-gateway` instructions; and "tell me what `log-data-mask` does not do".
+
+### What the agent decides for you
+
+| | The prompt says | This package's spec | The 2026-10-13 run |
+|---|---|---|---|
+| Email pattern | local part → `***` | `[^"@]+@` | `[^"@]*@` (also matches an empty local part) |
+| Single-record rewrite | the id reaches `/users/:customerId` | `regex_uri` | `regex_uri` |
+| Log mask value | redacted | `[redacted]` | `[redacted]` |
+| Correlation id | nothing | `request-id`, API-wide | `request-id`, API-wide |
+| Authentication | nothing | none — ships open | none (the agent flagged it and offered to add it) |
+
+None of these changes what the caller sees. `scope: global` and the anchored
+patterns do.
+
+## Variations
+
+Follow-ups for the same session, once the build above is standing. Use the same
+register as the prompt and say what you want to be true.
+
+**Prove the log half too**
 ```text
-Create a REST API "Support Console API" with ONE route for now. Upstream
-https://jsonplaceholder.typicode.com — reuse it if it already exists as an upstream
-in this org rather than creating another; the org's upstream limit is low.
-Environment test.
-
-Route: GET /support/customers -> proxy-rewrite uri /users
-Put request-id in the SERVICE spec so it applies API-wide. Set only the fields you
-need — an empty headers {} or a regex_uri of nulls is rejected at dry-run.
-
-Plugins go in a top-level "plugins" map on the route object, each under its own
-plugin name. No "x-helix-gateway" wrapper — a live route discards it silently and
-still reports success.
-
-Bind the upstream, run dry_run_deploy, then read the revision back so I can see
-which plugins actually landed. Wait before deploying.
+Add a logger to both routes that sends each request and response body to
+{{log_sink_url}} as soon as it happens. Then tell me how to compare one logged
+entry with and without the log masking, because that comparison is the only proof
+the log mask works.
 ```
 
-**Step 2 — the single-record route**
-
+**My payload names the fields differently**
 ```text
-Add a second route to the same revision, keeping the first exactly as it is:
-
-  GET /support/customers/{customerId}
-
-It needs proxy-rewrite with regex_uri, not uri, so the id reaches the backend:
-regex_uri: ["^/support/customers/(.*)$", "/users/$1"]
-
-Send routeSpec as a JSON array of both route objects — update_route_spec replaces
-the whole list. Then read the revision back.
+My records use contactEmail, mobileNumber and homeLat/homeLng. Mask those instead,
+in the response and in the logs, and remind me what happens to a copy of the same
+value stored under another key.
 ```
 
-**Step 3 — the masking the caller sees**
-
+**Mask by role rather than for everyone**
 ```text
-Give BOTH routes this response-rewrite block, verbatim — these are the exact
-patterns, do not rewrite them:
-
-filters:
-  - regex: ("email"\s*:\s*")[^"@]+@
-    replace: $1***@
-    scope: global
-  - regex: ("phone"\s*:\s*")[^"]*"
-    replace: $1[redacted]"
-    scope: global
-  - regex: ("lat"\s*:\s*")[^"]*"
-    replace: $1[redacted]"
-    scope: global
-  - regex: ("lng"\s*:\s*")[^"]*"
-    replace: $1[redacted]"
-    scope: global
-
-Every filter keeps scope: global. The default is "once" — one match, then stop —
-which on a list masks the first record and leaves the rest in the clear.
-
-Send routeSpec as a JSON array of both routes, then read the revision back.
+Only agents in the support tier should get the masked view; the fraud team needs
+the full record. Tell me honestly whether one route can do that, and if not, what
+the two-route shape looks like and how the caller is identified.
 ```
 
-**Step 4 — the masking the logs keep**
-
+**Put identity in front of it**
 ```text
-Add log-data-mask to both routes, keeping everything else exactly as it is:
-  response:
-    - { type: body, name: email, action: replace, value: "[redacted]", body_format: json }
-    - { type: body, name: phone, action: replace, value: "[redacted]", body_format: json }
-  request:
-    - { type: header, name: authorization, action: remove }
-    - { type: header, name: x-api-key, action: remove }
-
-Then read the revision back, and tell me in one sentence what log-data-mask does
-NOT do.
+Require an app's API key in the X-Api-Key header on both routes, and keep the
+masking exactly as it is. Then create a developer, a product and an app, and give
+me the key.
 ```
+That is [08](../08-api-key/). Masking is not access control.
 
-> **If step 4 ends in `stream closed with reason: error`, that's the defect above,
-> not your prompt.** The route spec is now large enough to trigger it reliably.
-> Import [`example/api-spec.yaml`](example/api-spec.yaml) instead — same
-> configuration, complete, and the agent has already done the parts that teach you
-> anything.
+## When the agent goes wrong
+
+**Read the stored revision before you trust any of it.**
+
+| Symptom | Cause |
+|---|---|
+| Only the first record is masked | A filter is missing `scope: global`. |
+| Nothing is masked | The pattern doesn't match the serialised body. Check key spelling and whitespace, and whether something on the route converts the format first. |
+| A field nobody asked about is mangled | An over-broad pattern. Anchor each one on its field name. |
+| A literal `[^"]*` appears in responses | The agent put regex syntax in the *replacement*. Replacements take `$1` and plain text only. |
+| Every single-record call returns the same customer | The rewrite is a fixed `uri`. It needs a `regex_uri` that carries the id. |
+| The agent says the logs are masked, with no logger on the route | `log-data-mask` has no effect without a logger, and never changes the response. |
+| `stream closed with reason: error` after a route write | Malformed tool arguments; nothing was written. Seen on an older model with the whole spec in one write. Retry once; if it repeats, import [`example/api-spec.yaml`](example/api-spec.yaml). |
+| The routes exist with **no plugins**, at exit 0 | The agent wrapped them in `x-helix-gateway` inside the live route object, which a live route silently discards. |
+| Deploy fails: `Only INACTIVE revisions can be updated` | Clone the revision or undeploy, then apply. |
 
 ## Install it directly
 
@@ -352,6 +405,7 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 | Gateway dry-run | **PASS** | Non-destructive, against a temporary import. |
 | Gateway deployed | **DEPLOYED** | Revision ACTIVE in a test environment. |
 | Functional tests | **PASS (6/6)** | Response side by `verify.sh`; the log side verified separately against a real logger and a readable sink. |
+| Agent-mode run | **PASS (config + 6/6 functional)**, 2026-10-13, `tencent/hy3` | The current prompt, run once, in one route write. The stored revision had `scope: global` on all four filters, anchored patterns, a `regex_uri` on the single-record route, and `log-data-mask` with both body fields and both headers. `verify.sh` passed 6/6 against the agent-built routes. The log half was not re-checked: no logger on the route. **The routes ran under an `/agentrun-10` prefix**, because this package's reference API holds the bare paths in that environment |
 
 Overall: **READY.** The `scope: once` behaviour and the independence of the two
 masks were both reproduced deliberately, not inferred.
