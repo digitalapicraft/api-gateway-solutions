@@ -269,6 +269,7 @@ That is [08](../08-api-key/).
 |---|---|
 | 200, and no enrichment headers at the backend | The callout is on the access phase, or it failed under `fail-open`. |
 | The headers arrive empty | A header names a variable that doesn't match `ctx.helix.<ctx_namespace>.<field>` exactly, or a field `map_response_to_ctx` doesn't define. |
+| No headers on reads, 503 on every write, and a `lua-callout` on the routes | The agent built its own mechanism, and the code reads fields the callout never mapped: the namespace holds only the names in `map_response_to_ctx` (seen 2026-10-13, reading `body` and `status` where it had mapped `external_body` and `external_status`). Replace it with the package's design: rewrite-phase callout, `proxy-rewrite` `headers.set`. |
 | One header missing, the others fine | That mapped path resolved to nothing. A path matching nothing is not an error. |
 | A client-supplied header survives | `headers.add` where `headers.set` belongs. |
 | 503 on every request | The callout is unreachable and the policy is `fail-close`. That is the configured behaviour. Check the URI from the gateway's network, not your laptop. |
@@ -386,6 +387,7 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 | Gateway dry-run | **PASS** | Non-destructive, against a temporary import. |
 | Gateway deployed | **DEPLOYED** | Revision ACTIVE in a test environment. |
 | Functional tests | **PASS (5/5)** | Plus all three failure cases reproduced on a temporary lab API. |
+| Agent-mode run | **FAIL**, 2026-10-13, operator, alpha environment | A second build of the current prompt. The agent ignored the named design: an access-phase callout, headers set from a `lua-callout` instead of `proxy-rewrite`, and `fail-open` on the write route with fail-close rebuilt in Lua. The Lua read fields the callout never stored. Measured live: GET returned 200 with **no enrichment headers, and a client-supplied `X-Tenant-Plan` reached the backend**; POST returned 503 on every call though the lookup succeeded |
 | Agent-mode run | **PASS (config + functional)**, 2026-10-13, `tencent/hy3` | The current prompt, run once. Both routes stored `phase: rewrite`, `headers.set` with the literal `${ctx.helix.service_callout.<field>}` names, `fail-open` on the read route and `fail-close` with the message on the write route. `verify.sh` passed every check against the agent-built routes, including the spoofed-header overwrite. The failure policies were read from the stored config, not exercised. The routes ran under an `/agentrun-11` prefix, because this package's reference API holds the bare paths in that environment |
 
 Overall: **READY.** The phase-ordering and failure-policy behaviours were
