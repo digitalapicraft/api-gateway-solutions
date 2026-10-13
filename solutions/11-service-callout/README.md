@@ -38,7 +38,7 @@ the *path*, not of any one service.
 
 ## Business need
 
-Full version: [`business-need.md`](business-need.md).
+The thirty-second version: [`business-need.md`](business-need.md).
 
 | Dimension | The lookup in every service | One callout at the edge |
 |---|---|---|
@@ -47,6 +47,30 @@ Full version: [`business-need.md`](business-need.md).
 | **Failure behaviour** | Whatever each team chose, undocumented | An explicit policy per route |
 | **Load on the profile service** | One call per service per request | One call per request |
 | **A new service** | Implements the lookup before it starts | Reads a header |
+
+The part that pays for the work is not the deduplication, it is the onboarding.
+Once the enrichment is on the route, every new service behind it starts with the
+answer already in hand. The lookup stops being the first thing each team builds and
+becomes something it inherits.
+
+The failure policy is the most consequential choice here, and it was never really
+made before: one service retried, one failed open, one failed the request, each
+decided by whoever wrote it, under a deadline. The first slow day of the profile
+service is when the estate finds out what it actually does. Here the policy is
+written on each route.
+
+What this does **not** buy you:
+
+- **An authorization decision.** The callout fetches an answer; it does not act on
+  it. Rejecting a caller on the response needs a plugin built to return a verdict.
+- **Fewer dependencies.** One synchronous call stays in the request path, and its
+  timeout is now part of your latency budget.
+- **A cache.** Every request makes the call unless you add caching deliberately.
+- **Work-free backends.** Under fail-open the headers can be absent, and each
+  backend has to decide what that means: one documented behaviour instead of N
+  undocumented ones.
+
+No ROI figure is claimed anywhere in this package.
 
 ## How a request flows
 
@@ -153,57 +177,104 @@ in the context.
 
 ## Build it with the Helix Agent
 
-Two steps; confirm between them. Full prompt with the reasoning, tweak knobs and
-failure modes: [`helix-agent-prompt.md`](helix-agent-prompt.md).
+Recommended path, about fifteen minutes. The whole build is **one prompt**:
+[`helix-agent-prompt.md`](helix-agent-prompt.md). Paste it as a single message and
+replace the `{{...}}` values. Then run [`example/verify.sh`](example/verify.sh)
+against it, as under [Testing](#testing). [AGENT-GUIDE.md](../../AGENT-GUIDE.md)
+carries the standing rules the prompt assumes.
 
+> **Check what was stored, not what the agent said.** Read the revision back. Each
+> route should carry `service-callout` with **`phase: rewrite`** and
+> `proxy-rewrite` with **`headers.set`**, not `add`. Every header value should be
+> `${ctx.helix.service_callout.<field>}` with a `<field>` that `map_response_to_ctx`
+> defines. The read route should be `fail-open`, the write route `fail-close`.
+
+### Why the prompt is worded the way it is
+
+It names no plugin. It describes the lookup, the headers and the failure policy,
+and names the two things the agent cannot learn from the schema:
+
+- **"The lookup must finish before the headers are set, so it runs in the rewrite
+  phase."** `proxy-rewrite` runs in the rewrite phase, so an access-phase callout
+  produces its values after the headers were already set. The backend gets **200
+  and no headers, with no error**. The reason is in the sentence, because without
+  it an agent tidies the phase back to its default.
+- **"`${ctx.helix.service_callout.<field>}`: one variable whose name includes the
+  dots, not a nested path."** That is the bridge. It looks like a path expression,
+  and an agent that "corrects" it into one produces empty headers. See
+  [the bridge](#2-the-bridge-is-a-variable-named-after-the-namespace).
+- **"The gateway's values replace any the client sent."** That is `set`, not `add`.
+  With `add`, a client asserts its own tenant plan and the backend believes it.
+- **The two failure outcomes, per route.** A read proceeds without the answer and a
+  write refuses. Stated as what happens, they become `fail-open` and `fail-close`.
+
+What the prompt no longer carries: the plugin names; `map_response_to_ctx`,
+`timeout` and `request-id` by name; the empty-fields warning; the `plugins`-map and
+`x-helix-gateway` instructions; and the curl request, which is now
+[`verify.sh`](example/verify.sh). On 2026-10-13, on `tencent/hy3`, this prompt
+built both routes correctly and `verify.sh` passed every check against them. See
+[Validation status](#validation-status).
+
+### What the agent decides for you
+
+| | The prompt says | This package's spec | The 2026-10-13 run |
+|---|---|---|---|
+| Context field names | nothing | `tenant_plan`, `tenant_contact`, `profile_status` | `company_name`, `email`, `status` |
+| Callout timeout | nothing | 3000 ms | not set (the plugin's default) |
+| Correlation id | nothing | `request-id`, API-wide | not added |
+
+Any field names work, as long as each header reads a field that
+`map_response_to_ctx` defines. The phase, `set` and the per-route policies decide
+whether this works.
+
+## Variations
+
+Follow-ups for the same session, once the build above is standing. Use the same
+register as the prompt and say what you want to be true.
+
+**Point it at my real profile service**
 ```text
-Create a REST API "Storefront API" whose backend needs the calling tenant's profile
-on every request. Upstream https://httpbin.org — its /headers endpoint echoes
-request headers back, so I can see what the backend received. Environment test.
-Fresh org — nothing exists yet.
-
-Route: GET /storefront/orders -> proxy-rewrite uri /headers
-
-Add service-callout on that route:
-  uri https://jsonplaceholder.typicode.com/users/1
-  method GET, phase rewrite, timeout 3000
-  map_response_to_ctx: tenant_plan from body.company.name, tenant_contact from
-  body.email, profile_status from status
-  error_handling policy fail-open
-
-phase MUST be rewrite. proxy-rewrite runs in the rewrite phase, so an access-phase
-callout produces its values after the injection has already happened and the
-headers arrive empty, with a 200 and no error.
-
-Then have proxy-rewrite SET these headers — set, not add, so a client cannot assert
-its own tenant plan:
-  X-Tenant-Plan: ${ctx.helix.service_callout.tenant_plan}
-  X-Tenant-Contact: ${ctx.helix.service_callout.tenant_contact}
-  X-Profile-Status: ${ctx.helix.service_callout.profile_status}
-Those variable names are literal — the dots are part of the name, not a path
-expression. Don't "correct" them into a nested lookup.
-
-Put request-id in the SERVICE spec so it applies API-wide. Set only the fields you
-need — an empty headers {} or a regex_uri of nulls is rejected at dry-run.
-
-Plugins go in a top-level "plugins" map on the route object, each under its own
-plugin name. No "x-helix-gateway" wrapper — a live route discards it silently and
-still reports success.
-
-Bind the upstream, run dry_run_deploy, then read the revision back. Wait before
-deploying.
+Fetch the profile from {{callout_uri}} instead, and pass the caller's
+Authorization header through to it. Then tell me what the profile service now has
+to handle that it didn't before.
 ```
 
-Then, in the same session:
-
+**The answer should decide whether the request is allowed**
 ```text
-Add a second route, POST /storefront/checkout -> proxy-rewrite uri /post, with the
-same callout but error_handling policy fail-close and the message "tenant profile
-unavailable" — on a write path we would rather fail than act without the answer.
-
-Send routeSpec as a JSON array of both routes, then show me the stored routeSpec
-and a curl that proves a client cannot spoof X-Tenant-Plan.
+I want to refuse callers whose account is suspended, not just pass the plan on.
+Tell me plainly whether this lookup can do that, and if not, show me the version of
+this route that can.
 ```
+
+**Cut the cost of the callout**
+```text
+This adds a round trip to every request. Show me what caching the lookup would
+look like, what the invalidation story is, and whether it is worth it at
+{{requests_per_second}} requests per second.
+```
+
+**Identify the caller first**
+```text
+Require an app's API key in the X-Api-Key header on both routes, and keep the
+lookup exactly as it is. Then create a developer, a product and an app, and give me
+the key.
+```
+That is [08](../08-api-key/).
+
+## When the agent goes wrong
+
+**Read the stored revision before you trust any of it.**
+
+| Symptom | Cause |
+|---|---|
+| 200, and no enrichment headers at the backend | The callout is on the access phase, or it failed under `fail-open`. |
+| The headers arrive empty | A header names a variable that doesn't match `ctx.helix.<ctx_namespace>.<field>` exactly, or a field `map_response_to_ctx` doesn't define. |
+| One header missing, the others fine | That mapped path resolved to nothing. A path matching nothing is not an error. |
+| A client-supplied header survives | `headers.add` where `headers.set` belongs. |
+| 503 on every request | The callout is unreachable and the policy is `fail-close`. That is the configured behaviour. Check the URI from the gateway's network, not your laptop. |
+| One route works and the other doesn't | The plugin is per route. |
+| The routes exist with **no plugins**, at exit 0 | The agent wrapped them in `x-helix-gateway` inside the live route object, which a live route silently discards. |
+| Deploy fails: `Only INACTIVE revisions can be updated` | Clone the revision or undeploy, then apply. |
 
 ## Install it directly
 
@@ -315,6 +386,7 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 | Gateway dry-run | **PASS** | Non-destructive, against a temporary import. |
 | Gateway deployed | **DEPLOYED** | Revision ACTIVE in a test environment. |
 | Functional tests | **PASS (5/5)** | Plus all three failure cases reproduced on a temporary lab API. |
+| Agent-mode run | **PASS (config + functional)**, 2026-10-13, `tencent/hy3` | The current prompt, run once. Both routes stored `phase: rewrite`, `headers.set` with the literal `${ctx.helix.service_callout.<field>}` names, `fail-open` on the read route and `fail-close` with the message on the write route. `verify.sh` passed every check against the agent-built routes, including the spoofed-header overwrite. The failure policies were read from the stored config, not exercised. The routes ran under an `/agentrun-11` prefix, because this package's reference API holds the bare paths in that environment |
 
 Overall: **READY.** The phase-ordering and failure-policy behaviours were
 reproduced rather than inferred.
