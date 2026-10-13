@@ -51,7 +51,7 @@ the domain, so nothing about it needs to live in either.
 
 ## Business need
 
-Full version: [`business-need.md`](business-need.md).
+The thirty-second version: [`business-need.md`](business-need.md).
 
 | Dimension | Four client-side parsers | One conversion at the edge |
 |---|---|---|
@@ -59,11 +59,34 @@ Full version: [`business-need.md`](business-need.md).
 | **Cost of a new client** | Write parser number five | Call the endpoint |
 | **Backend change required** | — | None. It keeps speaking XML |
 | **When the XML changes** | Four teams, four releases, four timelines | One place to look first |
+| **Where representation bugs land** | On the client team that did nothing wrong | In one place, with one owner |
 | **Existing XML consumers** | — | Unaffected — they keep getting XML from the same route |
 
-That last row is the one that usually decides it: because conversion is
+That last row usually decides it. Because the response conversion is
 content-negotiated, the old clients do not have to be migrated to put the new
-front door in place.
+front door in place, and that is often the difference between "approved" and
+"next year".
+
+The bugs this removes are intermittent, which is why they are expensive. A client
+works for months and breaks the first day a customer has exactly one item in a
+basket, because the element stopped being an array. The ticket lands on the client
+team, and is diagnosed by whoever knows the XML best, usually on a different team
+again.
+
+What this does **not** buy you:
+
+- **An API redesign.** The JSON mirrors the XML, element for element. Awkward XML
+  becomes awkward JSON. A stable, versioned contract needs a template transform on
+  top.
+- **Fidelity.** Attributes on child elements, mixed content and the single-vs-many
+  ambiguity are places where XML carries something JSON has no home for. See
+  [what the conversion actually does](#what-the-conversion-actually-does-to-your-document).
+- **Schema conformance on the way in.** JSON key order is not preserved, so a
+  backend validating a strict `xs:sequence` can reject a complete document.
+- **Authentication.** This package ships open so the mediation is the only thing
+  under test.
+
+No ROI figure is claimed anywhere in this package.
 
 ## How a request flows
 
@@ -184,49 +207,107 @@ the right tool for the request side — a template-based transform is.
 
 ## Build it with the Helix Agent
 
-Two steps; confirm between them. Full prompt with the reasoning, tweak knobs and
-failure modes: [`helix-agent-prompt.md`](helix-agent-prompt.md).
+Recommended path, about fifteen minutes. The whole build is **one prompt**:
+[`helix-agent-prompt.md`](helix-agent-prompt.md). Paste it as a single message and
+replace the `{{...}}` values. Then run [`example/verify.sh`](example/verify.sh)
+against it, as under [Testing](#testing). [AGENT-GUIDE.md](../../AGENT-GUIDE.md)
+carries the standing rules the prompt assumes.
 
+> **Check what was stored, not what the agent said.** Read the revision back.
+> `POST /catalog/orders` should carry `xml-to-json` with **`transform_request:
+> true`**, `request_root_name: order`, `array_item_name: item` and the `xmlns` root
+> attribute. Neither route's `proxy-rewrite` should set a `Content-Type`, and
+> nothing should set `pretty`.
+
+### Why the prompt is worded the way it is
+
+It names no plugin and almost no field. Ask for an outcome and the agent reads
+the real `xml-to-json` schema your org ships. Four sentences carry guards:
+
+- **"A JSON body reaches the backend as XML."** That is `transform_request`, which
+  defaults to `false`. An agent that writes `xml-to-json: {}` gets the response
+  direction working and the request direction silently never happening.
+- **"Don't set a Content-Type when retargeting the path."** The one instruction
+  kept from the old prompt by name. `proxy-rewrite` (priority 1008) runs before
+  `xml-to-json` (997), so an override there changes the header the transform
+  matches on, and the request direction stops converting. Removing this guard broke
+  [solution 03](../03-soap-to-rest/)'s request transform in a live run, and the
+  override is exactly the tidy-up an agent volunteers.
+- **The root element, namespace and item name.** Facts about the backend, not
+  plugin settings. A namespace-aware backend rejects a document without them,
+  usually with a message that doesn't mention namespaces.
+- **"Browser clients can … send the Accept header."** The conversion is
+  content-negotiated, so a browser that can't send `Accept` can't ask for JSON.
+
+What the prompt no longer carries: the plugin names; `content_types` and
+`request_content_types` (the defaults are right); the `pretty` warning (nothing
+asks for readable JSON, so nothing invites it; see [Gotchas](#gotchas)); the
+empty-fields warning (the dry-run catches it); `request-id`; the `plugins`-map and
+`x-helix-gateway` instructions; and the curl step, which is now
+[`verify.sh`](example/verify.sh). On 2026-10-13, on `tencent/hy3`, this prompt
+built both routes correctly and `verify.sh` passed in full against them. See
+[Validation status](#validation-status).
+
+### What the agent decides for you
+
+| | The prompt says | This package's spec | The 2026-10-13 run |
+|---|---|---|---|
+| CORS | browsers can send `Accept` | `cors` API-wide | `cors` API-wide, `allow_headers: "*"`, `max_age: 5` |
+| `content_types` | nothing | `application/xml`, `text/xml` | not set (the same defaults) |
+| `max_body_size` | nothing | 1 MiB | not set |
+| Correlation id | nothing | `request-id`, API-wide | `request-id`, API-wide |
+
+None of these decides whether the conversion happens. `transform_request` and the
+untouched `Content-Type` do.
+
+## Variations
+
+Follow-ups for the same session, once the build above is standing. Use the same
+register as the prompt and say what you want to be true.
+
+**My backend sends a different Content-Type**
 ```text
-Create a REST API "{{api_name}}" putting a JSON front door on an XML backend.
-Upstream https://httpbin.org — its /xml returns an XML document and its /post
-echoes what it received, so both directions are visible. Environment test. Fresh
-org — nothing exists yet.
-
-Routes GET /catalog/items and POST /catalog/orders, with proxy-rewrite
-/catalog/items -> /xml and /catalog/orders -> /post. Do NOT set a Content-Type in
-proxy-rewrite — it runs first and would break the request transform. Set only the
-plugin fields you need: an empty headers {} or a regex_uri of nulls is rejected at
-dry-run.
-
-Use xml-to-json. On the GET route, response conversion only. On the POST route set
-transform_request true as well — it defaults to false, so an empty block converts
-responses only. Set request_content_types to application/json, content_types to
-application/xml and text/xml, request_root_name "order", array_item_name "item",
-and root_attributes xmlns "urn:example:catalog".
-
-Don't set pretty — on this build it makes the route return 503.
-
-Put request-id and cors in the SERVICE spec so they apply API-wide; cors must
-allow the accept header, because the response conversion is content-negotiated.
-
-Plugins go in a top-level "plugins" map on the route object, each under its own
-plugin name. No "x-helix-gateway" wrapper — a live route discards it silently and
-still reports success.
-
-Show me the spec, run dry_run_deploy, then read the revision back so I can see
-which plugins actually landed. Wait before deploying.
+My backend replies with {{backend_content_type}}, not application/xml. Make the
+conversion recognise it on both routes, and tell me what else assumes the default.
 ```
 
-Then, in the same session:
-
+**I need a stable JSON contract, not a mirror of the XML**
 ```text
-Now curl commands showing, in order: GET /catalog/items with
-Accept: application/json returning JSON; the same call with Accept:
-application/xml returning the backend's XML untouched; a JSON POST to
-/catalog/orders whose echo shows the XML the backend received; and the same POST
-sent as text/plain, which passes through unconverted with no error.
+This JSON mirrors the backend's element names, and I need a contract that survives
+a backend refactor. Show me a template-based transform for the GET route instead,
+and be explicit about what I take on by maintaining the template.
 ```
+
+**My backend validates a strict xs:sequence**
+```text
+My backend's schema is an xs:sequence, so element order matters. Tell me plainly
+whether the request conversion can guarantee order, and if not, show me a
+template-based alternative for the POST route only.
+```
+
+**Put identity in front of it**
+```text
+Require an app's API key in the X-Api-Key header on both routes, and keep the
+conversion exactly as it is. Then create a developer, a product and an app, and
+give me the key.
+```
+That is [08](../08-api-key/).
+
+## When the agent goes wrong
+
+**Read the stored revision before you trust any of it.**
+
+| Symptom | Cause |
+|---|---|
+| The response is still XML | The client didn't send `Accept: application/json`, or the upstream's `Content-Type` isn't in `content_types`. |
+| The backend rejects the request body | `transform_request` is false, or the client's content type isn't in `request_content_types`. |
+| Everything returns 200 and the backend still complains | Both gates fail **open**. The gateway's status code is not evidence the conversion happened. |
+| The request direction stops working after an edit | Something added a `Content-Type` to `proxy-rewrite`. |
+| 503 with the connection dropped | `pretty: true` is set. Remove it. |
+| The dry-run fails while the agent adds a browser preflight route | Seen on 2026-10-13: the agent tried a separate `/*` OPTIONS route, which this environment refused. It recovered by relying on `cors` alone. Read the revision back. |
+| The dry-run fails on `proxy-rewrite` | The agent added empty optional fields (`headers: {}`, a `regex_uri` of nulls). Set only `uri`. |
+| The routes exist with **no plugins**, at exit 0 | The agent wrapped them in `x-helix-gateway` inside the live route object, which a live route silently discards. |
+| Deploy fails: `Only INACTIVE revisions can be updated` | Clone the revision or undeploy, then apply. |
 
 ## Install it directly
 
@@ -336,6 +417,7 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 | Gateway dry-run | **PASS** | Non-destructive, against a temporary import. |
 | Gateway deployed | **DEPLOYED** | Revision ACTIVE in a test environment. |
 | Functional tests | **PASS (5/5)** | Both directions, both silent-passthrough assertions, and the malformed-body rejection. |
+| Agent-mode run | **PASS (config + functional)**, 2026-10-13, `tencent/hy3` | The current prompt, run once. The stored revision had `transform_request: true`, the root name, item name and namespace, and no `Content-Type` override. `verify.sh` passed every check against the agent-built routes. The dry-run failed twice while the agent tried a separate preflight route, then passed without it. **The routes ran under an `/agentrun-09` prefix**, because this package's reference API holds the bare paths in that environment |
 
 Overall: **READY.** The `pretty: true` defect and the conversion-fidelity
 observations were both produced by this actual run, not read off a schema.

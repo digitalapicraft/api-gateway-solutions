@@ -1,70 +1,33 @@
-# Business need — one conversion at the edge instead of four in the clients
+# JSON clients for an XML backend, at the API gateway
 
-## The risk today
+> The stock system is REST that answers in XML, because it was written in 2009.
+> The web team wrote a parser, iOS wrote another, Android found a library, and the
+> partner team gave up and asked for a nightly CSV. Four conversions of the same
+> document, and the one that breaks is the one nobody owns.
+>
+> **Convert once, at the edge, and the backend keeps speaking XML.**
 
-An XML backend with JSON clients does not produce one problem. It produces one
-problem per client, and they drift.
+- **Conversions to maintain: one per client → one, in configuration.** A new
+  client calls a JSON endpoint instead of writing parser number five.
+- **Existing XML clients migrated: all of them → none.** The response is converted
+  only when the caller asks for JSON, so XML callers keep using the same route.
+- **Backend code changed: none.** It still receives and returns the XML it always
+  has.
 
-**The conversion exists N times.** Web wrote a parser. iOS wrote a different one.
-Android found a library. The partner team gave up and asked for a nightly file.
-Each implementation encodes its own answer to the same ambiguities: what an empty
-element means, whether a single occurrence of a repeatable element is a list,
-what happens to an attribute. They agree until the data changes.
+Pick the package by what the backend speaks, not by the word "XML":
 
-**The bugs are intermittent and land on the wrong team.** The failure mode is not
-"the parser is broken". It is a client that works for months and breaks the first
-day a customer has exactly one item in their basket, because the element stopped
-being an array. That ticket arrives at the client team, who did nothing wrong, and
-is diagnosed by whoever knows the XML best — who is on a different team again.
-
-**Every new client pays the toll again.** The cost of integrating is not calling
-the endpoint; it is writing parser number five. That shows up as partner
-onboarding time, which is a number the business already watches.
-
-**Nobody can change the backend.** It is the system of record, it has been stable
-for fifteen years, and rewriting its representation layer is not a project anyone
-will fund to make a JSON payload nicer.
-
-## What the gateway changes
-
-The conversion moves to the one place every client already passes through, and
-becomes configuration rather than code. The backend is untouched — it keeps
-receiving and returning the XML it always has.
-
-Two consequences do the commercial work:
-
-**A new client costs nothing.** It calls a JSON endpoint. There is no parser to
-write, so integration time stops scaling with the number of consumers.
-
-**The old clients do not have to move.** Because the response conversion is
-content-negotiated — it happens only when the caller asks for JSON — the existing
-XML consumers keep working through the same route, unchanged and unmigrated. The
-new front door does not require a migration project to open, which is usually the
-difference between "approved" and "next year".
-
-## The business outcome
-
-| Before | After |
+| The backend | Use |
 |---|---|
-| One conversion implementation per client | One, in configuration |
-| A new consumer writes a parser first | A new consumer calls an endpoint |
-| Representation bugs land on client teams | They land in one place, with one owner |
-| Adding JSON means migrating everyone | XML consumers keep working through the same route |
-| Backend rewrite is the only "real" fix | Backend untouched; the change is a revision deploy |
+| plain HTTP carrying XML: an inventory API, a file feed, an industry schema | this package |
+| SOAP: an envelope, a `SOAPAction`, a WSDL | [03 — SOAP to REST](../03-soap-to-rest/) |
 
-## What it does not buy you
+The JSON mirrors the XML element for element, so it is not a redesigned API. It is
+not lossless, and it does not keep key order on the way back to XML, so a backend
+that validates a strict `xs:sequence` can reject a complete document. It ships
+unauthenticated. [Before/after, what the conversion does to a document, and what
+this does not buy you are in the README](README.md#business-need).
 
-- **It is not an API redesign.** The JSON mirrors the XML, element for element.
-  If the XML is awkward, you now have awkward JSON. A stable, versioned JSON
-  contract that outlives the backend's structure needs a template-based transform
-  on top.
-- **It is not lossless.** Attributes on child elements, mixed content and the
-  single-vs-many ambiguity are all places where XML carries something JSON has no
-  natural home for. The package states exactly what happened to each in a real
-  document rather than claiming fidelity.
-- **It does not authenticate anything.** This package ships open on purpose so
-  the mediation is the only thing being demonstrated.
-- **The request direction is not a schema-conformance tool.** JSON object key
-  order is not preserved, so a backend validating a strict `xs:sequence` can
-  reject a document containing every field it required. Check that before
-  promising it.
+*Also searched as: XML to JSON at the API gateway · JSON to XML request transform ·
+convert an XML API to JSON · modernise a legacy XML REST API · content negotiation
+XML JSON · put a JSON front end on an XML backend · stop writing XML parsers in
+every client.*
