@@ -225,10 +225,12 @@ describes the result instead, and four sentences carry the guards:
   the earlier wording did exactly that on 2026-10-13; see
   [Validation status](#validation-status). Describe your own backend's spacing,
   or ask for patterns that tolerate any.
-- **"If a logger is added to these routes."** This is `log-data-mask`, phrased so
-  the agent configures it without inventing a logger and a sink. It changes only
-  what a logger writes, does nothing without one, and never changes the response.
-  See [Two masks](#two-masks-do-not-confuse-them).
+- **"Don't add a logger now. … if one is added to these routes later."** This
+  is `log-data-mask`, configured without a logger or a sink. It changes only what a
+  logger writes, does nothing without one, and never changes the response. The
+  first half was added after a build read "if a logger is added" as an
+  instruction, and added a `file-logger`. Whether it prevents that is not yet
+  measured. See [Two masks](#two-masks-do-not-confuse-them).
 
 The prompt is also **one block instead of four steps**. The split was a workaround
 for malformed tool arguments on large route writes, measured on an older agent
@@ -303,10 +305,11 @@ That is [08](../08-api-key/). Masking is not access control.
 | A field nobody asked about is mangled | An over-broad pattern. Anchor each one on its field name. |
 | A literal `[^"]*` appears in responses | The agent put regex syntax in the *replacement*. Replacements take `$1` and plain text only. |
 | The single-record route returns 404 | The route was stored as `/support/customers/{customerId}`. Live routes take `/:customerId`; only spec import rewrites the braces. Seen on 2026-10-13 with the prompt writing `:customerId`. Fix the path by hand. |
-| A `file-logger` appears on the API | The agent read "if a logger is added" as an instruction to add one (2026-10-13). It writes masked bodies to a file on the gateway. Remove it if you didn't want it. |
+| A `file-logger` appears on the API | The agent read "if a logger is added" as an instruction to add one (2026-10-13, before the prompt said not to). It writes masked bodies to a file on the gateway. Remove it if you didn't want it. |
 | Every single-record call returns the same customer | The rewrite is a fixed `uri`. It needs a `regex_uri` that carries the id. |
 | The agent says the logs are masked, with no logger on the route | `log-data-mask` has no effect without a logger, and never changes the response. |
 | `stream closed with reason: error` after a route write | Malformed tool arguments; nothing was written. Seen on an older model with the whole spec in one write. Retry once; if it repeats, import [`example/api-spec.yaml`](example/api-spec.yaml). |
+| The agent says the routes are built, and the API has **no routes** | The route write reported success and stored nothing (2026-10-13). The agent may still offer to deploy. Read the revision back; if it is empty, ask for the routes again or import [`example/api-spec.yaml`](example/api-spec.yaml). |
 | The routes exist with **no plugins**, at exit 0 | The agent wrapped them in `x-helix-gateway` inside the live route object, which a live route silently discards. |
 | Deploy fails: `Only INACTIVE revisions can be updated` | Clone the revision or undeploy, then apply. |
 
@@ -419,7 +422,8 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 | Gateway dry-run | **PASS** | Non-destructive, against a temporary import. |
 | Gateway deployed | **DEPLOYED** | Revision ACTIVE in a test environment. |
 | Functional tests | **PASS (6/6)** | Response side by `verify.sh`; the log side verified separately against a real logger and a readable sink. |
-| Agent-mode run, current wording | **Masking PASS; single-record route 404**, 2026-10-13, `tencent/hy3` | One build of the prompt as shipped. All six filters whitespace-tolerant, `scope: global`, placed API-wide. `verify.sh` passed the five list-route checks. **The single-record route was stored as `/{customerId}` and returns 404**, despite the prompt writing `:customerId`; see [When the agent goes wrong](#when-the-agent-goes-wrong). The agent also added a `file-logger` nobody asked for |
+| Agent-mode run, current wording | **Not built**, 2026-10-13, `tencent/hy3` | One build of the prompt as shipped, with "don't add a logger now". The route write reported success and stored **no routes**, and no `log-data-mask`. The agent then offered to deploy the empty API, describing two masked routes. Not deployed; whether the logger sentence works is unmeasured. Read the revision back before any deploy |
+| Agent-mode run, previous wording | **Masking PASS; single-record route 404**, 2026-10-13, `tencent/hy3` | The wording with the pretty-printed sentence and without "don't add a logger now". All six filters whitespace-tolerant, `scope: global`, placed API-wide. `verify.sh` passed the five list-route checks. **The single-record route was stored as `/{customerId}` and returns 404**, despite the prompt writing `:customerId`; see [When the agent goes wrong](#when-the-agent-goes-wrong). The agent also added a `file-logger` nobody asked for |
 | Agent-mode run, earlier wording | **1 of 2 builds masked anything**, 2026-10-13 | The wording before the pretty-printed sentence. One build on `tencent/hy3` passed `verify.sh` 6/6. **The operator's build masked nothing**: its patterns assumed compact JSON and matched 0 of 10 records (model not recorded) |
 
 The agent-mode builds ran under an `/agentrun-10` path prefix, because this package's reference API holds the bare paths in that environment.
