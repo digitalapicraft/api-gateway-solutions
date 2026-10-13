@@ -208,7 +208,7 @@ carries the standing rules the prompt assumes.
 It names no plugin, no field and no pattern. Earlier versions handed the agent
 four regular expressions verbatim, because one agent run had invented a
 replacement that would have written a literal `[^"]*` into every response. This one
-describes the result instead, and three sentences carry the guards:
+describes the result instead, and four sentences carry the guards:
 
 - **"In every record of every response, not just the first."** This is `scope:
   global`. The default is `once`: one match, then stop. On a list it masks the
@@ -217,6 +217,14 @@ describes the result instead, and three sentences carry the guards:
 - **"So `Sincere@april.biz` reads `***@april.biz`."** A worked example pins the
   replacement more tightly than a description of it, and it is the check the
   reader runs by eye.
+- **"The backend pretty-prints its JSON."** A fact about the backend, and the
+  guard that decides whether anything is masked at all. The agent writes its
+  patterns against the JSON it imagines, and a pattern written for compact JSON
+  (`"email":"`) matches nothing in `"email": "Sincere@april.biz"`. Every response
+  then passes through unmasked, with a 200 and no error. An operator's build of
+  the earlier wording did exactly that on 2026-10-13; see
+  [Validation status](#validation-status). Describe your own backend's spacing,
+  or ask for patterns that tolerate any.
 - **"If a logger is added to these routes."** This is `log-data-mask`, phrased so
   the agent configures it without inventing a logger and a sink. It changes only
   what a logger writes, does nothing without one, and never changes the response.
@@ -234,12 +242,15 @@ and `request-id` by name; the upstream-reuse note; the `plugins`-map and
 
 ### What the agent decides for you
 
-| | The prompt says | This package's spec | The 2026-10-13 run |
+| | The prompt says | This package's spec | First `tencent/hy3` build |
 |---|---|---|---|
+| Whitespace around `:` | pretty-printed, space after each colon | `\s*:\s*` | `\s*:\s*` (an operator's build of the earlier wording: none, so nothing matched) |
 | Email pattern | local part → `***` | `[^"@]+@` | `[^"@]*@` (also matches an empty local part) |
 | Single-record rewrite | the id reaches `/users/:customerId` | `regex_uri` | `regex_uri` |
 | Log mask value | redacted | `[redacted]` | `[redacted]` |
 | Correlation id | nothing | `request-id`, API-wide | `request-id`, API-wide |
+| Where the masks sit | both routes | on each route | on each route (the current wording's build: API-wide) |
+| A logger | only "if one is added" | none | none (the current wording's build added `file-logger`) |
 | Authentication | nothing | none — ships open | none (the agent flagged it and offered to add it) |
 
 None of these changes what the caller sees. `scope: global` and the anchored
@@ -287,9 +298,12 @@ That is [08](../08-api-key/). Masking is not access control.
 | Symptom | Cause |
 |---|---|
 | Only the first record is masked | A filter is missing `scope: global`. |
+| Nothing is masked, every call returns 200 | The patterns assume compact JSON (`"email":"`) and the backend sends `"email": "…"`. Seen on 2026-10-13. Ask for patterns that match however the field is spaced. |
 | Nothing is masked | The pattern doesn't match the serialised body. Check key spelling and whitespace, and whether something on the route converts the format first. |
 | A field nobody asked about is mangled | An over-broad pattern. Anchor each one on its field name. |
 | A literal `[^"]*` appears in responses | The agent put regex syntax in the *replacement*. Replacements take `$1` and plain text only. |
+| The single-record route returns 404 | The route was stored as `/support/customers/{customerId}`. Live routes take `/:customerId`; only spec import rewrites the braces. Seen on 2026-10-13 with the prompt writing `:customerId`. Fix the path by hand. |
+| A `file-logger` appears on the API | The agent read "if a logger is added" as an instruction to add one (2026-10-13). It writes masked bodies to a file on the gateway. Remove it if you didn't want it. |
 | Every single-record call returns the same customer | The rewrite is a fixed `uri`. It needs a `regex_uri` that carries the id. |
 | The agent says the logs are masked, with no logger on the route | `log-data-mask` has no effect without a logger, and never changes the response. |
 | `stream closed with reason: error` after a route write | Malformed tool arguments; nothing was written. Seen on an older model with the whole spec in one write. Retry once; if it repeats, import [`example/api-spec.yaml`](example/api-spec.yaml). |
@@ -405,7 +419,10 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 | Gateway dry-run | **PASS** | Non-destructive, against a temporary import. |
 | Gateway deployed | **DEPLOYED** | Revision ACTIVE in a test environment. |
 | Functional tests | **PASS (6/6)** | Response side by `verify.sh`; the log side verified separately against a real logger and a readable sink. |
-| Agent-mode run | **PASS (config + 6/6 functional)**, 2026-10-13, `tencent/hy3` | The current prompt, run once, in one route write. The stored revision had `scope: global` on all four filters, anchored patterns, a `regex_uri` on the single-record route, and `log-data-mask` with both body fields and both headers. `verify.sh` passed 6/6 against the agent-built routes. The log half was not re-checked: no logger on the route. **The routes ran under an `/agentrun-10` prefix**, because this package's reference API holds the bare paths in that environment |
+| Agent-mode run, current wording | **Masking PASS; single-record route 404**, 2026-10-13, `tencent/hy3` | One build of the prompt as shipped. All six filters whitespace-tolerant, `scope: global`, placed API-wide. `verify.sh` passed the five list-route checks. **The single-record route was stored as `/{customerId}` and returns 404**, despite the prompt writing `:customerId`; see [When the agent goes wrong](#when-the-agent-goes-wrong). The agent also added a `file-logger` nobody asked for |
+| Agent-mode run, earlier wording | **1 of 2 builds masked anything**, 2026-10-13 | The wording before the pretty-printed sentence. One build on `tencent/hy3` passed `verify.sh` 6/6. **The operator's build masked nothing**: its patterns assumed compact JSON and matched 0 of 10 records (model not recorded) |
+
+The agent-mode builds ran under an `/agentrun-10` path prefix, because this package's reference API holds the bare paths in that environment.
 
 Overall: **READY.** The `scope: once` behaviour and the independence of the two
 masks were both reproduced deliberately, not inferred.
