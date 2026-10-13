@@ -199,7 +199,7 @@ carries the standing rules the prompt assumes.
 > **Check what was stored, not what the agent said.** Read the revision back. Both
 > routes should carry `response-rewrite` with **`scope: global` on every filter**,
 > each pattern anchored on its own field name, and `log-data-mask` with the email
-> and phone body fields and both auth headers. The single-record route's
+> and phone body fields and the `Authorization` header. The single-record route's
 > `proxy-rewrite` must carry the id through (a `regex_uri`), not a fixed `uri`.
 > Then run `verify.sh`: a bad pattern shows in one response.
 
@@ -217,14 +217,13 @@ describes the result instead, and four sentences carry the guards:
 - **"So `Sincere@april.biz` reads `***@april.biz`."** A worked example pins the
   replacement more tightly than a description of it, and it is the check the
   reader runs by eye.
-- **"The backend pretty-prints its JSON."** A fact about the backend, and the
-  guard that decides whether anything is masked at all. The agent writes its
-  patterns against the JSON it imagines, and a pattern written for compact JSON
-  (`"email":"`) matches nothing in `"email": "Sincere@april.biz"`. Every response
-  then passes through unmasked, with a 200 and no error. An operator's build of
-  the earlier wording did exactly that on 2026-10-13; see
-  [Validation status](#validation-status). Describe your own backend's spacing,
-  or ask for patterns that tolerate any.
+- **"Masking must match a field however it is spaced."** The guard that decides
+  whether anything is masked at all. The agent writes its patterns against the
+  JSON it imagines, and a pattern written for compact JSON (`"email":"`) matches
+  nothing in jsonplaceholder's `"email": "Sincere@april.biz"`. Every response then
+  passes through unmasked, with a 200 and no error. An operator's build of an
+  earlier wording did exactly that on 2026-10-13; see
+  [Validation status](#validation-status).
 - **"Don't add a logger now. … if one is added to these routes later."** This
   is `log-data-mask`, configured without a logger or a sink. It changes only what a
   logger writes, does nothing without one, and never changes the response. The
@@ -246,7 +245,7 @@ and `request-id` by name; the upstream-reuse note; the `plugins`-map and
 
 | | The prompt says | This package's spec | First `tencent/hy3` build |
 |---|---|---|---|
-| Whitespace around `:` | pretty-printed, space after each colon | `\s*:\s*` | `\s*:\s*` (an operator's build of the earlier wording: none, so nothing matched) |
+| Whitespace around `:` | any spacing | `\s*:\s*` | `\s*:\s*` (an operator's build of the earlier wording: none, so nothing matched) |
 | Email pattern | local part → `***` | `[^"@]+@` | `[^"@]*@` (also matches an empty local part) |
 | Single-record rewrite | the id reaches `/users/:customerId` | `regex_uri` | `regex_uri` |
 | Log mask value | redacted | `[redacted]` | `[redacted]` |
@@ -422,9 +421,10 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 | Gateway dry-run | **PASS** | Non-destructive, against a temporary import. |
 | Gateway deployed | **DEPLOYED** | Revision ACTIVE in a test environment. |
 | Functional tests | **PASS (6/6)** | Response side by `verify.sh`; the log side verified separately against a real logger and a readable sink. |
-| Agent-mode run, current wording | **Not built**, 2026-10-13, `tencent/hy3` | One build of the prompt as shipped, with "don't add a logger now". The route write reported success and stored **no routes**, and no `log-data-mask`. The agent then offered to deploy the empty API, describing two masked routes. Not deployed; whether the logger sentence works is unmeasured. Read the revision back before any deploy |
-| Agent-mode run, previous wording | **Masking PASS; single-record route 404**, 2026-10-13, `tencent/hy3` | The wording with the pretty-printed sentence and without "don't add a logger now". All six filters whitespace-tolerant, `scope: global`, placed API-wide. `verify.sh` passed the five list-route checks. **The single-record route was stored as `/{customerId}` and returns 404**, despite the prompt writing `:customerId`; see [When the agent goes wrong](#when-the-agent-goes-wrong). The agent also added a `file-logger` nobody asked for |
-| Agent-mode run, earlier wording | **1 of 2 builds masked anything**, 2026-10-13 | The wording before the pretty-printed sentence. One build on `tencent/hy3` passed `verify.sh` 6/6. **The operator's build masked nothing**: its patterns assumed compact JSON and matched 0 of 10 records (model not recorded) |
+| Agent-mode run, current wording | **Not driven by the build tooling** | The operator's wording, shipped modulo placeholders and one missing `/` in the second route. It states "however it is spaced" instead of describing the backend, and drops `X-Api-Key` from the log mask. No build of it is recorded here |
+| Agent-mode run, logger wording | **Not built**, 2026-10-13, `tencent/hy3` | One build of the pretty-printed wording plus "don't add a logger now". The route write reported success and stored **no routes**, and no `log-data-mask`. The agent then offered to deploy the empty API, describing two masked routes. Not deployed; whether the logger sentence works is unmeasured. Read the revision back before any deploy |
+| Agent-mode run, pretty-printed wording | **Masking PASS; single-record route 404**, 2026-10-13, `tencent/hy3` | The wording with the pretty-printed sentence and without "don't add a logger now". All six filters whitespace-tolerant, `scope: global`, placed API-wide. `verify.sh` passed the five list-route checks. **The single-record route was stored as `/{customerId}` and returns 404**, despite the prompt writing `:customerId`; see [When the agent goes wrong](#when-the-agent-goes-wrong). The agent also added a `file-logger` nobody asked for |
+| Agent-mode run, first wording | **1 of 2 builds masked anything**, 2026-10-13 | The wording before the pretty-printed sentence. One build on `tencent/hy3` passed `verify.sh` 6/6. **The operator's build masked nothing**: its patterns assumed compact JSON and matched 0 of 10 records (model not recorded) |
 
 The agent-mode builds ran under an `/agentrun-10` path prefix, because this package's reference API holds the bare paths in that environment.
 

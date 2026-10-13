@@ -23,10 +23,8 @@ Update both routes so that, in every record of every response, not just the firs
   so Sincere@april.biz reads ***@april.biz.
 - each phone number, latitude and longitude reads [redacted].
 - every other field is unchanged.
-The backend pretty-prints its JSON, with a space after each colon, so the masking
-must match a field however it is spaced.
+Masking must match a field however it is spaced.
 
-Don't add a logger now. Separately, if one is added to these routes later, the
-entries it writes have email and phone redacted and no Authorization or X-Api-Key
-header.
+Don't add a logger now. But if one is added to these routes later, the entries it
+writes have email and phone redacted and no Authorization header.
 ```
