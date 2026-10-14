@@ -25,7 +25,5 @@ before proxying, and hands it to the backend as headers:
   own plan.
 - if the lookup fails, GET /storefront/orders goes ahead without the headers, and
   POST /storefront/checkout is refused with "tenant profile unavailable".
-The lookup must finish before the headers are set, so it runs in the rewrite phase.
-The headers read ${ctx.helix.service_callout.<field>}: one variable whose name
-includes the dots, not a nested path.
+The lookup must finish before the headers are set.
 ```
