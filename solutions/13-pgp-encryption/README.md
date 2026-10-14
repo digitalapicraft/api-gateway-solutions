@@ -40,7 +40,7 @@ it needs to live in something that does.
 
 ## Business need
 
-Full version: [`business-need.md`](business-need.md).
+The thirty-second version: [`business-need.md`](business-need.md).
 
 | Dimension | A keyring script on a VM | Crypto at the edge |
 |---|---|---|
@@ -289,95 +289,104 @@ material out of the spec entirely.
 
 ## Build it with the Helix Agent
 
-Three steps, and expect to retry one. Full prompt with the reasoning, tweak knobs
-and failure modes: [`helix-agent-prompt.md`](helix-agent-prompt.md).
+Recommended path, about twenty minutes. The whole build is **one prompt**:
+[`helix-agent-prompt.md`](helix-agent-prompt.md). Paste it as a single message and
+replace the `{{...}}` values. **Leave `<PGP_PRIVATE_KEY>` and `<PGP_PUBLIC_KEY>` as
+written.** When the routes exist, paste your real ASCII-armored keys over them in
+the console, then deploy. Run [`example/verify.sh`](example/verify.sh) as under
+[Testing](#testing). [AGENT-GUIDE.md](../../AGENT-GUIDE.md) carries the standing
+rules the prompt assumes.
 
-> **Don't paste key material into the agent** — the prompts ask for placeholders,
-> and you put the real armored blocks in yourself. And any route write has a real
-> chance of ending in `stream closed with reason: error`, a tool-argument defect in
-> the agent rather than anything about your prompt; nothing is written when it
-> happens. Verified: four of five attempts in this package's own testing ended
-> this way, and payload size wasn't the discriminator — one failure carried 570
-> bytes and one success carried more. Retry once, then import
-> [`example/api-spec.yaml`](example/api-spec.yaml).
+> **Check what was stored, not what the agent said.** Read the revision back. The
+> statement route's path must be **`/statements/:statementId`**. The 2026-10-14
+> build stored `/statements/{statementId}`, though the prompt wrote `:statementId`.
+> That path matches only the literal text `{statementId}`, so every real id gets
+> `404 Route Not Found`, and the dry-run doesn't catch it. Each route should carry
+> `pgp-crypto`: a `decrypt` block with `fail_close_status: 400` on the inbound
+> route, and an `encrypt` block with `fail_close_status: 500` and **no `field`** on
+> the statement route. Both key fields should hold your armored keys, not the
+> placeholders.
 
-**Step 1 — the API and the inbound (decrypt) route**
+### Why the prompt is worded the way it is
 
+The prompt describes the exchange the way the integration team would: what the
+partner sends, what the backend must see, and what happens when the crypto
+fails. Three choices carry the weight:
+
+- **It names `pgp-crypto`.** That is the only plugin name in the prompt. Without
+  it, the 2026-10-14 agent said the gateway has no PGP plugin and offered JWE or
+  a backend change instead. The plugin exists, but the agent doesn't find it
+  unless it is named.
+- **The keys are placeholders, not pasted in.** An earlier wording passed the
+  armored keys in the prompt. The resulting route write was too large to send,
+  and it failed three times out of three, with nothing usable stored. Placeholders
+  also keep your private key out of the conversation.
+- **The failure outcomes are statuses.** "Refused with a 400" and "a 500, never the
+  plaintext" become `fail-close` with those statuses. "Encrypts the whole
+  response" is what keeps `field` off the encrypt block: `field` returns only that
+  field's ciphertext and drops the rest of the document.
+
+### What the agent decides for you
+
+| | The prompt says | This package's spec | The 2026-10-14 run |
+|---|---|---|---|
+| Failure messages | nothing | "request body is not a PGP message this gateway can decrypt" · "statement could not be encrypted" | "Request body is not a decryptable PGP message" · "Response could not be encrypted" |
+| Correlation id | nothing | `request-id`, API-wide | `request-id`, API-wide |
+| Route names | nothing | from the spec's operations | `post-inbound-statement`, `get-statement-by-id` |
+
+None of these change the behaviour. The path syntax, the two blocks and the
+fail-close statuses do.
+
+## Variations
+
+Follow-ups for the same session, once the build above is standing. Use the same
+register as the prompt and say what you want to be true.
+
+**Write the note for the partner**
 ```text
-Create a REST API "Statements API" with ONE route for now. Upstream
-https://httpbin.org — reuse it if it already exists as an upstream in this org.
-Its /post echoes what it received, which is the only way to be sure the request
-direction worked. Environment test.
-
-Route: POST /statements/inbound -> proxy-rewrite uri /post, with pgp-crypto. Its
-crypto configuration is NESTED under a "decrypt" key, not flat. The route object
-must look exactly like this:
-
-{
-  "name": "statements-inbound",
-  "uri": "/statements/inbound",
-  "methods": ["POST"],
-  "service_id": "<the api id>",
-  "plugins": {
-    "proxy-rewrite": { "uri": "/post" },
-    "pgp-crypto": {
-      "decrypt": {
-        "target": "request",
-        "source": "body",
-        "private_key": "<PGP_PRIVATE_KEY>",
-        "fail_policy": "fail-close",
-        "fail_close_status": 400,
-        "fail_close_message": "request body is not a PGP message this gateway can decrypt"
-      }
-    }
-  }
-}
-
-Leave <PGP_PRIVATE_KEY> as that literal placeholder — I'll supply the real armored
-key myself. Don't generate a key and don't ask me to paste one here.
-
-Put request-id in the SERVICE spec so it applies API-wide. No "x-helix-gateway"
-key anywhere in a route object — a live route discards it silently and deploys
-with no crypto at all.
-
-Bind the upstream, run dry_run_deploy, then read the revision back. Wait before
-deploying.
+Write me the integration note to send our bank partner. Both directions carry
+base64 of the ASCII-armored message, not the armor itself, and a raw armored body
+is refused. Include a worked example of encrypting a file and base64-encoding it
+before the POST.
 ```
 
-**Step 2 — the outbound (encrypt) route**
-
+**A second partner**
 ```text
-Add a second route, keeping the first exactly as it is:
+We're adding a second bank, {{second_partner_name}}, with its own key pair. Tell me
+what this design costs at two partners and at twenty, and show me the version that
+picks the key per partner instead.
+```
+That is [14](../14-per-partner-pgp-keys/).
 
-  GET /statements/{statementId} -> proxy-rewrite uri /json
-
-with pgp-crypto nested under an "encrypt" key:
-
-  "pgp-crypto": {
-    "encrypt": {
-      "target": "response",
-      "source": "body",
-      "public_key": "<PGP_PUBLIC_KEY>",
-      "fail_policy": "fail-close",
-      "fail_close_status": 500
-    }
-  }
-
-Do NOT set "field" on the encrypt block — it makes the response only that field's
-ciphertext and discards the rest of the document.
-
-Send routeSpec as a JSON array of both route objects, then read the revision back
-and run dry_run_deploy.
+**Rotate our private key**
+```text
+Our private key is being rotated on {{rotation_date}}. Tell me what happens to
+messages the partner encrypted to the old key, and the order to do the change in.
 ```
 
-**Step 3 — the integration note for the counterparty**
-
+**Only callers we know**
 ```text
-Now write me the integration note to send the partner. It must say that both
-directions use BASE64 of the ASCII-armored message, not the armor itself — a raw
-armored body is rejected — and include a worked example of encrypting a file and
-base64-encoding it before the POST.
+Require an app's API key in the X-Api-Key header on both routes, and keep the
+crypto exactly as it is. Then create a developer, a product and an app, and give me
+the key.
 ```
+That is [08](../08-api-key/).
+
+## When the agent goes wrong
+
+**Read the stored revision before you trust any of it.**
+
+| Symptom | Cause |
+|---|---|
+| The agent says the gateway has no PGP plugin, and offers JWE or a backend change | It didn't look `pgp-crypto` up (seen 2026-10-14). Keep the sentence naming it, or import the spec. |
+| `GET /statements/<id>` returns `404 Route Not Found`, and the inbound route works | The path was stored as `/statements/{statementId}` (seen 2026-10-14). Change it to `/statements/:statementId`. |
+| The route write fails, or the session drops, with no route stored | The keys were pasted into the prompt, and the write was too large to send (seen 2026-10-14). Use the placeholders. |
+| Every inbound request is refused with 400, even a correctly encrypted one | The body is raw armor, not base64 of the armor; or the placeholder is still in `private_key`. |
+| Every statement request returns 500 | The placeholder is still in `public_key`, or the key doesn't parse. |
+| The response is a short ciphertext instead of the whole statement | `field` was set on the encrypt block. Remove it. |
+| A statement comes back in plaintext | `fail_policy: fail-open` on the encrypt block. Set `fail-close`. |
+| The routes exist with **no plugins**, at exit 0 | The agent wrapped them in `x-helix-gateway` inside the live route object, which a live route silently discards. |
+| Deploy fails: `Only INACTIVE revisions can be updated` | Clone the revision or undeploy, then apply. |
 
 ## Install it directly
 
@@ -492,14 +501,13 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 | Gateway dry-run | **PASS** | Non-destructive, against a temporary import. |
 | Gateway deployed | **DEPLOYED** | Revision ACTIVE in a test environment, with a throwaway RSA-3072 key pair. |
 | Functional tests | **PASS (7/7)** | Both directions, both rejection cases, and the full round trip. |
-| Agent-mode run | **PARTIAL** | Step 1 landed exactly right, confirmed by reading the revision back. Step 2 hit the tool-call defect above and was not completed by the agent in this run — see below. |
+| Agent-mode run, current wording | **PASS after two hand fixes (config + functional)**, 2026-10-14, `tencent/hy3` | The prompt as shipped, run once. Both routes stored `pgp-crypto` as asked: `decrypt` fail-close 400 inbound, `encrypt` fail-close 500 on the statement route, no `field`, placeholders verbatim, `request-id` API-wide. The agent stopped before deploying and asked whether the keys were in. **The statement path was stored as `/statements/{statementId}`**: as built, a real id returned 404. With throwaway keys pasted over the placeholders and the path corrected to `/:statementId`, `verify.sh` passed **7/7**, including the round trip both ways. The routes ran under an `/agentrun-13` prefix, because this package's reference API holds the bare paths in that environment |
+| Agent-mode run, plugin not named | **FAIL**, 2026-10-14, `tencent/hy3` | The same prompt without the sentence naming `pgp-crypto`. The agent said the gateway has no PGP plugin and offered JWE or a backend change. Nothing was built |
+| Agent-mode run, keys in the prompt | **FAIL**, 2026-10-14, `tencent/hy3` | The armored keys pasted into the prompt. The route write was refused three times out of three; nothing usable was stored |
 
 Overall: **READY.** The wire format and the `field` behaviour were established by
-running them, not by reading the schema. One thing worth being precise about:
-the deployed, tested outbound (encrypt) route came from importing
-[`example/api-spec.yaml`](example/api-spec.yaml), not from the agent finishing
-Step 2 — in the verified run, Step 2 failed on the tool-call defect before it
-could complete, and this package doesn't claim otherwise.
+running them, not by reading the schema. The agent builds the crypto correctly
+from the shipped prompt; check the statement path, as above, before you deploy.
 
 ## Related solutions
 
