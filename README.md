@@ -31,9 +31,9 @@ it, and an honest record of what was and wasn't validated.
 | **09** | [XML to JSON](solutions/09-xml-to-json/) | *"Our stock system is REST. It just answers in XML, so four client teams each wrote their own parser."* Mediate both directions at the edge — with no SOAP envelope in sight. | [prompt](solutions/09-xml-to-json/helix-agent-prompt.md) |
 | **10** | [Data masking](solutions/10-data-mask/) | *"Audit flagged PII in the logs. While we were reading the samples we noticed the support console shows agents all of it too."* Two different masks, for two different audiences — and the one most teams ship is the wrong one. | [prompt](solutions/10-data-mask/helix-agent-prompt.md) |
 | **11** | [Service callout](solutions/11-service-callout/) | *"Seven services each start by calling the customer-profile service. Seven caches, seven timeouts, seven opinions about what to do when it fails."* Do the lookup once and hand the answer to the backend as a header. | [prompt](solutions/11-service-callout/helix-agent-prompt.md) |
-| **12** | [Key-value map](solutions/12-key-value-map/) | *"Fourteen partners, fourteen keys in fourteen routes, and a deploy every time one of them rotates."* Fetch the key per request so rotation is a write, not a release. | [prompt](solutions/12-key-value-map/helix-agent-prompt.md) |
+| **12** | [Key-value store](solutions/12-key-value-store/) | *"Every partner gets the same canned response from our sandbox, so nobody catches an integration bug until production."* Answer each caller with that caller's own stored values — one route, no backend, and changing a value is a write rather than a release. | [prompt](solutions/12-key-value-store/helix-agent-prompt.md) |
 | **13** | [PGP encryption](solutions/13-pgp-encryption/) | *"The bank only accepts PGP-encrypted payloads. Today that's a Python script with a keyring on a VM, and it's what pages us at 2am."* Decrypt inbound and encrypt outbound at the edge; the backend never handles ciphertext. | [prompt](solutions/13-pgp-encryption/helix-agent-prompt.md) |
-| **14** | [Dynamic mock](solutions/14-dynamic-mock/) | *"Every partner gets the same canned response from our sandbox, so nobody catches an integration bug until production."* Answer each caller with that caller's own stored values — one route, no backend, and changing a value is a write rather than a release. | [prompt](solutions/14-dynamic-mock/helix-agent-prompt.md) |
+| **14** | [Per-partner PGP keys](solutions/14-per-partner-pgp-keys/) | *"Fourteen partners, fourteen keys in fourteen routes, and a deploy every time one of them rotates."* Fetch the key per request so rotation is a write, not a release. | [prompt](solutions/14-per-partner-pgp-keys/helix-agent-prompt.md) |
 | **15** | [gRPC stream proxy](solutions/15-grpc-proxy/) | *"Our units hold a bidirectional gRPC stream open for hours. Anything that wants to authenticate or count them has to be built into the service."* Authenticate each stream as it opens, from gRPC metadata, without touching the service. | [prompt](solutions/15-grpc-proxy/helix-agent-prompt.md) |
 
 They compose. 02 gives you identity, 03 gives you the protocol bridge, 01 turns
@@ -242,7 +242,7 @@ provisioned on the credential by the control plane and never belong in a spec.
 > **Solution 13 has the worst version of it.** `private_key` and `public_key` are
 > literals too, and a private key outlives a signing secret and is usually shared
 > with a counterparty. That limitation is the entire reason
-> [solution 12](solutions/12-key-value-map/) exists: it fetches the key per request
+> [solution 14](solutions/14-per-partner-pgp-keys/) exists: it fetches the key per request
 > so no key material is in the document at all.
 
 ## Prerequisites

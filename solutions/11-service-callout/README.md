@@ -391,7 +391,7 @@ reproduced rather than inferred.
 
 ## Related solutions
 
-- **[12 — Key-value map](../12-key-value-map/)** — the other way to get per-request
+- **[12 — Key-value store](../12-key-value-store/)** — the other way to get per-request
   data into a route, when the value is key material rather than a service's answer.
 - **[08 — API keys](../08-api-key/)** — identify the caller first; this package
   ships unauthenticated so the callout is the only behaviour under test.

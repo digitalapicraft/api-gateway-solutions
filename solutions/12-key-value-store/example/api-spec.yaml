@@ -1,5 +1,5 @@
 # =============================================================================
-# 14-dynamic-mock — a sandbox that answers each caller with that caller's own
+# 12-key-value-store — a sandbox that answers each caller with that caller's own
 # values, with no backend behind it and no deploy to change a value.
 #
 # THE IMPORTABLE ARTIFACT IS THIS DOCUMENT. It is both the OpenAPI description

@@ -26,9 +26,10 @@ the store, and someone has to protect it:
 
 It ships with the registration route and the partner id both unauthenticated, so
 as shipped anyone who can reach the route can register a key under any partner.
-The store has no control-plane API on this build, and the crypto is only the
-consumer that proves the store works. [Before/after, what it costs, and what
-this does not buy you are in the README](README.md#business-need).
+The store itself is [solution 12](../12-key-value-store/), and PGP with the key
+in the route is [solution 13](../13-pgp-encryption/); this combines them.
+[Before/after, what it costs, and what this does not buy you are in the
+README](README.md#business-need).
 
 *Also searched as: key-value store at the API gateway · per-tenant configuration
 without redeploy · store partner PGP keys at the gateway · dynamic key lookup per

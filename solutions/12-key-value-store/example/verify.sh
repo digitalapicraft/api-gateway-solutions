@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Solution 14 — proof that a mocked route answers each caller with that caller's
+# Solution 12 — proof that a mocked route answers each caller with that caller's
 # own stored values, and that changing a value needs no deploy.
 #
 # Exits 0 only if ALL of the following hold:

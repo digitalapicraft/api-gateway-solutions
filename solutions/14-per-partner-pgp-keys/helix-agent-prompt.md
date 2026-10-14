@@ -2,8 +2,9 @@
 
 Paste this to the Helix Agent as one message, replacing the `{{...}}` values. It
 works from a fresh, empty org on a public upstream, so you need nothing of your
-own until you register a partner's key. Read [solution 13](../13-pgp-encryption/)
-first; it is the same encryption with the key in the route. Why the prompt is
+own until you register a partner's key. It combines two earlier packages: the
+key-value store, [solution 12](../12-key-value-store/), and PGP encryption with the
+key in the route, [solution 13](../13-pgp-encryption/). Why the prompt is
 worded this way, what the agent decides on its own, and what to check before you
 trust it are in the [README](README.md#build-it-with-the-helix-agent).
 

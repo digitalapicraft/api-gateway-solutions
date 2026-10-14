@@ -13,7 +13,7 @@
 # answered by the previous run's stored values — the store outlives the test.
 
 meta:
-  solution: 14-dynamic-mock
+  solution: 12-key-value-store
   version: 1.0.0
   executor: example/verify.sh
   note: >-
