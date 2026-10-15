@@ -12,15 +12,14 @@ agent decides on its own, and what to check before you trust it are in the
 ```text
 Step 1:
 Create an API called "{{api_name}}" in the {{environment}} environment, in front of
-our gRPC service at {{grpc_upstream_host}}:{{grpc_upstream_port}}. It speaks
-plaintext gRPC, not HTTP, and not TLS. Route the service's methods
-/timing.TimingUnit/Ping, /timing.TimingUnit/Status and /timing.TimingUnit/Commands
-exactly as written, plus server reflection so clients can discover the service.
+our gRPC service at {{grpc_upstream_host}}:{{grpc_upstream_port}}. Route the
+service's methods /timing.TimingUnit/Ping, /timing.TimingUnit/Status and
+/timing.TimingUnit/Commands exactly as written, plus server reflection so clients
+can discover the service.
 
 Step 2:
 Our units hold these streams open for hours. Update every route so a connection
-is accepted only if it carries an app's API key in the X-Unit-Key metadata,
-checked when the stream opens.
+is accepted only if it carries an app's API key.
 
 Step 3:
 Create a developer "{{developer_name}}", a corresponding product and an app to work

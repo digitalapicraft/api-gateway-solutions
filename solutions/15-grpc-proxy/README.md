@@ -160,24 +160,30 @@ assumes.
 > build routed only `v1alpha`. Everything else worked, but `grpcurl list` failed
 > with a 502, because a client asks for `v1` first and stops when nothing answers.
 > Add the `v1` route by hand. The upstream bound to the API should have **`scheme:
-> grpc`**. `helix-auth` (validate, key-auth, header `X-Unit-Key`) can sit API-wide
-> or on each route; both are correct here.
+> grpc`**. `helix-auth` (validate, key-auth) can sit API-wide or on each route;
+> both are correct here. Note which header it reads the key from. The prompt
+> doesn't name one, and the 2026-10-15 build chose `apikey`.
 
 ### Why the prompt is worded the way it is
 
-It names no plugin and no upstream field. It says what the integration team knows
-about the service, and what must be true of a connection:
+It names no plugin, no upstream field and no header. It says what the
+integration team knows about the service, and what must be true of a connection:
 
-- **"Plaintext gRPC, not HTTP, and not TLS."** That is the upstream's `scheme:
-  grpc`. Get it wrong and every call fails before auth matters. The gRPC part of
-  this design lives on the upstream, not on the routes.
+- **"Our gRPC service."** That is enough for the agent to create the upstream with
+  `scheme: grpc`. Get the scheme wrong and every call fails before auth matters.
+  The gRPC part of this design lives on the upstream, not on the routes. An
+  earlier wording spelled out "plaintext gRPC, not HTTP, and not TLS"; the shorter
+  one built a working upstream without it.
 - **"Exactly as written."** The method paths contain a dot and are matched
-  literally. The agent stored all three as given.
-- **"Checked when the stream opens."** One stream is one request, so auth is
-  evaluated once. Saying so keeps the design honest about what a revoked key does
-  to an open stream.
+  literally. Both builds stored them as given.
+- **"Hold these streams open for hours."** The key is checked once, when a stream
+  opens. That is what a revoked key can't reach; see
+  [one stream is one request](#one-stream-is-one-request).
 - **Step 3 asks for the product with the app.** An app subscribes to an API
   through a product; without one, every stream is refused.
+
+Want the key in a particular header? Say so in step 2, for example *"in the
+X-Unit-Key metadata"*. Otherwise the agent picks one.
 
 **"Plus server reflection"** doesn't name the two versions, and that is why the
 check above matters. Name them if you would rather not add one by hand:
@@ -185,14 +191,16 @@ check above matters. Name them if you would rather not add one by hand:
 
 ### What the agent decides for you
 
-| | The prompt says | This package's spec | The 2026-10-14 run |
+| | The prompt says | This package's spec | The 2026-10-15 run |
 |---|---|---|---|
-| Where `helix-auth` sits | nothing | on each route | API-wide |
-| Reflection versions | "server reflection" | `v1` and `v1alpha` | `v1alpha` only |
-| Correlation id | nothing | `request-id`, API-wide | not added |
-| Upstream name and load balancing | nothing | a separate object, round robin | created by the agent, `scheme: grpc` |
+| Key header | nothing | `X-Unit-Key` | `apikey` |
+| Where `helix-auth` sits | nothing | on each route | not recorded |
+| Reflection versions | "server reflection" | `v1` and `v1alpha` | both |
+| Correlation id | nothing | `request-id`, API-wide | not recorded |
+| Upstream | "our gRPC service" | a separate object, `scheme: grpc` | created by the agent; serves gRPC |
 
-Only the reflection row changes what a client can do.
+The reflection row and the key header change what a client has to do. Builds
+have differed on reflection: see [Validation status](#validation-status).
 
 ## Variations
 
@@ -248,8 +256,12 @@ decide that, and how.
 ```bash
 GATEWAY=<your-gateway-host> \
 UNIT_KEY=<app credential key> \
+KEY_HEADER=<the header your build reads the key from> \
 ./example/verify.sh
 ```
+
+`KEY_HEADER` defaults to `X-Unit-Key`, the spec's header. An agent build picks
+its own unless the prompt names one.
 
 No `.proto` file is needed — this package routes reflection, so the schema is
 discovered over the connection.
@@ -341,22 +353,15 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
   paths, both reflection versions, and the absence of body-touching plugins.
 - **Gateway dry-run passed** — the spec imports and dry-runs clean.
 - **Gateway deployed** — deployed ACTIVE against a real bidirectional gRPC service.
-- **Functional test passed** — `example/verify.sh` **6/6**: unauthenticated and
-  invalid credentials refused at stream initiation, an authenticated unary call,
-  an authenticated bidirectional stream, a held-open stream that closes cleanly,
-  and reflection resolving with no descriptor file. Verified on two
-  environments with different fronting infrastructure — the second run also
-  held a stream open 30s against server-pushed keepalives every 10s, and the
-  package deployed unmodified on both.
-- **Connection telemetry confirmed** — `requests-count` returned one row per
-  stream and `response-time` returned 24,235 ms for a stream held open ~25s,
-  grouped by method and by app.
-- **Agent-mode run, current wording — PASS with one hand fix needed**, 2026-10-14,
-  `tencent/hy3`. The prompt as shipped. The agent created the API, a `scheme: grpc`
-  upstream, the three method routes, `helix-auth` (validate, key-auth,
-  `X-Unit-Key`) API-wide, and the developer, product and app, and returned the key.
-  `example/verify.sh` against the agent-built API: checks 1–5 **pass** (both
-  refusals, unary, the bidirectional stream, a 20s held stream). Check 6
-  **fails**: only reflection `v1alpha` was routed, so `grpcurl list` got a 502.
-  Ran on the real method paths, with this package's reference API briefly
-  undeployed from that environment.
+- **Functional test passed** — `example/verify.sh` **6/6** on two environments
+  with different fronting infrastructure: both refusals at stream start, unary,
+  a two-way stream, a held stream, and reflection with no descriptor file.
+- **Connection telemetry confirmed** — one `requests-count` row per stream;
+  `response-time` of 24,235 ms for a stream held ~25s.
+- **Agent, current wording — PASS 6/6**, 2026-10-15, operator, production. Both
+  reflection versions; key header `apikey`. An earlier build of the same wording
+  in the operator's alpha environment routed only `v1alpha`, and streaming failed
+  there because its load balancer doesn't pass HTTP/2 through to the gateway.
+- **Agent, earlier wording — 5/6**, 2026-10-14, `tencent/hy3`. The wording that
+  named the plaintext upstream and `X-Unit-Key`. Checks 1–5 passed; reflection
+  failed, because only `v1alpha` was routed.
