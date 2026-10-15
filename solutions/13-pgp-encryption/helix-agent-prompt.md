@@ -4,7 +4,8 @@ Paste this to the Helix Agent as one message, replacing the `{{...}}` values. It
 works from a fresh, empty org on a public upstream that echoes what it receives.
 Leave `<PGP_PRIVATE_KEY>` and `<PGP_PUBLIC_KEY>` exactly as written: the agent puts
 them in the configuration as placeholders, and you paste your real ASCII-armored
-keys over them in the console afterwards, so no key passes through the chat. Why the
+keys over them in the console afterwards, so no key passes through the chat.
+[Get the keys](README.md#get-the-keys) shows how to make them. Why the
 prompt is worded this way, what the agent decides on its own, and what to check
 before you trust it are in the [README](README.md#build-it-with-the-helix-agent).
 

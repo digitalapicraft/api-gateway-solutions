@@ -162,8 +162,9 @@ Copy this, fill in the two blanks, and it is a complete integration brief:
 >
 > **Key requirements:** your key must carry an **encryption subkey**. Check with
 > `gpg --list-keys --with-colons <uid> | awk -F: '/^(pub|sub)/{print $1, $12}'` —
-> you need a `sub` row containing `e`. `gpg --quick-generate-key` does **not**
-> produce one; use `gpg --quick-add-key <fpr> rsa3072 encr never` to add it.
+> you need a `sub` row containing `e`. `gpg --quick-generate-key "<uid>" default
+> default 2y` creates one; naming an algorithm such as `rsa3072` in place of the
+> first `default` does not. Add one with `gpg --quick-add-key <fpr> rsa3072 encr 2y`.
 >
 > **On failure** you will get a 400 with a generic message — the reason is in our
 > logs, not your response. Quote the `X-Request-Id` header and we will look.
@@ -287,13 +288,106 @@ document, and a deploy every time one of them rotates. Fetch the key per request
 instead — [solution 14](../14-per-partner-pgp-keys/) does exactly that and keeps key
 material out of the spec entirely.
 
+## Get the keys
+
+You need two keys in the configuration: **your private key** (the inbound route
+decrypts with it) and **your partner's public key** (the outbound route encrypts
+to it). You generate the first. The partner sends you the second, and you send
+them your public half in return. If you only want to try the package, the
+[throwaway pair](#try-it-with-throwaway-keys) below stands in for both sides.
+
+**1. Install GnuPG.**
+
+| Platform | Install |
+|---|---|
+| macOS | `brew install gnupg` |
+| Debian, Ubuntu | `sudo apt install gnupg` |
+| Windows | [Gpg4win](https://www.gpg4win.org/), then use `gpg` from a terminal |
+
+Check it with `gpg --version`.
+
+**2. Generate your key pair.** Use a name and an address that identify the
+integration, not a person:
+
+```bash
+gpg --quick-generate-key "Acme Statements <statements@acme.example>" default default 2y
+```
+
+It asks for a passphrase. Choose one; the gateway can hold it (step 5). The two
+`default`s matter: they create an **encryption subkey** alongside the signing key.
+Name an algorithm in their place, such as `rsa3072`, and you get no encryption
+subkey, so nothing can be encrypted to the key.
+
+**3. Check the encryption subkey.**
+
+```bash
+gpg --list-keys statements@acme.example
+```
+
+You need a `sub` line ending in **`[E]`**, such as `sub   cv25519 2026-10-15 [E]`.
+
+**4. Export both halves as ASCII armor.**
+
+```bash
+gpg --armor --export statements@acme.example > acme-public.asc               # send to the partner
+gpg --armor --export-secret-keys statements@acme.example > acme-private.asc  # goes into the gateway
+```
+
+The second command asks for your passphrase. `acme-private.asc` begins with
+`-----BEGIN PGP PRIVATE KEY BLOCK-----`; never send it to anyone.
+
+**5. Put the keys into the routes.** In the console, open each route's
+`pgp-crypto` configuration:
+
+| Field | Paste |
+|---|---|
+| inbound route, `decrypt.private_key` | the whole of `acme-private.asc`, from `-----BEGIN` to `-----END` |
+| inbound route, `decrypt.passphrase` | the passphrase from step 2; leave it out if you chose none |
+| statement route, `encrypt.public_key` | the whole of the partner's public key file |
+
+Before you paste the partner's key, check that it has an encryption subkey too:
+`gpg --show-keys partner-public.asc` should show a `sub` line ending in `[E]`.
+
+**6. Remove the exported private key file** once it is in the gateway:
+`rm acme-private.asc`. The key also stays in your local keyring. Keep it there,
+or in your secrets store, for rotation and recovery.
+
+The gateway runs `gpg` itself, so any key `gpg` can use works. This package has
+been verified with RSA keys (2048 and 3072) and with the ed25519/cv25519 pair the
+command above produces, with and without a passphrase. If your partner insists on
+RSA, generate with `rsa3072 sign 2y`, then add the subkey:
+`gpg --quick-add-key <fingerprint> rsa3072 encr 2y`.
+
+### Try it with throwaway keys
+
+No partner yet? Make both pairs in a temporary keyring, so nothing touches your
+real one. These keys have no passphrase and expire in a day:
+
+```bash
+export GNUPGHOME="$(mktemp -d)"
+gpg --batch --passphrase '' --quick-generate-key "Statements Ours <ours@example.test>" default default 1d
+gpg --batch --passphrase '' --quick-generate-key "Bank Partner <partner@example.test>" default default 1d
+gpg --armor --export-secret-keys ours@example.test > ours-private.asc   # -> decrypt.private_key
+gpg --armor --export partner@example.test > partner-public.asc          # -> encrypt.public_key
+```
+
+Paste the two files into the routes as in step 5, with no passphrase. Then run
+the full test from the same shell, so it can play the partner:
+
+```bash
+GATEWAY=https://<YOUR_GATEWAY_HOST> RECIPIENT=ours@example.test ./example/verify.sh
+```
+
+When you're done: `gpgconf --kill gpg-agent; rm -rf "$GNUPGHOME" ours-private.asc partner-public.asc`.
+
 ## Build it with the Helix Agent
 
 Recommended path, about twenty minutes. The whole build is **one prompt**:
 [`helix-agent-prompt.md`](helix-agent-prompt.md). Paste it as a single message and
 replace the `{{...}}` values. **Leave `<PGP_PRIVATE_KEY>` and `<PGP_PUBLIC_KEY>` as
 written.** When the routes exist, paste your real ASCII-armored keys over them in
-the console, then deploy. Run [`example/verify.sh`](example/verify.sh) as under
+the console, as in [Get the keys](#get-the-keys), then deploy. Run
+[`example/verify.sh`](example/verify.sh) as under
 [Testing](#testing). [AGENT-GUIDE.md](../../AGENT-GUIDE.md) carries the standing
 rules the prompt assumes.
 
