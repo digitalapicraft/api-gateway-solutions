@@ -8,9 +8,8 @@ Paste this to the Helix Agent as one message, replacing the `{{...}}` values. It
 builds and deploys the whole solution, credentials included.
 
 Before you trust the result, check that the signing secret is a real random value
-rather than a placeholder, and read the stored routes back. What to look for, and
-what the agent decides on its own, is in
-[Build it with the Helix Agent](guides.md#build-it-with-the-helix-agent).
+rather than a placeholder, and read the stored routes back. See
+[Troubleshooting](guides.md#troubleshooting) if something looks off.
 
 ## Prompt
 

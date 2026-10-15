@@ -27,47 +27,10 @@ Then, for everyone: [See it work](#see-it-work) · [Variations](#variations) ·
 
 ## Build it with the Helix Agent
 
-[`helix-agent-prompt.md`](helix-agent-prompt.md) has the build as four steps: the
-upstream, the API, the `Ping` route, then bind, deploy and read it back. Paste each
-as its own message.
-
-**Those four steps route `Ping` only.** The spec also routes the two streaming
-methods and both reflection versions. To match it, before Step 4:
-
-- **Repeat Step 3 for each streaming method**, one step each, with
-  `/timing.TimingUnit/Status` and `/timing.TimingUnit/Commands` in place of the
-  `Ping` path.
-- **Add the two reflection routes**, so clients can discover the schema:
-
-```text
-On the same API, add two more POST routes, each with the same single
-"helix-auth" plugin block as above:
-
-  /grpc.reflection.v1.ServerReflection/ServerReflectionInfo
-  /grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo
-
-Both are needed. A client tries v1 first and falls back to v1alpha only if the
-v1 call gets a clean gRPC answer.
-```
-
-Or import [`example/api-spec.yaml`](example/api-spec.yaml), which carries all five
-routes.
-
-Why the prompt is shaped this way:
-
-| Choice | Reason |
-|---|---|
-| **The upstream is its own step, first** | It is the only place the gRPC setting exists. An agent asked to "create a gRPC API" will happily produce routes with an HTTP upstream, and the result fails as though the backend were broken. |
-| **The scheme is spelled out** | `http`/`https` are the values every other solution uses, and what an agent defaults to. If it picks one of those, tell it the scheme must be exactly `grpc`. |
-| **"do not normalise the path"** | `/timing.TimingUnit/Ping` looks like a typo to a model used to REST paths. An agent that "tidies" it to `/timing/TimingUnit/Ping` produces a route that never matches. |
-| **One route per step** | A prompt carrying several routes and plugin blocks reaches the nesting depth that triggers the agent's tool-argument defect, which shows up as `stream closed with reason: error` and writes nothing. |
-| **"keep the plugin-name level explicit"** | The agent can drop that level and promote a plugin's fields into the `plugins` map; the route then deploys carrying plugins that do not exist. |
-| **Ask for a dry-run deploy, never `validate_route`** | `validate_route` always fails on this build — the tool sends `{"route": …}` where the endpoint expects `{"routeSpec": [ … ]}`. |
-
-When you read the revision back, check every route carries `helix-auth` under its
-own name, and check the upstream binding. The agent steps do not create the
-product, developer and app callers need for a key; do that as in
-[Build it in the UI](#build-it-in-the-ui), steps 4–7.
+[`helix-agent-prompt.md`](helix-agent-prompt.md) has four steps: the upstream, the
+API, the `Ping` route, then bind, deploy and read it back. **Paste each as its own
+message.** The prompt routes `Ping` only; for the streaming methods and schema
+discovery, import [`example/api-spec.yaml`](example/api-spec.yaml) instead.
 
 See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the ground rules these prompts
 assume.

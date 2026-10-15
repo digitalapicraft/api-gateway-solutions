@@ -22,69 +22,9 @@ Then, for everyone: [See it work](#see-it-work) · [Variations](#variations) ·
 
 ## Build it with the Helix Agent
 
-[`helix-agent-prompt.md`](helix-agent-prompt.md) has the build as two steps: the
-registration route first, then the document route. Paste each as its own message,
-starting from a fresh, empty org.
-
-The prompts hand the agent the literal route objects rather than describing them,
-for reasons that each come from a run:
-
-- **Literal JSON, not prose.** Given prose, the agent flattened the nested plugin
-  blocks and invented field names. Given the JSON, it reproduced it exactly.
-- **The `$` references stay as written.** An agent that treats them as
-  placeholders substitutes a value, and the route then serves one partner forever.
-- **`encrypt` is a wrapper.** Asked in prose, the agent wrote `pgp-crypto` flat —
-  `{ target, source, public_key }` — which the schema rejects.
-- **Two steps, not one.** A large route write has a real chance of ending in
-  `stream closed with reason: error`, a tool-argument defect in the agent. Smaller
-  writes survive it more often. If it happens, nothing was written: retry once,
-  then import [`example/api-spec.yaml`](example/api-spec.yaml) for the rest.
-
-**Read the revision back when it finishes.** A plugin nested under
-`x-helix-gateway` inside a live route object is silently discarded: the write
-reports success, the dry-run passes, and the route deploys with nothing on it.
-Check that both routes carry `key-value-map`, and that the document route carries
-`pgp-crypto` with its settings nested under `encrypt`.
-
-### Follow-up prompts
-
-Paste any of these after the build, in the same conversation.
-
-**Protect the registration route** *(do this before anything else)*
-
-```text
-Add API-key authentication to the /partners/keys route only, with helix-auth
-validate, validate_auth_type key-auth, reading the key from X-Admin-Key. Leave the
-document route as it is for now, and tell me what is still open after that change.
-```
-
-That is [solution 08](../08-api-key/).
-
-**Key on the authenticated caller instead of a header**
-
-```text
-The partner id currently comes from a header the caller controls. Put helix-auth
-validate on the document route and change both references from
-$request.headers.x-partner-id to $consumer.public_key, so the entry is keyed on the
-authenticated consumer. Explain what that changes about who can request what.
-```
-
-**Store something other than a key**
-
-```text
-I also want a per-partner upstream path stored alongside the key. Show me how to
-fetch two entries on one route and how a second plugin would read the other one.
-```
-
-**Go back to the simple shape**
-
-```text
-I only have one counterparty after all. Show me what this looks like with the key
-in the route instead, and be explicit about what I lose and what I stop having to
-protect.
-```
-
-That is [solution 13](../13-pgp-encryption/).
+Works on a **fresh, empty org**. [`helix-agent-prompt.md`](helix-agent-prompt.md)
+has two steps: the registration route first, then the document route. **Paste each
+as its own message.**
 
 See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the ground rules these prompts
 assume.

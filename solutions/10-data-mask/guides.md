@@ -22,52 +22,12 @@ Then, for everyone: [See it work](#see-it-work) · [Variations](#variations) ·
 
 ## Build it with the Helix Agent
 
-Works on a **fresh, empty org**. [`helix-agent-prompt.md`](helix-agent-prompt.md)
-has four small steps: the API and list route, the single-record route, the mask
-the caller sees, then the mask the logs keep. Paste them one at a time and let the
-agent read the revision back after each.
-
-**The four steps are needed, not a matter of style.** `update_route_spec` replaces
-the whole route list each time, so every step resends the complete route spec. As
-that spec grows, the agent's tool call comes out malformed and the run ends with
-`stream closed with reason: error`. The one-prompt version failed four times out
-of four. Step 4 is the one that can still tip it over: **if step 4 ends in that
-error, import [`example/api-spec.yaml`](example/api-spec.yaml) instead** — same
-configuration, complete, and the agent has already done the steps that teach you
-anything.
-
-**Why the prompt is shaped the way it is:**
-
-- **`scope: global` on every filter.** The most dangerous default here. `once`
-  masks the first match and leaves the rest of the list — and the first record is
-  the one in every screenshot.
-- **The patterns given word for word.** Asked to invent them, the agent produced a
-  replacement containing a literal `[^"]*`, which would have written that text into
-  every response. Given them, it reproduced them exactly.
-- **`regex_uri`, not `uri`, on the single-record route.** A fixed `uri` sends every
-  request to the same record, and an agent that has just written one fixed rewrite
-  tends to write a second.
-- **"What does `log-data-mask` NOT do."** Makes the agent put the distinction into
-  its own words. It changes only what a *logger* writes, does nothing without a
-  logger on the route, and never changes the response — the thing readers get
-  wrong.
-- **Read the revision back, every step.** Plugins nested under `x-helix-gateway`
-  on a live route are silently discarded: the write reports success, the dry-run
-  passes, and the routes deploy with no masking. The read-back is the only thing
-  that catches it.
-
-**If the agent run goes wrong:**
-
-| Symptom | Cause |
-|---|---|
-| `stream closed with reason: error` after `update_route_spec` | The malformed tool-call defect above. Nothing was written. Try once more; if it repeats, import [`example/api-spec.yaml`](example/api-spec.yaml) for the rest. |
-| The write succeeds and the routes have no plugins | They were nested under `x-helix-gateway`. Ask for a flat `plugins` map and read the revision back. |
-| Only the first record is masked | A filter is missing `scope: global`. |
-| Nothing is masked | The pattern doesn't match the body as sent — check key spelling and whitespace, and whether something on the route converts the format first. |
-| A field nobody asked about is damaged | An over-broad pattern. Tie it to its key. |
-| The agent says the logs are masked after adding only `log-data-mask` | There's no logger on the route, so it has no effect — and it never changes the response. |
-| The single-record route returns 404 | `regex_uri` is wrong or missing. Routing, not masking. |
-| Deploy fails: `Only INACTIVE revisions can be updated` | Clone the revision or undeploy, then apply. |
+The fastest path, and it works on a **fresh, empty org**. One prompt does the
+whole build: [`helix-agent-prompt.md`](helix-agent-prompt.md) has it as two
+numbered steps — Step 1 creates the API and its two routes, Step 2 adds the
+masking the caller sees and the masking a logger would keep. Paste the whole thing
+as one message, read the revision back before you deploy, then run the checks
+under [See it work](#see-it-work).
 
 See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the ground rules these prompts
 assume.
@@ -112,7 +72,7 @@ No products, developers or apps are needed: the package ships unauthenticated.
   the `proxy-rewrite` paths, in the spec before you import it.
 - **A logger.** The spec carries the log mask, not a logger, and `log-data-mask`
   does nothing without one. Add a logger plugin block to the routes in the spec
-  before importing, or use the "also mask the logs for real" prompt under
+  before importing, or use the "prove the log half too" prompt under
   [Variations](#variations).
 
 ## Install it directly
@@ -180,36 +140,37 @@ compare the two entries. Full procedure and the other manual tests:
 
 ## Variations
 
-Each of these is a follow-up you can paste to the agent after step 4.
+Follow-ups you can paste to the agent in the same chat, once the build is
+standing. Say what you want to be true.
 
-**Also mask the logs for real**
+**Prove the log half too**
 ```text
-Add http-logger to both routes pointing at {{log_sink_url}},
-include_resp_body true, batch_max_size 1 so it flushes immediately. Then tell me
-how to compare the logged entry with and without log-data-mask — that comparison is
-the only way to know the log mask works.
+Add a logger to both routes that sends each request and response body to
+{{log_sink_url}} as soon as it happens. Then tell me how to compare one logged
+entry with and without the log masking, because that comparison is the only proof
+the log mask works.
 ```
 
 **My payload names the fields differently**
 ```text
-My records use contactEmail, mobileNumber and homeLat/homeLng. Rewrite every filter
-and every log-data-mask entry for those names, and remind me what happens to a copy
-of the same value stored under another key.
+My records use contactEmail, mobileNumber and homeLat/homeLng. Mask those instead,
+in the response and in the logs, and remind me what happens to a copy of the same
+value stored under another key.
 ```
 
 **Mask by role rather than for everyone**
 ```text
-Only agents in the "support" tier should get the masked view; the fraud team needs
-the full record. Tell me honestly whether response-rewrite can do that on one
-route, and if not, what the two-route shape looks like and how the caller is
-identified.
+Only agents in the support tier should get the masked view; the fraud team needs
+the full record. Tell me honestly whether one route can do that, and if not, what
+the two-route shape looks like and how the caller is identified.
 ```
 
-**Put identity in front of it** — that's [solution 08](../08-api-key/).
+**Put identity in front of it** — that's [solution 08](../08-api-key/). Masking
+is not access control.
 ```text
-Add API-key authentication to both routes with helix-auth validate,
-validate_auth_type key-auth, reading the key from X-Api-Key. Keep the masking
-exactly as it is — masking is not access control.
+Require an app's API key in the X-Api-Key header on both routes, and keep the
+masking exactly as it is. Then create a developer, a product and an app, and give
+me the key.
 ```
 
 ## Configuration reference
@@ -292,3 +253,34 @@ Every field of every plugin, and the wider product docs:
   payloads.
 - **Confirm `response-rewrite` and `log-data-mask` exist in your org** before you
   design around them.
+- **Nothing is masked, and every call returns 200.** The patterns assume compact
+  JSON (`"email":"`) while the backend sends `"email": "…"`. Ask for patterns that
+  match a field however it is spaced.
+- **An email address in some other field is masked too.** The email pattern
+  matches anything shaped like an address, not just the `email` field. Tie it to
+  `"email"` if other fields must stay unchanged.
+- **The response is no longer valid JSON.** A pattern made the quotes optional, and
+  the backend sends that field as a number, so the match runs into the next field.
+  Require the quotes, or match numbers separately.
+- **A literal `[^"]*` appears in responses.** Regex syntax ended up in the
+  *replacement*. Replacements take `$1` and plain text only.
+- **The single-record route returns 404.** If you built it with the agent, check
+  the stored path: a live route needs `/support/customers/:customerId`, and the
+  agent may store `{customerId}` instead. Fix the path by hand.
+- **Every single-record call returns the same customer.** The path rewrite is a
+  fixed `uri`. It needs a `regex_uri` that carries the id.
+- **A `file-logger` appears on the API.** The agent added a logger nobody asked
+  for. It writes masked bodies to a file on the gateway; remove it if you don't
+  want it.
+- **The agent says the logs are masked, and there is no logger on the route.**
+  `log-data-mask` has no effect without one, and never changes the response.
+- **The agent says the routes are built, and the API has no routes.** The route
+  write reported success and stored nothing. Read the revision back before any
+  deploy; if it's empty, ask for the routes again or import
+  [`example/api-spec.yaml`](example/api-spec.yaml).
+- **The routes exist but have no plugins.** The agent nested them under
+  `x-helix-gateway`, which a live route silently ignores. Read the revision back.
+- **`stream closed with reason: error` after a route write.** Nothing was written.
+  Try once more; if it repeats, import [`example/api-spec.yaml`](example/api-spec.yaml).
+- **Deploy fails with `Only INACTIVE revisions can be updated`.** Clone the
+  revision or undeploy it, then apply the change.

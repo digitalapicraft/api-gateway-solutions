@@ -31,7 +31,7 @@ Or bring a token you already have (any grant):
 |---|---|
 | `TOKEN_AUDIENCE` | Authorization servers that need an `audience` to issue a JWT rather than an opaque token. Auth0 always does; Okta custom authorization servers usually do. |
 | `OTHER_ISSUER_TOKEN` | Case 7. A valid token from a **different** authorization server. Without it, case 7 is skipped. |
-| `API_PATH` | A path other than `/posts`. |
+| `API_PATH` | A path other than `/albums`. |
 | `PACE` | Seconds to wait between requests (default 7). Environments often limit request rates, and a burst of test calls returns 429, which looks like a failure and isn't one. Set `0` to turn it off. |
 
 Exit code 0 means every case that ran held:

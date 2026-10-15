@@ -2,7 +2,7 @@
 #
 # Signing base (note the trailing newline — it is part of the string):
 #   {{KEY_ID}}\n
-#   POST /posts\n
+#   POST /albums\n
 #   date: {{DATE}}\n
 #   digest: {{DIGEST}}\n
 #
@@ -11,10 +11,10 @@
 #
 # Generate both with ../../example/verify.sh, or the worked example in ../../README.md.
 
-POST {{GATEWAY}}/posts
+POST {{GATEWAY}}/albums
 Content-Type: application/json
 Date: {{DATE}}
 Digest: {{DIGEST}}
 Authorization: Signature keyId="{{KEY_ID}}",algorithm="hmac-sha256",headers="@request-target date digest",signature="{{SIGNATURE}}"
 
-{"title":"order-created","body":"sku-1","userId":1}
+{"title":"order-created","userId":1}

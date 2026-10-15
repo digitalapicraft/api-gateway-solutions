@@ -24,7 +24,7 @@
 # GET /orgs/{orgId}/plugin-schemas?page=1&size=300 before you rely on this.
 #
 # RUNNABLE AGAINST A REAL UPSTREAM. The upstream is the public
-# https://jsonplaceholder.typicode.com, so GET /posts returns real data with no
+# https://jsonplaceholder.typicode.com, so GET /albums returns real data with no
 # backend of your own. Route paths match upstream paths, so no proxy-rewrite.
 #
 # FILL IN FOUR VALUES BEFORE DEPLOY — THEY ARE LITERALS, NOT INDIRECTIONS.
@@ -47,7 +47,7 @@
 openapi: 3.0.3
 
 info:
-  title: Partner Posts API
+  title: Partner Albums API
   version: 1.0.0
   description: >-
     A sample API protected by OAuth 2.0 access tokens issued by Okta. The gateway
@@ -56,17 +56,17 @@ info:
     own upstream when ready; nothing about the auth configuration changes.
 
 paths:
-  /posts:
+  /albums:
     get:
-      summary: List posts
+      summary: List albums
       description: >-
         Requires a valid Okta-issued Bearer access token. Rejected in the access
         phase before the upstream is contacted.
       responses:
-        '200': { description: Array of posts }
+        '200': { description: Array of albums }
         '401': { description: Missing, malformed, expired, wrong-issuer or badly signed Bearer token }
     post:
-      summary: Create a post
+      summary: Create an album
       description: Requires a valid Okta-issued Bearer access token.
       requestBody:
         required: true
@@ -74,26 +74,14 @@ paths:
           application/json:
             schema:
               type: object
-              required: [title, body, userId]
+              required: [title, userId]
               properties:
                 title:  { type: string }
-                body:   { type: string }
                 userId: { type: integer }
       responses:
         '201': { description: Created }
         '400': { description: Invalid payload }
         '401': { description: Missing or invalid Bearer token }
-
-  /posts/{postId}:
-    get:
-      summary: Get a post
-      description: Requires a valid Okta-issued Bearer access token.
-      parameters:
-        - { name: postId, in: path, required: true, schema: { type: string } }
-      responses:
-        '200': { description: Post }
-        '401': { description: Missing, malformed, expired, wrong-issuer or badly signed Bearer token }
-        '404': { description: Not found }
 
 # API-WIDE POLICY — every route above is protected by this one block.
 x-helix-gateway:

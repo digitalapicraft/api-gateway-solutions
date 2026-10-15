@@ -8,11 +8,9 @@ Paste this to the Helix Agent as one message, replacing the `{{...}}` values. Br
 your own SOAP endpoint, the handler path it answers on, and the REST route you want
 partners to call.
 
-It builds the translation only — the same API as
-[`example/api-spec.yaml`](example/api-spec.yaml) — and **it is unauthenticated**:
-add [solution 02](../02-oauth-jwt/) before partners call it. What to check before
-you trust the result is in
-[Build it with the Helix Agent](guides.md#build-it-with-the-helix-agent).
+It builds the translation only, and **it is unauthenticated**: add
+[solution 02](../02-oauth-jwt/) before partners call it. See
+[Troubleshooting](guides.md#troubleshooting) if something looks off.
 
 ## Prompt
 

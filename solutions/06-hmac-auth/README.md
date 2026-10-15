@@ -68,8 +68,9 @@ A bearer credential of any kind has two weaknesses:
 
 ## Example
 
-A payments partner posts settlement events to `POST /posts` and reads them back
-from `GET /posts/{postId}`.
+A payments partner sends settlement events to `POST /albums` and reads them back
+from `GET /albums/{albumId}`. (The example borrows a public test service's album
+records, so the paths say "albums".)
 
 | The partner sends… | It gets back |
 |---|---|

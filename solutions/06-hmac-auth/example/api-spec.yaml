@@ -5,7 +5,7 @@
 # Mode, or import this file, bind the upstream, and deploy the revision.
 #
 # RUNNABLE ON A FRESH FREE-TRIAL ORG. The upstream is the public
-# https://jsonplaceholder.typicode.com, so a signed POST /posts returns a real
+# https://jsonplaceholder.typicode.com, so a signed POST /albums returns a real
 # 201 with no backend of your own. Swap in your real upstream when you have one
 # — nothing else in this file changes.
 #
@@ -49,7 +49,7 @@
 openapi: 3.0.3
 
 info:
-  title: Partner Events API
+  title: Partner Albums API
   version: 1.0.0
   description: >-
     A sample API where every request is HMAC-signed by the caller and verified at
@@ -57,23 +57,22 @@ info:
     data on a fresh org; point it at your own upstream when ready.
 
 paths:
-  /posts:
+  /albums:
     post:
       summary: Submit a signed event
       description: >-
         Requires an HMAC signature over the method, path, Date and body digest.
         The body is bound to the signature by the Digest header, so a payload
-        modified anywhere in transit is rejected. Proxies the upstream's POST /posts.
+        modified anywhere in transit is rejected. Proxies the upstream's POST /albums.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [title, body, userId]
+              required: [title, userId]
               properties:
                 title:  { type: string }
-                body:   { type: string }
                 userId: { type: integer }
       responses:
         '201': { description: Accepted and forwarded to the upstream }
@@ -107,15 +106,15 @@ paths:
             # Sent as WWW-Authenticate: hmac realm="partner-events" on a 401.
             realm: partner-events
 
-  /posts/{postId}:
+  /albums/{albumId}:
     get:
       summary: Read an event, signed
       description: >-
         Requires an HMAC signature over the method, path and Date. No body, so no
         digest — see the route's signed_headers. Proxies the upstream's
-        /posts/{postId}.
+        /albums/{albumId}.
       parameters:
-        - { name: postId, in: path, required: true, schema: { type: string } }
+        - { name: albumId, in: path, required: true, schema: { type: string } }
       responses:
         '200': { description: The event }
         '401': { description: Missing, malformed, stale or invalid signature, or unknown key_id }
@@ -125,8 +124,8 @@ paths:
           hmac-auth:
             # No body on a GET, so digest is dropped from the signed set and body
             # validation is off. @request-target still covers METHOD AND PATH
-            # INCLUDING QUERY STRING, so a signature for /posts/1 will not verify
-            # against /posts/2.
+            # INCLUDING QUERY STRING, so a signature for /albums/1 will not verify
+            # against /albums/2.
             signed_headers: ["@request-target", "date"]
             validate_request_body: false
             clock_skew: 300

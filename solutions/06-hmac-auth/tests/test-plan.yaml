@@ -164,8 +164,8 @@ cases:
       Sending a Digest this route does not require is harmless — it is simply not in
       the signed set. Omitting one that a route DOES require is the weak-signed-set
       case. The path binding was confirmed against a deployed route: this exact
-      signature returns 200 on /posts/1 and 401 on /posts/2, because
-      @request-target expanded to "GET /posts/1" inside the signing base.
+      signature returns 200 on /albums/1 and 401 on /albums/2, because
+      @request-target expanded to "GET /albums/1" inside the signing base.
 
   - id: cavage-client
     type: failure
@@ -179,7 +179,7 @@ cases:
       have one) using the same key_id and secret, and send it.
     expected_outcome: >-
       401. cavage omits the keyId from the signing base, adds no trailing newline,
-      and writes "(request-target): post /posts" in lowercase. Each of those three
+      and writes "(request-target): post /albums" in lowercase. Each of those three
       differences alone changes the signature; together they guarantee a mismatch.
     notes: >-
       Worth running once per integration, because the symptom — a bare 401 against a

@@ -22,38 +22,11 @@ Then, for everyone: [See it work](#see-it-work) · [Variations](#variations) ·
 
 ## Build it with the Helix Agent
 
-[`helix-agent-prompt.md`](helix-agent-prompt.md) has the build as four steps:
-create the API, add the registration route, add the read route, then read the
-revision back. Paste each as its own message.
-
-**The prompt builds a smaller version than the spec.** It stores one value per
-partner (`tier`) and leaves out the diagnostics route, `request-id` and `cors`. The
-shipped spec stores two values (`tier` and `settlement`) and carries all three
-routes. To get the full version, import [`example/api-spec.yaml`](example/api-spec.yaml)
-instead. The prompt also stops at the read-back: bind an upstream and deploy as in
-[Build it in the UI](#build-it-in-the-ui), step 2.
-
-Why the prompt is shaped this way:
-
-| Choice | Reason |
-|---|---|
-| **One route per step** | A prompt carrying two routes and four plugin blocks is deep enough to trigger the agent's tool-argument defect, which shows up as `stream closed with reason: error` and writes nothing. |
-| **"keep the plugin-name level explicit"** | The agent can drop that level and promote one plugin's fields into the `plugins` map. The route then deploys carrying several plugins that do not exist and none of the real one; the write succeeds and the dry-run passes. |
-| **"the $ctx reference is literal text"** | `$ctx.helix.key_value_map.tier` looks like something an assistant should tidy. "Correcting" it to `${ctx.helix...}` produces empty values, a 200, and no error. |
-| **No `request-validation` body schema** | A body schema with a `properties` map is exactly the depth that fails the tool-argument defect, five runs out of five. Anything that deep belongs in spec import, not an agent write. |
-| **Ask for `dry_run_deploy`, never `validate_route`** | `validate_route` always fails on this build: the tool sends `{"route": …}` and the endpoint expects `{"routeSpec": [ … ]}`. |
-
-If the agent wants to change something it shouldn't, reply plainly:
-
-- **It moves or removes the `tier:` prefix, or turns it into a dotted suffix.** The
-  key is a template, and the prefix in front of it is deliberate. Ask it to keep
-  the key exactly as written.
-- **It drops the `alias`.** The alias is what lets the template refer to the value.
-  Without it the reference cannot resolve.
-
-Reading the revision back is the only check that catches a silently dropped
-plugin. Confirm both routes carry `key-value-map` **and** `mocking`, each under its
-own name.
+[`helix-agent-prompt.md`](helix-agent-prompt.md) has four steps: create the API,
+add the registration route, add the read route, then read the revision back.
+**Paste each as its own message.** The prompt builds a smaller version than the
+spec; for the full version, import [`example/api-spec.yaml`](example/api-spec.yaml)
+instead.
 
 See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the ground rules these prompts
 assume.

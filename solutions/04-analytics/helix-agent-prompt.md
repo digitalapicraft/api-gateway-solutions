@@ -5,12 +5,8 @@
 ---
 
 Paste any one of these to the Helix Agent, replacing the `{{...}}` values. It
-pulls the numbers and draws a chart in the chat; every one of them only reads, so
-nothing is added to your APIs and nothing is changed.
-
-What the agent can and can't answer, what to do when a result comes back empty or
-unattributed, and follow-ups worth asking next are in
-[Guides](guides.md#ask-the-helix-agent).
+pulls the numbers and draws a chart in the chat. Every question only reads, so
+nothing in your APIs changes.
 
 ## Prompt
 

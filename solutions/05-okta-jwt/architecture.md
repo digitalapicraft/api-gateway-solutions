@@ -86,13 +86,13 @@ sequenceDiagram
     IDP-->>C: RS256-signed JWT
 
     Note over C,GW: Step 2 — call the API
-    C->>GW: GET /posts, Authorization Bearer token
+    C->>GW: GET /albums, Authorization Bearer token
     GW->>IDP: fetch JWKS — once, then cached
     IDP-->>GW: public keys
     Note over GW: verify signature, issuer, expiry and alg<br/>locally. The IdP is NOT on the request path.
 
     alt token valid
-        GW->>UP: GET /posts
+        GW->>UP: GET /albums
         UP-->>GW: 200
         GW-->>C: 200 with the upstream body
     else rejected

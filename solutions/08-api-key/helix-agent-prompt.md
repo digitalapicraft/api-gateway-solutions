@@ -4,11 +4,9 @@
 
 ---
 
-Two steps, from a **fresh, empty org** to two routes behind an API key, plus the
-product and app whose key you test with. Replace the `{{...}}` values, then
-**paste Step 1, confirm, and paste Step 2** in the same session. Why the prompt is
-worded this way, and what to check before you trust the result, are in
-[Guides](guides.md#build-it-with-the-helix-agent).
+Replace the `{{...}}` values, then **paste Step 1, confirm, and paste Step 2** in
+the same chat. See [Troubleshooting](guides.md#troubleshooting) if something looks
+off.
 
 ## Prompt
 

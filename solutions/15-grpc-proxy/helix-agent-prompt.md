@@ -9,11 +9,10 @@ Paste each step to the Helix Agent as its own message, in order, replacing the
 gRPC backend's address, and `{{upstream_id}}` is the id the agent gives you in
 Step 1.
 
-The read-back in Step 4 is not optional: three of the four known agent-mode
-defects report success at every step the agent shows you. These steps route
-`Ping` only; [Guides](guides.md#build-it-with-the-helix-agent) covers the
-streaming methods and the reflection routes, and
-[Troubleshooting](guides.md#troubleshooting) what to do if something looks off.
+These steps route `Ping` only. For the streaming methods and schema discovery,
+import [`example/api-spec.yaml`](example/api-spec.yaml) instead. Always do the
+read-back in Step 4, and see [Troubleshooting](guides.md#troubleshooting) if
+something looks off.
 
 ## Prompt
 

@@ -21,8 +21,8 @@ SECRET_KEY=<SECRET_KEY> \
 
 `KEY_ID` and `SECRET_KEY` come from the app credential the control plane
 generated (see [Guides](guides.md#install-it-directly)). They are never in the
-spec. Optional: `WRITE_PATH` (default `/posts`) and `READ_PATH` (default
-`/posts/1`). The script needs only `bash`, `curl` and `openssl`.
+spec. Optional: `WRITE_PATH` (default `/albums`) and `READ_PATH` (default
+`/albums/1`). The script needs only `bash`, `curl` and `openssl`.
 
 Exit code 0 means all eight held:
 
@@ -51,8 +51,8 @@ appears on your build, the case fails and you notice. See
 Case 2 is also the check that the signing steps in this package are the ones the
 gateway rebuilds. Case 5 matters most if it fails: a wrong secret being accepted
 would mean the signature is decorative. Case 8 confirms the read route's
-no-digest signed set. Separately, a signature made for `GET /posts/1` returns 200
-there and 401 on `/posts/2`, because the path is part of what is signed.
+no-digest signed set. Separately, a signature made for `GET /albums/1` returns 200
+there and 401 on `/albums/2`, because the path is part of what is signed.
 
 Raw fixtures, if you want to run one case by hand instead of the whole script:
 [`tests/requests/`](tests/requests/) (the HTTP requests) and
@@ -64,7 +64,7 @@ drift apart).
 
 | Case | What it proves | How to run it |
 |---|---|---|
-| **A draft-cavage client** | An off-the-shelf HTTP Signatures library does **not** work with this, so the failure is recognised as a format mismatch rather than chased as a credential problem. | Sign the same request with any draft-cavage library, using the same `key_id` and secret, and send it. Expect `401`: the library leaves out the `keyId` line, adds no final newline, and writes `(request-target): post /posts` in lowercase. Each difference alone changes the signature. Worth running once per integration. |
+| **A draft-cavage client** | An off-the-shelf HTTP Signatures library does **not** work with this, so the failure is recognised as a format mismatch rather than chased as a credential problem. | Sign the same request with any draft-cavage library, using the same `key_id` and secret, and send it. Expect `401`: the library leaves out the `keyId` line, adds no final newline, and writes `(request-target): post /albums` in lowercase. Each difference alone changes the signature. Worth running once per integration. |
 | **`signed_headers` removed** | What leaving out `signed_headers` costs, so it is never treated as optional. | In a **throwaway** environment only, remove `signed_headers` from the write route. Sign a base made of the `keyId` alone (`headers=""`, no `Date`, no `Digest`). Send that one `Authorization` header with several different bodies and paths. Expect every one to be accepted: one signature, copied once, works for any request indefinitely. |
 
 Full procedures, plus the exact assertions each one makes:

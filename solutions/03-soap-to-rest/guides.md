@@ -27,64 +27,14 @@ Then, for everyone: [See it work](#see-it-work) · [Variations](#variations) ·
 
 ## Build it with the Helix Agent
 
-A short path. The build is **one prompt** —
-[`helix-agent-prompt.md`](helix-agent-prompt.md). Paste it as a single message and
-replace the `{{...}}` values.
+The fastest path, and it works on a **fresh, empty org**. One prompt builds the
+translation: the API, the JSON route, and the conversion to and from your SOAP
+service. [`helix-agent-prompt.md`](helix-agent-prompt.md) has it as one message —
+paste it and replace the `{{...}}` values. Sign-in is not part of it; add it
+afterwards with [solution 02](../02-oauth-jwt/) (see [Variations](#variations)).
 
-It builds the translation and nothing else, and so does
-[`example/api-spec.yaml`](example/api-spec.yaml) — the prompt and the spec
-describe the same API. Sign-in is [solution 02](../02-oauth-jwt/); add it with
-02's prompt once the translation works (see [Variations](#variations)). Keeping
-them apart is deliberate: a translation failure and a sign-in failure look alike
-from the outside, and building one at a time is how you find out which one broke.
-[AGENT-GUIDE.md](../../AGENT-GUIDE.md) has the standing rules the prompt assumes.
-
-> **Check what was stored, not what the agent said.** Three of the four known
-> agent-mode problems report success at every step the agent shows you — a run can
-> end "success" having deployed a route with no plugins at all. Ask for the
-> plugins applied to `/locations` and read them back.
->
-> **A JSON call must come back as JSON with no angle brackets in the body.** A
-> content-type header is a claim; a body with no XML markup is evidence. Check that
-> before you add anything on top of it.
-
-### Why the prompt is worded the way it is
-
-It names no plugin, no field and no secret, on purpose. Ask for an outcome and the
-agent reads the real plugin settings your org has; ask for field names and it
-copies them from some other gateway's documentation. That matters more here than
-anywhere else in this library, because **`xml-to-json`'s settings vary between
-builds more than most** — see [Architecture](architecture.md#the-one-thing-everybody-gets-wrong).
-
-One phrase does most of the work: **"neither side changes to make that work."**
-It states the whole outcome as a rule — partners get JSON, the backend keeps its
-XML, and no code is written at either end — and leaves the agent to pick the
-mechanism, which is the part that differs between builds.
-
-The prompt carries **no warning about `Content-Type`**, and you should know why
-that is worth checking. An earlier run, with different wording, put
-`Content-Type: application/xml` in `proxy-rewrite`. That runs before the body is
-converted, so the request conversion never saw a JSON body and the backend was
-handed JSON it couldn't read. The route still answered **200 with
-`content-type: application/json` and a JSON body**, so nothing looked wrong. A
-later run of the wording shipped here built the translation in one pass. Which
-wording change made the difference hasn't been measured, so read the revision back
-and confirm nothing set `Content-Type` on the rewrite.
-
-### When the agent goes wrong
-
-| Symptom | Cause |
-|---|---|
-| The handler returns 500, but calling it directly works | A second conversion plugin is converting the body twice; or a missing `SOAPAction`; or the request field names don't match what the handler reads. |
-| The response is still XML | The client isn't sending `Accept: application/json`, or `proxy-rewrite` is setting `Content-Type` ahead of the conversion. Both have happened. |
-| An XML body with a JSON content type | The conversion is only running in the request direction. Ask for the plugins applied on that route. |
-| 200, a JSON body, and the backend's own "bad input" error inside it | The agent set `Content-Type` in `proxy-rewrite`. It runs before the body is converted, so the backend received raw JSON. Everything looks healthy — 200, `application/json`, valid JSON — and the translation isn't working. Seen on a live run. |
-| The JSON body is `{}` | The handler returned an empty envelope — usually the request field names don't match its elements. Ask what XML it is actually sending. |
-| 415 from the handler | Do **not** fix this by setting `Content-Type` in `proxy-rewrite` — it runs first and hides the JSON body from the conversion. Check whether the handler needs a `SOAPAction` header instead. |
-| 504 on every call | The handler is slower than the gateway timeout. Looks like an outage, isn't. |
-| The agent adds a second plugin for the reverse direction | One plugin covers both directions here. See [Architecture](architecture.md#the-one-thing-everybody-gets-wrong). |
-| The agent puts a `description` key in a plugin block | Only the plugin's own fields (plus `_meta`) are allowed. Move the note to a YAML comment. |
-| Deploy fails: `Only INACTIVE revisions can be updated` | Expected on any change after the first deploy — clone the revision or undeploy first. |
+See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the ground rules these prompts
+assume.
 
 ## Build it in the UI
 

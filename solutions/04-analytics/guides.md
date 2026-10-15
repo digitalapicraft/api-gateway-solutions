@@ -26,29 +26,12 @@ there are no screens to go through.
 ## Ask the Helix Agent
 
 The quickest path, with no queries to write. Ask in plain English and the agent
-pulls the numbers and **draws a chart in the chat** — it calls its `get_metrics`
-tool for you. Every question in
-[`helix-agent-prompt.md`](helix-agent-prompt.md) works on its own; paste any one.
-Start here:
+pulls the numbers and **draws a chart in the chat**.
+[`helix-agent-prompt.md`](helix-agent-prompt.md) has a set of questions — each one
+works on its own, so paste any one.
 
-```text
-Show me requests to all my APIs in the last hour, broken down by API and sorted
-busiest first.
-```
-
-### Keep the ask inside what analytics supports
-
-The agent maps your words onto the metrics API, so a question it can't answer
-comes back empty or quietly approximated rather than as an error:
-
-| Ask for… | Not… | Because |
-|---|---|---|
-| **average / min / max** response time | p95 / p99 / percentiles | The metric supports AVG, MIN, MAX and SUM only. `MAX` is the worst-case signal. |
-| a **count of 429s** | "percent of quota used" | There is no quota-usage metric; you can count rejections, not remaining headroom. |
-| an **aggregate slice** (by API, app, status, time) | "show me *that one* request" | Looking up a single request means matching its `X-Request-Id` in your own logs. |
-| grouping by **`route_id`** | expecting one row per URL | A templated route is one row under `route_id`; `api_path` gives one row per concrete id. |
-
-[AGENT-GUIDE.md](../../AGENT-GUIDE.md) has the general pattern.
+See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the ground rules these prompts
+assume.
 
 ## Run the script
 

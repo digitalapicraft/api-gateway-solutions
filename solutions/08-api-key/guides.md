@@ -22,40 +22,13 @@ Then, for everyone: [See it work](#see-it-work) · [Variations](#variations) ·
 
 ## Build it with the Helix Agent
 
-Works on a **fresh org**: the agent creates the API on a public test service, so
-you get real data immediately. [`helix-agent-prompt.md`](helix-agent-prompt.md)
-has two steps: Step 1 creates and protects the API, Step 2 issues a key and gives
-you the calls that test it. **Paste one step at a time and confirm between them**,
-in the same session.
-
-Why the prompt is worded the way it is:
-
-- **`apikey` with `source` is required in practice.** The published schema marks
-  it optional; the plugin's own check doesn't. Without this line the agent writes
-  a config that fails the dry-run over a field it believed was optional.
-- **`key-auth` is not a standalone plugin.** It's a `validate_auth_type` of
-  `helix-auth`. A general-purpose model reaches for it by name.
-- **No secret in the spec.** True here and worth saying, because it is *not* true
-  of `helix-auth` in generate mode ([solution 02](../02-oauth-jwt/)), where the
-  signing secret is written into the spec. An agent copying that pattern will try
-  to put a key in this one.
-- **Not `secret_validation`.** Its name sounds like a second factor. It isn't one.
-- **Not `cors`.** Devices aren't browsers. An agent copying the other auth
-  solutions adds an open CORS policy this API has no use for.
-- **`request-id` on the API, not each route.** API-wide plugins belong there.
-  Copied onto each route it works, and then drifts.
-- **Keep your route paths; rewrite to the backend.** The published paths are the
-  contract with the fleet. Without this line the agent may rename your routes to
-  match the backend.
-- **The key-in-the-URL test.** Proves `source: header` means the header only.
-
-**Before you trust a run, read the stored revision back.** The agent's summary is
-not enough. Check that both routes carry `helix-auth` with `apikey.source: header`
-and `apikey.key: X-Device-Key`, plus their `proxy-rewrite`, and that there is no
-key value, no `secret_validation` and no `cors` anywhere.
+Works on a **fresh org**. [`helix-agent-prompt.md`](helix-agent-prompt.md) has two
+steps: Step 1 creates and protects the API, Step 2 issues a key and gives you the
+calls that test it. **Paste one step at a time and confirm between them**, in the
+same chat.
 
 See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the ground rules these prompts
-assume, and [Troubleshooting](#troubleshooting) if the agent takes a wrong turn.
+assume.
 
 ## Build it in the UI
 
@@ -328,17 +301,10 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
   [solution 01](../01-api-products/).
 - **Deploy fails with `Only INACTIVE revisions can be updated`.** Clone the
   revision or undeploy, then apply.
-
-### When the agent takes a wrong turn
-
-| Symptom | Cause |
-|---|---|
-| Dry-run fails naming `apikey` | `apikey.source` is missing. It's required in practice on both routes. |
-| A valid key returns 403, not 200 | The key was recognised, but the app's product doesn't contain this API. |
-| Everything 401s with *Missing API key* | The header on the wire isn't the one in `apikey.key`, or the key is in the query string. |
-| The agent renames the routes to `/todos/1` and `/posts` | It matched the upstream instead of rewriting to it. Keep your paths; use `proxy-rewrite`. |
-| The agent reaches for a `key-auth` plugin | It's a `validate_auth_type` of `helix-auth` here, not a plugin. |
-| The agent puts a key value in the spec | The route names the header only; the control plane issues the key on the app. |
-| `create_api` fails saying the API exists | A previous run left one behind. Use a free name. |
-| Deploy fails: `Only INACTIVE revisions can be updated` | Clone the revision or undeploy, then apply. |
-| You ask the agent to run `validate_route` | Don't. It is broken against this control plane: the tool sends `{"route": {...}}` but the endpoint requires `{"routeSpec": [...]}`, so it returns 400 whatever the content. An earlier prompt that asked for it failed twice, the second time with the agent retrying into a malformed tool call that ended the run. Ask for `dry_run_deploy` instead, which is why this prompt never mentions `validate_route`. |
+- **A valid key returns 403, not 200.** The key was recognised, but the app's product doesn't contain this API.
+- **Everything 401s with *Missing API key*.** The header on the wire isn't the one in `apikey.key`, or the key is in the query string.
+- **The agent renames the routes to `/todos/1` and `/posts`.** It matched the upstream instead of rewriting to it. Keep your paths; use `proxy-rewrite`.
+- **The agent reaches for a `key-auth` plugin.** It's a `validate_auth_type` of `helix-auth` here, not a plugin.
+- **The agent puts a key value in the spec.** The route names the header only; the control plane issues the key on the app.
+- **`create_api` fails saying the API exists.** A previous run left one behind. Use a free name.
+- **You ask the agent to run `validate_route`.** It always fails on this platform, whatever the route says. Ask for `dry_run_deploy` instead.

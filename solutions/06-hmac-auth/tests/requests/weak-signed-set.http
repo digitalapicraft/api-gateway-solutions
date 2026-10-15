@@ -9,10 +9,10 @@
 # rejected BEFORE the signature is checked. Remove signed_headers from the route
 # and this request succeeds — which is the whole argument for setting it.
 
-POST {{GATEWAY}}/posts
+POST {{GATEWAY}}/albums
 Content-Type: application/json
 Date: {{DATE}}
 Digest: {{DIGEST}}
 Authorization: Signature keyId="{{KEY_ID}}",algorithm="hmac-sha256",headers="@request-target date",signature="{{SIGNATURE_WITHOUT_DIGEST}}"
 
-{"title":"order-created","body":"sku-1","userId":1}
+{"title":"order-created","userId":1}

@@ -65,7 +65,7 @@ Three things are true at once, which is why this stays unsolved for years:
 
 ## Example
 
-Say you have a partner posts API and Okta already knows your partners' apps.
+Say you have a partner albums API and Okta already knows your partners' apps.
 
 | A caller sends… | It gets back |
 |---|---|

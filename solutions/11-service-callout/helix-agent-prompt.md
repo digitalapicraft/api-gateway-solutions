@@ -8,7 +8,7 @@ Paste step 1 and wait for the agent to read the revision back. Then paste step 2
 in the same session. Keep the `${ctx.helix…}` variable names exactly as written
 — the dots are part of each name.
 
-See [Guides](guides.md#build-it-with-the-helix-agent) if something looks off.
+See [Guides](guides.md#troubleshooting) if something looks off.
 
 ## Prompt
 

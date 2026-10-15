@@ -23,50 +23,9 @@ Then, for everyone: [See it work](#see-it-work) · [Variations](#variations) ·
 ## Build it with the Helix Agent
 
 Works on a **fresh, empty org**. [`helix-agent-prompt.md`](helix-agent-prompt.md)
-has two steps: step 1 creates the API, the read route, the callout and the
-headers; step 2 adds the write route with the opposite failure policy. Paste step
-1, let the agent read the revision back, then paste step 2 in the same session.
-
-The steps are kept small on purpose. `update_route_spec` replaces the whole route
-list each time, so every step resends the complete route spec, and small steps
-keep that small enough for the agent to send cleanly.
-
-**Why the prompt is shaped the way it is:**
-
-- **`phase: rewrite`, with the reason.** The most likely wrong turn, and it fails
-  silently — an access-phase callout returns 200 with no headers and no error.
-  Saying only "use rewrite" isn't enough; without the reason, the agent tidies it
-  back.
-- **The variable names are literal.** `${ctx.helix.service_callout.tenant_plan}`
-  looks like a path to look up. An agent that "corrects" it produces empty headers.
-- **`set`, not `add`.** A security property, not a style choice. With `add`, a
-  client can assert its own tenant plan and the backend believes it.
-- **`profile_status` from the callout's HTTP status.** Lets the backend tell a
-  real answer from a fail-open miss. Left to itself, the agent maps only the
-  business fields.
-- **`fail-close` on the write path.** Makes the failure policy a deliberate
-  per-route decision rather than an inherited default. It's the most consequential
-  choice in this solution.
-- **The live route object, named explicitly.** Plugins nested under
-  `x-helix-gateway` on a live route are silently discarded — the write reports
-  success and the dry-run passes. A shorter instruction ("put the plugins in a flat
-  plugins map, do not nest them under x-helix-gateway") was ignored every time it
-  was tried, right after the agent had read the spec generator's document-shaped
-  examples. What worked was naming the live route object, telling the agent not to
-  follow those examples, and showing the route-object shape — the wording in step 1.
-
-**If the agent run goes wrong:**
-
-| Symptom | Cause |
-|---|---|
-| 200, and no enrichment headers at the backend | The callout is on the access phase, or it failed under `fail-open`. |
-| The headers arrive empty | The variable name doesn't match `ctx.helix.<ctx_namespace>.<field>` exactly. |
-| One header missing, the others fine | That mapped path matched nothing. That isn't an error. |
-| A client-supplied header survives | `headers.add` where `headers.set` belongs. |
-| 503 on every request | The callout can't be reached and the policy is `fail-close`. That's the configured behaviour — check the URI from the gateway's network, not your laptop. |
-| One route works and the other doesn't | The plugin is per route. |
-| The write succeeds and the routes have no plugins | Nested under `x-helix-gateway`. Read the revision back. |
-| Deploy fails: `Only INACTIVE revisions can be updated` | Clone the revision or undeploy, then apply. |
+has two steps: Step 1 creates the API, the read route and the lookup, Step 2 adds
+the write route. **Paste Step 1, check the result, then paste Step 2** in the same
+chat.
 
 See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the ground rules these prompts
 assume.

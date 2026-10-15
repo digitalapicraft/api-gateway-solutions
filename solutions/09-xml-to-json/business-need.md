@@ -1,35 +1,37 @@
-# XML to JSON conversion for a legacy REST backend
+# JSON clients for an XML backend, at the API gateway
 
 > [Overview](README.md) · **Business need** · [Architecture](architecture.md) · [Guides](guides.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [API reference](api-reference.md)
 
 ---
 
-> Your backend answers in XML and nobody can change it. So the web team wrote a
-> parser, the iOS team wrote another, the Android team found a library, and the
-> partner team asked for a nightly file. Each one answers the same questions
-> differently — what an empty element means, whether one item is a list — and
-> they agree until the data changes.
+> The stock system is REST that answers in XML, because it was written in 2009.
+> The web team wrote a parser, iOS wrote another, Android found a library, and the
+> partner team gave up and asked for a nightly CSV. Four conversions of the same
+> document, and the one that breaks is the one nobody owns.
 >
-> **The conversion is being solved four times, in the wrong place.**
+> **Convert once, at the edge, and the backend keeps speaking XML.**
 
-- **A new client calls an endpoint** instead of writing parser number five, so
-  integration time stops growing with every new consumer.
-- **The XML clients don't have to move.** The response is converted only when a
-  client asks for JSON, so the new front door opens without a migration project —
-  usually the difference between "approved" and "next year".
-- **Conversion bugs land in one place**, with one owner, instead of on a client
-  team that did nothing wrong.
+- **Conversions to maintain: one per client → one, in configuration.** A new
+  client calls a JSON endpoint instead of writing parser number five.
+- **Existing XML clients migrated: all of them → none.** The response is converted
+  only when the caller asks for JSON, so XML callers keep using the same route.
+- **Backend code changed: none.** It still receives and returns the XML it always
+  has.
 
-| Before | After |
+Pick the package by what the backend speaks, not by the word "XML":
+
+| The backend | Use |
 |---|---|
-| One conversion per client | One, in configuration |
-| Adding JSON means migrating everyone | XML clients keep working through the same route |
-| The backend rewrite is the only "real" fix | Backend untouched; the change is a revision deploy |
+| plain HTTP carrying XML: an inventory API, a file feed, an industry schema | this package |
+| SOAP: an envelope, a `SOAPAction`, a WSDL | [03 — SOAP to REST](../03-soap-to-rest/) |
 
-No figures here are measured savings; they are the reasoning. It is not an API
-redesign — the JSON mirrors the XML, element for element — and it is not
-lossless. [What it does not do is in Architecture](architecture.md#what-it-does-not-do).
+The JSON mirrors the XML element for element, so it is not a redesigned API. It is
+not lossless, and it does not keep key order on the way back to XML, so a backend
+that validates a strict `xs:sequence` can reject a complete document. It ships
+unauthenticated. [What the conversion does to a document, and what this does not
+buy you, are in Architecture](architecture.md#what-the-conversion-does-to-your-document).
 
-*Also searched as: XML to JSON API · convert XML response to JSON · JSON to XML
-request · legacy XML API modernization · REST XML backend JSON clients · API
-content negotiation · XML mediation without SOAP.*
+*Also searched as: XML to JSON at the API gateway · JSON to XML request transform ·
+convert an XML API to JSON · modernise a legacy XML REST API · content negotiation
+XML JSON · put a JSON front end on an XML backend · stop writing XML parsers in
+every client.*

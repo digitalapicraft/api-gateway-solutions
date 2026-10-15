@@ -20,7 +20,7 @@ under a product, and creating the app is what generates the `key_id` and
 | Create an upstream | `POST /api/orgs/{orgId}/envs/{envId}/upstreams` | `{"name","specification":{"scheme","nodes":[{"host","port","weight"}], ...}}` | Upstreams are created **per environment**. |
 | Bind the upstream to the revision | `PATCH /api/orgs/{orgId}/apis/{apiId}/revisions/{revisionId}/upstream-bindings/add` | `{"environmentUpstreams":[{"environmentId","upstreamId"}]}` | Must succeed before the deploy call below. |
 | Deploy the revision | `POST /api/orgs/{orgId}/apis/{apiId}/revisions/{revisionId}/deploy` | `{"environmentId","force":false}` | This is what makes the routes live. |
-| List APIs (to get `<API_ID>`) | `GET /api/orgs/{orgId}/apis` | — | Find the id of the imported "Partner Events API" here, if you didn't keep it from the import response. |
+| List APIs (to get `<API_ID>`) | `GET /api/orgs/{orgId}/apis` | — | Find the id of the imported "Partner Albums API" here, if you didn't keep it from the import response. |
 | Create the product | `POST /api/orgs/{orgId}/products` | The product object in [`example/products.json`](example/products.json): `{"name","displayName","description","apiIds","authMethods":["hmac-auth"],"quota":{"limit","interval","interval_unit"}}` | `authMethods` **must** name `hmac-auth`; it defaults to `["helix-auth"]`. A product with no `quota` is rejected at creation. |
 | Deploy the product to an environment | `POST /api/orgs/{orgId}/envs/{envId}/products/{productId}/deploy` | — | A different deploy from the revision's. |
 | Create a developer | `POST /api/orgs/{orgId}/developers` | `{"firstName","lastName","email"}` | Returns the developer's `id`. |

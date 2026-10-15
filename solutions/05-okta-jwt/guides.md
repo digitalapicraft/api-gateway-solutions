@@ -5,14 +5,15 @@
 ---
 
 Three ways to build the same thing, then how to see it work. Whichever way you
-pick, the result is one API with three routes (`GET /posts`, `GET /posts/{postId}`
-and `POST /posts`) that accept only access tokens your Okta issued, in front of a
+pick, the result is one API, "Partner Albums API", with two routes (`GET /albums`
+and `POST /albums`) that accept only access tokens your Okta issued, in front of a
 public test service.
 
 **Check this first, whatever path you pick:** your org must include the
 `openid-connect` plugin. Not every org does. See
 [Install it directly](#install-it-directly) for the one call that tells you, or
-ask the Helix Agent (Step 1 of the prompt does this for you).
+ask the Helix Agent *"confirm the openid-connect plugin exists in this org"*
+before you paste the prompt.
 
 ## Pick your path
 
@@ -27,44 +28,16 @@ Then, for everyone: [See it work](#see-it-work) · [Variations](#variations) ·
 
 ## Build it with the Helix Agent
 
-Works on a **fresh org**, as long as it includes `openid-connect`.
-[`helix-agent-prompt.md`](helix-agent-prompt.md) has two steps. **Paste Step 1,
-check what it shows you, then paste Step 2.** A single large prompt pushes the
-agent into an oversized tool call, and the fields it drops are the hardening ones.
-
-**This is the one prompt in the library that names fields.** The configuration has
-fourteen of them, four override defaults you would not guess, and one is missing
-from the published schema. Asked for as a single outcome, the agent drops exactly
-the hardening fields, because they come last. Here is why each instruction is
-there:
-
-- **"Confirm the plugin exists; do not substitute."** `openid-connect` is missing
-  from some orgs. Without this line the agent reaches for `helix-auth` and builds
-  something that looks right and cannot work.
-- **`use_jwks: true`, flagged as missing from the schema.** The most important
-  line. The agent won't find it in the plugin schema and will drop it as a mistake
-  unless told not to. The result imports, dry-runs and deploys cleanly, then
-  rejects every token.
-- **`unauth_action: deny`, with what breaks without it.** Explaining the login
-  redirect is what makes the agent keep the field when it starts trimming.
-- **The defaults worth overriding.** `ssl_verify` defaults to false;
-  `accept_unsupported_alg` defaults to true and its own description is "ignore the
-  signature"; `set_userinfo_header` adds a call to Okta on every request; and
-  without `valid_issuers` any issuer the plugin can reach is trusted.
-- **API level, not per route.** The opposite of [solution 02](../02-oauth-jwt/)'s
-  rule. An agent that has seen that one will attach the check route by route out
-  of habit. Here there is no token endpoint to leave open.
-- **Step 2 at all.** It makes the agent review its own work against your org's
-  live schema, which is what catches dropped fields.
-
-**Before you trust a run, read the stored revision back.** The agent's own summary
-is not enough: a field can be dropped while every step reports success. Check that
-`openid-connect` is present with `use_jwks: true` and `bearer_only: true`, and
-that there is no `helix-auth` anywhere. Then test with no token first: it must
-return 401, not a redirect.
+Works on a **fresh org**, as long as it includes the `openid-connect` plugin.
+[`helix-agent-prompt.md`](helix-agent-prompt.md) has two steps: Step 1 creates the
+API and its two routes, Step 2 makes every route accept only your Okta's tokens.
+Paste the whole thing as one message, or one step at a time if the run ends early.
+There is no developer, product or app step: Okta issues the tokens. When it
+finishes, read the revision back and check for `use_jwks: true` — the agent often
+leaves it out, and you add it yourself.
 
 See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the ground rules these prompts
-assume, and [Troubleshooting](#troubleshooting) if the agent takes a wrong turn.
+assume.
 
 ## Build it in the UI
 
@@ -139,7 +112,7 @@ curl -s -H "authorization: Bearer $TOKEN" -F "file=@api-spec.filled.yaml" \
 # 2. Import does NOT make the routes live. Create an upstream, bind it
 #    to the revision, then deploy the revision.
 curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/envs/<ENV_ID>/upstreams" \
-  -d '{"name":"posts-upstream","specification":{"scheme":"https","nodes":[{"host":"jsonplaceholder.typicode.com","port":443,"weight":1}]}}'
+  -d '{"name":"albums-upstream","specification":{"scheme":"https","nodes":[{"host":"jsonplaceholder.typicode.com","port":443,"weight":1}]}}'
 # → {"id":"<UPSTREAM_ID>", ...}
 
 curl -s "${H[@]}" -X PATCH "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/upstream-bindings/add" \
@@ -173,10 +146,10 @@ TOKEN=$(curl -s -X POST "https://<your-okta-domain>/oauth2/<authServerId>/v1/tok
   -u "<CLIENT_ID>:<CLIENT_SECRET>" \
   -d grant_type=client_credentials -d scope=<scope> | jq -r .access_token)
 
-curl -s -o /dev/null -w "%{http_code}\n" "https://<YOUR_GATEWAY_HOST>/posts"
+curl -s -o /dev/null -w "%{http_code}\n" "https://<YOUR_GATEWAY_HOST>/albums"
 # 401  <- no token, and NOT a redirect to Okta's login page
 
-curl -s -o /dev/null -w "%{http_code}\n" "https://<YOUR_GATEWAY_HOST>/posts" \
+curl -s -o /dev/null -w "%{http_code}\n" "https://<YOUR_GATEWAY_HOST>/albums" \
   -H "authorization: Bearer $TOKEN"
 # 200  <- the upstream's data, untouched
 ```
@@ -232,8 +205,8 @@ after the build.
 several APIs in one Okta tenant, since the audience is not checked by value.
 
 ```text
-Add required_scopes so only tokens carrying "{{required_scope}}" are accepted, and
-tell me what a token without it now returns.
+Only accept tokens that carry the "{{required_scope}}" scope, and tell me what a
+token without it now returns.
 ```
 
 A token without the scope returns 403 (tested).
@@ -241,17 +214,17 @@ A token without the scope returns 403 (tested).
 **Point at your real upstream.**
 
 ```text
-Change the upstream to {{upstream_url}} and re-run the
-dry-run. Leave the auth configuration untouched.
+Point this at {{upstream_url}} instead, and leave the token verification exactly
+as it is.
 ```
 
 **Your authorization server issues opaque tokens, not JWTs.**
 
 ```text
 This Okta authorization server issues opaque access tokens, so there is no
-signature to verify locally. Reconfigure openid-connect to use
-introspection_endpoint instead, and tell me what that changes about latency and
-what happens when Okta is unreachable.
+signature to verify locally. Change verification to ask Okta about each token
+instead, and tell me what that does to latency and what happens when Okta is
+unreachable.
 ```
 
 That puts Okta on the request path, and changes how fast and how available your
@@ -260,9 +233,19 @@ API is. It is a different design from the one this package validates.
 **Use the org authorization server instead of a custom one.**
 
 ```text
-Switch discovery to https://{{okta_domain}}/.well-known/openid-configuration
-and update valid_issuers to match the issuer that document reports.
+Switch to the org authorization server, whose discovery document is
+{{okta_org_discovery_url}}, and pin the issuer to the one that document reports.
 ```
+
+**Meter the callers as well.**
+
+```text
+I want to sell access to this API in tiers and enforce the limits per caller.
+```
+
+Read [solution 01](../01-api-products/) first: its quota counts per app, and a
+token Okta issued does not identify a gateway app. Expect the agent to tell you
+this.
 
 **Other identity providers.** Entra ID, Auth0 and Keycloak work the same way:
 change `discovery` and `valid_issuers` to that provider's values.
@@ -386,14 +369,14 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
   used only if you switch to introspection. Supply a real one anyway.
 - **`openid-connect` is not in your org.** Some builds don't include it. This
   solution cannot be deployed there.
-
-### When the agent takes a wrong turn
-
-| Symptom | Cause |
-|---|---|
-| Every token 401s, though the spec deployed cleanly | `use_jwks` was dropped. Tell the agent it's missing from the schema but accepted and saved, put it back, and redeploy. |
-| The API redirects instead of refusing | The plugin is still set up for browser sign-in. Always test with no token first. |
-| The proposed spec has `discovery`, `client_id`, `client_secret` and nothing else | The hardening fields were dropped. Step 2's field-by-field check is what catches this. |
-| The agent reaches for `helix-auth` | Tell it: `helix-auth` has no JWKS URL, issuer or audience field and its schema forbids extra fields. Re-read the `openid-connect` schema. |
-| The agent proposes `jwt-auth` as a standalone plugin | It isn't one here. It is only a `validate_auth_type` of `helix-auth`, and it means a token *this* gateway signed. |
-| The agent invents an `audience` field with an expected value | There isn't one. `claim_validator.audience` has `required`, `claim` and `match_with_client_id`. |
+- **The stored config holds `<ENV:...>` instead of your client id and secret.**
+  The agent swapped your values for placeholders, and the gateway uses that text
+  exactly as written. Keep the prompt's *"use the literal values for the
+  configuration"* line, or ask the agent to put the real values in.
+- **The proposed spec has `discovery`, `client_id`, `client_secret` and nothing else.** The hardening fields were dropped. Ask the agent to compare what it stored, field by field, against what the prompt asked for.
+- **A token from a *different* authorization server returns 200.** No issuer pin. Ask for tokens to be accepted only from the issuer the discovery document reports.
+- **The agent reaches for `helix-auth`.** Tell it: `helix-auth` has no JWKS URL, issuer or audience field and its schema forbids extra fields. If `openid-connect` isn't in this org, stop.
+- **The agent proposes `jwt-auth` as a standalone plugin.** It isn't one here. It is only a `validate_auth_type` of `helix-auth`, and it means a token *this* gateway signed.
+- **The agent invents an `audience` field with an expected value.** There isn't one. `claim_validator.audience` has `required`, `claim` and `match_with_client_id`.
+- **The routes exist with **no plugins**, though every step reported success.** The agent wrapped the plugins in `x-helix-gateway` inside the live route, which a live route silently discards. Ask for a plain top-level `plugins` map and read the revision back; if it still won't, import the spec.
+- **Deploy fails: `Only INACTIVE revisions can be updated`.** The revision is already live. Clone it or undeploy, then apply.

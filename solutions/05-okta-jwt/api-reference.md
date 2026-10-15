@@ -20,7 +20,7 @@ deploy.
 | Create an upstream | `POST /api/orgs/{orgId}/envs/{envId}/upstreams` | `{"name","specification":{"scheme","nodes":[{"host","port","weight"}], ...}}` | Upstreams are created **per environment**. |
 | Bind the upstream to the revision | `PATCH /api/orgs/{orgId}/apis/{apiId}/revisions/{revisionId}/upstream-bindings/add` | `{"environmentUpstreams":[{"environmentId","upstreamId"}]}` | The upstream must be in the same environment. One from a different environment fails the deploy with `Upstream not configured for environment`. |
 | Deploy the revision | `POST /api/orgs/{orgId}/apis/{apiId}/revisions/{revisionId}/deploy` | `{"environmentId","force":false}` | This is what makes the routes live, and where a missing `bearer_only` is caught (`session.secret is required`). |
-| List APIs (to get `<API_ID>`) | `GET /api/orgs/{orgId}/apis` | — | Find the id of the imported "Partner Posts API" here, if you didn't keep it from the import response. |
+| List APIs (to get `<API_ID>`) | `GET /api/orgs/{orgId}/apis` | — | Find the id of the imported "Partner Albums API" here, if you didn't keep it from the import response. |
 
 The token request itself goes to **Okta**, not to the gateway:
 `POST https://<your-okta-domain>/oauth2/<authServerId>/v1/token` with the

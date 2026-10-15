@@ -5,13 +5,13 @@
 ---
 
 **Create the Kafka topic first** — auto-creation drops the message that triggers
-it, and the caller still gets a 202. Then paste step 1, replacing the `{{...}}`
-values and leaving the route JSON exactly as written, and paste step 2 once the
+it, and the caller still gets a 202. Then paste Step 1, replacing the `{{...}}`
+values and leaving the route JSON exactly as written, and paste Step 2 once the
 revision has been read back.
 
-The optional prompts at the end are independent of each other; paste one after
-step 2 only if you need it. See [Guides](guides.md#build-it-with-the-helix-agent)
-if something looks off.
+The optional prompts at the end are separate changes; paste one after Step 2 only
+if you need it. See [Troubleshooting](guides.md#troubleshooting) if something
+looks off.
 
 ## Prompt
 

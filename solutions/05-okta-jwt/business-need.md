@@ -1,35 +1,41 @@
-# Put your APIs behind the identity provider you already own
+# Verify Okta-issued JWTs at the API gateway
 
 > [Overview](README.md) · **Business need** · [Architecture](architecture.md) · [Guides](guides.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [API reference](api-reference.md)
 
 ---
 
-> Joiners, movers and leavers already flow through Okta. The APIs are not in it.
-> They accept static keys handed out by email, and nobody can say how many are
-> still live.
+> Your company already uses Okta to sign people and apps in. Your APIs don't —
+> they still check a fixed key that someone emailed out years ago, never expires,
+> and is hard to take back. Everyone agrees the APIs should check Okta's tokens
+> instead. It never gets done, because every service would need its own code to
+> do the checking.
 >
-> **The credential should be a token Okta issues on demand, not a secret you hand
-> out and lose track of.**
+> **The gateway can check Okta's tokens for every API at once, and no service has
+> to change.**
 
-- **Removing access becomes real.** Disable a caller in Okta and its access ends
-  when its current token expires, instead of after a hunt for every copy of a key.
-- **The APIs join the access review that already runs**, rather than needing a
-  separate one that doesn't exist.
-- **No backend release.** The gateway checks the token once, in front of every
-  route. No service changes, and nobody writes token-checking code N times.
+- **How long a stolen credential works: forever → minutes.** Okta hands out
+  short-lived tokens on request, and they expire by themselves.
+- **Cutting off a caller: track down every copy of the key → switch the app off in
+  Okta.** One place decides who can call your APIs.
+- **Code that checks tokens: one copy per service → one place, the gateway.** No
+  service is changed.
 
-The one decision that matters is who issues the token:
+Checking the token's signature is the easy part. The real choice is what else to
+check, because out of the box the gateway behaves as if a person were logging in
+through a browser, not a program calling an API:
 
-| Your situation | What to use |
-|---|---|
-| Okta, Entra ID, Auth0 or Keycloak already issues tokens to these callers | The gateway only checks them — this solution |
-| No identity provider, and callers are your own partner apps | The gateway issues and checks — [solution 02](../02-oauth-jwt/) |
+| What to check | Out of the box | What an API needs |
+|---|---|---|
+| A call with no token | sent to Okta's login page | turned away with a 401 |
+| Whose tokens to trust | any that pass the signature check, whichever server issued them | only your Okta server's |
+| That the keys really come from Okta | not checked | checked, and refreshed hourly |
+| Which API the token was meant for | **never checked** — a token for another of your APIs gets in | tell them apart with scopes |
 
-It proves *who* is calling, not *what* they may do, and an issued token stays
-valid until it expires. No savings figures are claimed: the benefits describe how
-the system works, not measured results. More in
-[Architecture](architecture.md#when-to-use-this).
+It checks who is calling. It doesn't decide what they may do, count their calls,
+or cancel a token before it expires — and your gateway needs the `openid-connect`
+plugin. [How it works, and what this does not buy you, are in
+Architecture](architecture.md#when-to-use-this).
 
-*Also searched as: Okta API gateway · verify Okta JWT · OIDC token validation ·
-JWKS validation at the gateway · external identity provider JWT · Auth0 / Entra ID
-access token check · replace API keys with SSO.*
+*Also searched as: Okta JWT validation at the API gateway · verify external IdP
+tokens · JWKS signature verification · OIDC bearer-only API auth · Auth0 / Entra ID
+/ Keycloak token verification · replace API keys with Okta · bring APIs under SSO.*

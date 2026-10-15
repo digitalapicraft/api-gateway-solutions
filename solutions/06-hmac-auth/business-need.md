@@ -1,37 +1,39 @@
-# Request signing: authenticate partners without a secret on the wire
+# HMAC request signing at the API gateway
 
 > [Overview](README.md) · **Business need** · [Architecture](architecture.md) · [Guides](guides.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [API reference](api-reference.md)
 
 ---
 
-> A payments partner sends the key you issued on every request. It is now in
-> their runbook and a support ticket, and rotating it needs a release on their
-> side. And a body changed in transit still arrives with a valid key attached.
+> Your payments partner posts settlement files with an API key you issued three
+> years ago. It's in their runbook, their CI, and a support ticket. Rotating it
+> means a release on their side, so nobody has — and even a safe key says nothing
+> about the payload: rewrite the amount in transit and the key still checks out.
 >
-> **The caller should prove it holds the secret without sending it, and the proof
-> should cover this exact request.**
+> **At the edge, the secret stops travelling and the signature covers the
+> request.**
 
-- **Copying traffic stops being credential theft.** Someone who captures a request
-  gets one signature for one request, valid for at most 300 seconds, not a key
-  that works for years.
-- **Tampering is caught at the edge**, before the request reaches anything that
-  would act on it. "Signed over method, path, date and body" answers an audit
-  question directly.
-- **One credential per partner**, rotated on its own, with no backend change now
-  or later.
+- **Secret on the wire: every request → never.** The caller proves it holds the
+  secret by signing; a proxy log or a pasted request is no longer a rotation event.
+- **A captured request is worth: the credential, forever → that one request, for
+  five minutes.** The signature binds method, path, timestamp and a hash of the
+  body. Alter any of them and it fails at the edge.
+- **Backend code changed: none.** And partners recognise the pattern — Stripe,
+  GitHub, Shopify, Slack and Twilio all sign their webhooks.
 
-The real decision is which callers can sign:
+The control is real only if the *route* decides what a signature must cover.
+Leave that to the caller and it is decoration:
 
-| Your caller | Use |
+| The route requires the signature to cover | A captured signature can be reused for |
 |---|---|
-| A server, device fleet or partner backend that can keep a secret and run signing code | Signed requests — this solution |
-| A browser or mobile app (a secret on a user's device is not a secret) | A token — [solution 02](../02-oauth-jwt/) or [05](../05-okta-jwt/) |
+| nothing — the caller chooses | any body, any path, indefinitely |
+| method, path, date | that path, any body, for the clock-skew window |
+| method, path, date, body digest | that exact request, for the clock-skew window — this package |
 
-The caller does more work per request, and a copied request can be replayed
-within the 300-second window. No savings figures are claimed: the benefits
-describe how the system works, not measured results. More in
-[Architecture](architecture.md#limits-worth-knowing).
+It is authentication and integrity, not authorization, not replay protection
+inside the window, and not for browsers — a secret on a user's device is not a
+secret. [How it works, and what this does not buy you, are in
+Architecture](architecture.md#limits-worth-knowing).
 
-*Also searched as: HMAC authentication · HTTP request signing · webhook signature
-verification · API signature auth · message integrity for APIs · replace API key
-with HMAC · signed partner API.*
+*Also searched as: HMAC authentication API gateway · signed API requests · webhook
+signature verification · request signing with a shared secret · verify payload
+integrity · HTTP message signatures · replace API keys for partner integrations.*

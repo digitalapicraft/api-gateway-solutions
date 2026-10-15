@@ -27,55 +27,10 @@ Then, for everyone: [See it work](#see-it-work) · [Variations](#variations) ·
 ## Build it with the Helix Agent
 
 Works on a **fresh, empty org**. [`helix-agent-prompt.md`](helix-agent-prompt.md)
-has two steps: step 1 creates the route with all three plugins, step 2 asks the
-agent for the commands that prove it. Paste step 1, check the result, then paste
-step 2.
-
-**One limitation applies only to the agent path.** The agent can't write a
-`body_schema` with a `properties` map. That extra level of nesting makes the
-agent's own tool call come out malformed, every time it was tried, and nothing is
-written. So the prompt ships a schema that only lists the **required** fields: it
-still rejects an event missing `event_id`, `event_type` or `occurred_at`, but
-doesn't check their types. For the full schema in
-[`example/api-spec.yaml`](example/api-spec.yaml), import the spec instead
-([Build it in the UI](#build-it-in-the-ui) or [Install it directly](#install-it-directly)).
-Importing a spec doesn't have this problem. The general rule: give the agent
-shallow structures, and use spec import for anything deeper.
-
-**Why the prompt is shaped the way it is:**
-
-- **Step 1 hands the agent a literal JSON route object** instead of describing
-  the outcome. This is the only prompt in the library that does. Asked to compose
-  this route from a description, the agent's tool call comes out malformed and
-  nothing is written. Given the object to copy, it works.
-- **"Bind any upstream."** An agent that knows `mocking` answers by itself may
-  decide no upstream is needed. The deploy then fails on a missing binding, with
-  an error that looks unrelated.
-- **`$apisix_request_id`, not `$request_id`.** The first version of this package
-  got this wrong. The `request-id` plugin overwrites `$apisix_request_id` with the
-  UUID the caller sees and never touches `$request_id`, so the obvious variable
-  gives a correlation field that matches nothing.
-- **`_meta.filter` on status 202.** Without it, `kafka-logger` also runs for a
-  400, and rejected events reach the topic anyway.
-- **`producer_type: sync`, `required_acks: -1`, `max_retry_count: 3`.** Three
-  defaults chosen for logging rather than producing: send-and-forget, leader-only
-  acknowledgement, and no retries. None looks wrong until an event goes missing.
-- **`with_mock_header: false`.** It defaults to true and stamps every response
-  with a header naming the plugin and the gateway version.
-- **No authentication in step 1.** An agent told the route is open will helpfully
-  secure it, and `hmac-auth`'s body check collides with `request-validation`.
-- **"Don't tell me it reached Kafka based on the 202."** An agent summarising a
-  successful test will write "the event was published". It can't know that.
-
-**Read the revision back after step 1.** Three of the four failures below report
-success at every step the agent shows you.
-
-| What you see | What is happening | What to do |
-|---|---|---|
-| `stream closed with reason: error`, and the revision has **0 routes** | The agent's tool call came out as malformed JSON and never reached the control plane. Nothing was written; the API exists, empty. | Check the route object matches the one in the prompt, and keep `properties` out of `body_schema` (next row). |
-| The same error every time, when `body_schema` has a `properties` map | **Reproducible, not occasional.** The extra nesting makes the agent swap its closing brackets: `…1}}]}}` where `…1}}}]}` is valid, which closes the `routeSpec` array before the route object. Removing that one level made the identical prompt succeed. | Use the required-only schema with the agent, or import [`example/api-spec.yaml`](example/api-spec.yaml) for the full one. |
-| The route deploys, but `plugins` contains `response_status`, `content_type`… as if they were plugin names | The agent dropped the plugin-name level and put one plugin's fields straight into the map. The write succeeds and the dry-run passes; the route carries several plugins that don't exist and none of the real one. | Read the revision back. The prompt names that level explicitly to prevent it. |
-| Success reported, dry-run passes, the route has no plugins | The route object carried an `x-helix-gateway` wrapper, which a live route silently discards. | Send again with `plugins` as a top-level key on the route. |
+has two steps: Step 1 creates the ingest route, Step 2 gives you the commands that
+prove it. **Paste Step 1, check the result, then paste Step 2.** The agent's
+version checks only that the required fields are present; for the full field
+checks, import [`example/api-spec.yaml`](example/api-spec.yaml) instead.
 
 See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the ground rules these prompts
 assume.

@@ -63,9 +63,9 @@ sequenceDiagram
     participant UP as Upstream
 
     Note over C: secret_key is stored here and never sent
-    C->>C: canonicalise: keyId, "POST /posts", Date, Digest(body)
+    C->>C: canonicalise: keyId, "POST /albums", Date, Digest(body)
     C->>C: signature = base64(HMAC-SHA256(secret_key, base + "\n"))
-    C->>GW: POST /posts<br/>Date, Digest, Authorization: Signature keyId=...
+    C->>GW: POST /albums<br/>Date, Digest, Authorization: Signature keyId=...
 
     GW->>GW: parse the Authorization envelope
     GW->>GW: every signed_headers entry present in headers= ?
@@ -76,7 +76,7 @@ sequenceDiagram
 
     alt all checks hold
         GW->>GW: attach the consumer to the request context
-        GW->>UP: POST /posts (Authorization stripped by hide_credentials)
+        GW->>UP: POST /albums (Authorization stripped by hide_credentials)
         UP-->>GW: 201
         GW-->>C: 201
     else any check fails
@@ -100,7 +100,7 @@ This is the part callers most often get wrong, so it is written out exactly.
 
 ```text
 demo-key\n
-POST /posts\n
+POST /albums\n
 date: Wed, 16 Sep 2026 11:12:37 GMT\n
 digest: SHA-256=bSNUn7HvRElwnpOx6RaAXbApBPNta7M0chZgmYaCEFI=\n
 ```
@@ -241,8 +241,8 @@ What there is to sign differs per route, so the signed set is set per route:
 
 | Route | `signed_headers` | `validate_request_body` | Why |
 |---|---|---|---|
-| `POST /posts` | `@request-target`, `date`, `digest` | `true` | There is a body, so the signature must cover it |
-| `GET /posts/{postId}` | `@request-target`, `date` | `false` | No body. Requiring a digest of nothing adds work, not security |
+| `POST /albums` | `@request-target`, `date`, `digest` | `true` | There is a body, so the signature must cover it |
+| `GET /albums/{albumId}` | `@request-target`, `date` | `false` | No body. Requiring a digest of nothing adds work, not security |
 
 `hmac-auth` is therefore attached **per route, not API-wide**. One API-wide block
 can't say both. The cost: **a route added later without its own `hmac-auth` block
@@ -250,11 +250,11 @@ is unauthenticated.** If you would rather fail safe, move the `POST` block to th
 top of the spec and have callers of bodyless routes send the digest of an empty
 body, which is always `SHA-256=47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=`.
 
-`@request-target` **includes the query string.** A signature for `/posts?page=1`
-does not match `/posts?page=2`, and anything between the caller and the gateway
+`@request-target` **includes the query string.** A signature for `/albums?page=1`
+does not match `/albums?page=2`, and anything between the caller and the gateway
 that reorders, normalises or adds query parameters breaks every signature it
-touches. It also binds the path: a signature for `GET /posts/1` returns 200 there
-and 401 on `/posts/2` (tested).
+touches. It also binds the path: a signature for `GET /albums/1` returns 200 there
+and 401 on `/albums/2` (tested).
 
 ### `signed_headers` is the setting that makes this secure
 

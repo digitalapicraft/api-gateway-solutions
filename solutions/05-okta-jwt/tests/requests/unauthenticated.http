@@ -4,5 +4,5 @@
 ### A 302/303/307 here is the signature failure of this solution: unauth_action
 ### is still at its default "auth", so the gateway is redirecting API clients to
 ### Okta's HTML login page instead of refusing them.
-GET {{GATEWAY}}/posts
+GET {{GATEWAY}}/albums
 accept: application/json

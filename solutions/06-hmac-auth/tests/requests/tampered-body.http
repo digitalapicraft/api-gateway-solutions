@@ -3,10 +3,10 @@
 # payload is not. validate_request_body rehashes what arrived and finds it
 # disagrees with the Digest that was signed.
 
-POST {{GATEWAY}}/posts
+POST {{GATEWAY}}/albums
 Content-Type: application/json
 Date: {{DATE}}
 Digest: {{DIGEST}}
 Authorization: Signature keyId="{{KEY_ID}}",algorithm="hmac-sha256",headers="@request-target date digest",signature="{{SIGNATURE}}"
 
-{"title":"TAMPERED","body":"x","userId":1}
+{"title":"TAMPERED","userId":1}

@@ -23,92 +23,11 @@ Then, for everyone: [See it work](#see-it-work) · [Variations](#variations) ·
 
 ## Build it with the Helix Agent
 
-[`helix-agent-prompt.md`](helix-agent-prompt.md) has the build as three steps: the
-inbound (decrypt) route, the outbound (encrypt) route, then the integration note
-for your partner. Paste each as its own message, starting from a fresh, empty org.
-
-**Expect to retry one.** Any route write has a real chance of ending in
-`stream closed with reason: error`, a tool-argument defect in the agent. Nothing is
-written when it happens. Four of five attempts at these route writes have ended
-this way, and payload size was not the cause — one failure carried 570 bytes and
-one success carried more. Retry once, then import
-[`example/api-spec.yaml`](example/api-spec.yaml).
-
-Why the prompts are worded the way they are:
-
-- **Literal JSON, with the wrapper shown.** Asked in prose, the agent wrote
-  `pgp-crypto: { target, source, public_key }` — flat, with no `encrypt` or
-  `decrypt` wrapper — which the schema rejects. Shown the nested shape, it
-  reproduced it exactly.
-- **The placeholders stay placeholders.** Without that instruction the agent
-  either generates a key pair, which puts a private key in a transcript, or asks
-  you to paste yours.
-- **No `field` on encrypt.** It makes the response *only* that field's ciphertext
-  and discards the document. An agent reading the schema offers it as an
-  improvement.
-- **400 inbound, 500 outbound.** These mean different things to a caller. Left
-  alone, the agent picks one default for both.
-- **Two route writes, not one.** The one-prompt version failed twice out of two on
-  the tool-argument defect. Smaller writes survive it more often.
-- **Step 3 at all.** The wire format is what breaks the integration, and the
-  partner is the one who has to change. Write the note while it is fresh.
-
-**Read the revision back when it finishes.** A plugin nested under
-`x-helix-gateway` inside a live route object is silently discarded: the write
-reports success, the dry-run passes, and the route deploys with no crypto at all.
-Then put the real armored keys in place of the two placeholders before deploying.
-
-### Follow-up prompts
-
-Paste any of these after the build, in the same conversation, replacing the
-`{{...}}` values.
-
-**I have more than one counterparty**
-
-```text
-I have {{partner_count}} partners, each with their own key. Tell me plainly what this
-route shape costs at that number, then show me the key-value-map version where the
-key is fetched per request from a partner id in the request.
-```
-
-That is [solution 12](../12-key-value-map/).
-
-**Write the counterparty's side for me**
-
-```text
-My counterparty {{counterparty_setup}} (for example: also runs this
-gateway, or runs a cron job with gpg on it). Write
-the configuration THEY need, mirroring mine: they decrypt what I send with their
-own private key, and encrypt to my public key when they send to me. Be explicit
-about which of the four key halves each party holds, and don't assume my two
-placeholders are a pair — they are not.
-```
-
-**My partner insists on sending raw armor**
-
-```text
-My counterparty cannot base64 the armored message. Tell me honestly whether the
-plugin can accept bare armor, and if it cannot, what my options are — don't invent
-a setting.
-```
-
-**Encrypt only part of the document**
-
-```text
-I only need one field of the statement encrypted, not the whole document. Tell me
-exactly what `field` does to the response before you configure it.
-```
-
-**Put identity in front of it**
-
-```text
-Add API-key authentication to both routes with helix-auth validate,
-validate_auth_type key-auth, reading the key from X-Api-Key. Keep the crypto
-exactly as it is — encrypting to a partner's key is not the same as checking who
-called.
-```
-
-That is [solution 08](../08-api-key/).
+Works on a **fresh, empty org**. [`helix-agent-prompt.md`](helix-agent-prompt.md)
+has three steps: the inbound (decrypt) route, the outbound (encrypt) route, then a
+note for your partner. **Paste each as its own message.** If a step ends with
+`stream closed with reason: error`, retry it once, then import
+[`example/api-spec.yaml`](example/api-spec.yaml) instead.
 
 See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the ground rules these prompts
 assume.

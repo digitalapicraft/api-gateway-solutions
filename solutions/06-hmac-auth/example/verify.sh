@@ -32,16 +32,16 @@
 # ../README.md § Getting a credential. They are never in the spec.
 #
 # Optional overrides:
-#   WRITE_PATH   default /posts
-#   READ_PATH    default /posts/1
+#   WRITE_PATH   default /albums
+#   READ_PATH    default /albums/1
 
 set -uo pipefail
 
 GATEWAY="${GATEWAY:?set GATEWAY to the gateway base URL, e.g. https://<YOUR_GATEWAY_HOST>}"
 KEY_ID="${KEY_ID:?set KEY_ID to the app credential's key_id}"
 SECRET_KEY="${SECRET_KEY:?set SECRET_KEY to the app credential's secret_key}"
-WRITE_PATH="${WRITE_PATH:-/posts}"
-READ_PATH="${READ_PATH:-/posts/1}"
+WRITE_PATH="${WRITE_PATH:-/albums}"
+READ_PATH="${READ_PATH:-/albums/1}"
 
 WRITE_URL="${GATEWAY%/}${WRITE_PATH}"
 READ_URL="${GATEWAY%/}${READ_PATH}"
@@ -114,7 +114,7 @@ auth_header() {
     "$KEY_ID" "$headers" "$sig"
 }
 
-BODY='{"title":"order-created","body":"sku-1","userId":1}'
+BODY='{"title":"order-created","userId":1}'
 DIGEST="$(body_digest "$BODY")"
 
 echo "→ Signed write: POST $WRITE_URL"
@@ -152,7 +152,7 @@ esac
 echo
 status="$(curl -s -o "$BODY_FILE" -w '%{http_code}' -X POST "$WRITE_URL" \
   -H 'content-type: application/json' -H "Date: $DATE" -H "Digest: $DIGEST" \
-  -H "Authorization: $AUTH" --data-binary '{"title":"TAMPERED","body":"x","userId":1}')"
+  -H "Authorization: $AUTH" --data-binary '{"title":"TAMPERED","userId":1}')"
 [[ "$status" == "$EXP_TAMPERED" ]] \
   && pass "body tampered after signing → 401 (Digest binds the body)" \
   || fail "body tampered → ${status} (expected 401). A 2xx here means validate_request_body is off,

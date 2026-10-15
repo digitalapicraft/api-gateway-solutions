@@ -5,9 +5,9 @@
 ---
 
 Three ways to build the same thing, then how to see it work. Whichever way you
-pick, the result is one API with two signed routes (`POST /posts`, whose
-signature also covers the body, and `GET /posts/{postId}`), plus one app whose
-`key_id` and `secret_key` you sign with.
+pick, the result is one API, "Partner Albums API", with two signed routes
+(`POST /albums`, whose signature also covers the body, and `GET /albums/{albumId}`),
+plus one app whose `key_id` and `secret_key` you sign with.
 
 ## Pick your path
 
@@ -23,42 +23,16 @@ Then, for everyone: [See it work](#see-it-work) · [Variations](#variations) ·
 ## Build it with the Helix Agent
 
 Works on a **fresh, empty org**. [`helix-agent-prompt.md`](helix-agent-prompt.md)
-has two steps: Step 1 creates the API and signs its routes, Step 2 issues an app
-credential and gives you a script that proves it. **Paste one step at a time and
-confirm between them.** Below them are four optional follow-ups, each a separate
-change; paste one only if you want it (see [Variations](#variations)).
-
-Why the prompt is worded the way it is:
-
-- **`signed_headers` is stated as mandatory.** It has no default, so an agent
-  writing "a reasonable `hmac-auth` config" leaves it out. The result passes
-  checks, deploys, and is wide open. This is the most damaging wrong turn here.
-- **Per route, not API-wide.** The two routes need different signed sets. Move one
-  block API-wide and every bodyless GET must send a digest of an empty body or get
-  a 401.
-- **No `request-validation`.** An agent asked to harden an intake endpoint reaches
-  for schema checking. At priority 2800 it re-encodes the body before `hmac-auth`
-  hashes it at 2530, and the digest silently stops matching.
-- **No secret on the route.** Stops the agent inventing a `secret_key` or
-  `signing_secret` field by analogy with `helix-auth`. The route has neither.
-- **`authMethods: ["hmac-auth"]`.** It defaults to `["helix-auth"]`, and app
-  creation then fails with an unhelpful error about an unsupported auth plugin.
-- **`plugins {"hmac-auth": {}}`.** The empty object means "generate the
-  credentials". An agent may invent values instead, which works but gives you a
-  secret of its choosing.
-- **"Pipe printf straight into openssl".** Ordinary bash puts the signing base in
-  a variable first; `$( )` then drops the final newline, and every request gets a
-  401 with a signature that looks right.
-- **The test where `headers=` leaves out `digest`.** It proves `signed_headers` is
-  enforced rather than decorative.
-
-**Before you trust a run, read the stored revision back.** The agent's summary is
-not enough. Check that each route has `hmac-auth` with its own `signed_headers`
-(`digest` on the POST route only) and `validate_request_body: true` on the POST
-route, and that there is no `request-validation` and no secret in the route config.
+has three steps: Step 1 creates the API and its two routes, Step 2 makes both
+routes accept only signed requests, and Step 3 creates a developer, a product and
+an app, and gives you the app's key id and secret. Paste the whole thing as one
+message, or one step at a time if the run ends early. When it finishes, read the
+revision back and check each route has its own `signed_headers` — a route without
+them still deploys, and is wide open. Then send one signed request using
+[See it work](#see-it-work).
 
 See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the ground rules these prompts
-assume, and [Troubleshooting](#troubleshooting) if the agent takes a wrong turn.
+assume.
 
 ## Build it in the UI
 
@@ -99,7 +73,7 @@ that.
 
 **3. Create the product**
 1. Go to **API Distribution → API Products**, click **Add API Product**.
-2. Under **Basic Information**, set **Display Name** to `Partner Events API`.
+2. Under **Basic Information**, set **Display Name** to `Partner Albums API`.
 3. Under **APIs**, click **Add API**, select your API, then **Continue**.
 4. Under **Authentication Methods**, pick **`hmac-auth`**. Left blank, it defaults
    to `helix-auth`, and the app you create in step 6 is then rejected.
@@ -153,7 +127,7 @@ curl -s -H "authorization: Bearer $TOKEN" -F "file=@example/api-spec.yaml" \
 # 2. Import does NOT make the routes live. Create an upstream, bind it
 #    to the revision, then deploy the revision.
 curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/envs/<TEST_ENV_ID>/upstreams" \
-  -d '{"name":"posts-upstream","specification":{"scheme":"https","nodes":[{"host":"jsonplaceholder.typicode.com","port":443,"weight":1}]}}'
+  -d '{"name":"albums-upstream","specification":{"scheme":"https","nodes":[{"host":"jsonplaceholder.typicode.com","port":443,"weight":1}]}}'
 # → {"id":"<UPSTREAM_ID>", ...}
 
 curl -s "${H[@]}" -X PATCH "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/upstream-bindings/add" \
@@ -192,18 +166,18 @@ The same calls without narration: [API reference](api-reference.md).
 Sign and send a request. Replace `KEY_ID` and `SECRET_KEY` with your app's values:
 
 ```bash
-BODY='{"title":"order-created","body":"sku-1","userId":1}'
+BODY='{"title":"order-created","userId":1}'
 DATE=$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S GMT')
 DIGEST="SHA-256=$(printf '%s' "$BODY" | openssl dgst -sha256 -binary | openssl base64 -A)"
 
 # printf is piped straight into openssl on purpose: the signing base ends with a
 # newline, and $( ) strips trailing newlines. Capturing the base in a variable
 # first signs a different string, and every request 401s.
-SIGNATURE=$(printf '%s\nPOST /posts\ndate: %s\ndigest: %s\n' \
+SIGNATURE=$(printf '%s\nPOST /albums\ndate: %s\ndigest: %s\n' \
               "$KEY_ID" "$DATE" "$DIGEST" \
             | openssl dgst -sha256 -hmac "$SECRET_KEY" -binary | openssl base64 -A)
 
-curl -i -X POST "https://<YOUR_GATEWAY_HOST>/posts" \
+curl -i -X POST "https://<YOUR_GATEWAY_HOST>/albums" \
   -H 'Content-Type: application/json' \
   -H "Date: $DATE" -H "Digest: $DIGEST" \
   -H "Authorization: Signature keyId=\"$KEY_ID\",algorithm=\"hmac-sha256\",headers=\"@request-target date digest\",signature=\"$SIGNATURE\"" \
@@ -238,26 +212,59 @@ enforced. What each check proves: [Tests](tests.md).
 
 ## Variations
 
-**Optional follow-up prompts.** [`helix-agent-prompt.md`](helix-agent-prompt.md)
-carries four, below Steps 1 and 2. Paste one into the same session only if you
-want that change:
+Each of these is a follow-up prompt to paste into the same Helix Agent session
+after the build. Paste one only if you want that change.
 
-- **Tighter replay window.** Cuts `clock_skew` to 60 seconds on both routes, which
-  shrinks the replay window fivefold. Only do this if your callers are servers
-  with accurate clocks.
-- **Fail safe instead of per route.** Moves `hmac-auth` API-wide with the `POST`
-  settings, so any route added later is signed by default. Callers of bodyless
-  routes must then send
-  `Digest: SHA-256=47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=`, the digest of an
-  empty body.
-- **Add per-app quota on top.** Puts `api-product-enforcer` on both routes so the
-  product's quota is enforced per app. This combination was tested and works
-  without extra setup: with a 3-a-minute quota, three signed requests returned 201
-  and the next three returned `429 {"error":"quota exceeded"}`. See
-  [solution 01](../01-api-products/).
-- **Let unsigned callers through as an anonymous consumer.** Sets
-  `anonymous_consumer` on the GET route, so unsigned reads are allowed but still
-  attributed, while POST stays strictly signed.
+**Tighter replay window.** Shrinks the replay window fivefold. Only do this if
+your callers are servers with accurate clocks.
+
+```text
+Cut the allowed clock skew to 60 seconds on both routes. Our callers are servers
+with NTP, so a one-minute window is realistic.
+```
+
+**Fail safe instead of per route.** Signing moves API-wide with the `POST` rules,
+so any route added later is signed by default.
+
+```text
+Make signing API-wide with the POST route's rules, so any route I add later is
+signed by default. Tell me the exact Digest header my GET callers must now send
+for an empty body.
+```
+
+The answer should be `SHA-256=47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=`, the
+digest of an empty body.
+
+**Meter the partners as well.**
+
+```text
+Enforce the product's quota per app on both routes. If the quota can't identify
+the app from a signed request, tell me rather than working around it.
+```
+
+This combination was tested and works without extra setup: with a 3-a-minute
+quota, three signed requests returned 201 and the next three returned
+`429 {"error":"quota exceeded"}`. See [solution 01](../01-api-products/).
+
+**Let unsigned reads through, attributed.**
+
+```text
+Allow unsigned GET /albums/{albumId} calls, attributed to {{anonymous_consumer_name}},
+while POST /albums stays strictly signed.
+```
+
+**Prove it with a script.**
+
+```text
+Write me a bash script that signs and sends requests with the app's key id and
+secret, showing in order: no signature → 401; a correct signature → 201; the same
+headers with a modified body → 401; a Date 20 minutes old → 401; a signature that
+leaves the digest out of what it covers → 401.
+```
+
+Check the script pipes `printf` straight into `openssl`: `$( )` strips the
+signing base's final newline, and every request then gets 401 with a signature
+that looks right.
 
 **Bring your own secret.** When creating the app, put the partner's existing
 `key_id` and `secret_key` in the `hmac-auth` object instead of an empty one.
@@ -272,7 +279,7 @@ and plugins, plus the product in [`example/products.json`](example/products.json
 Each route carries its own `hmac-auth` block:
 
 ```yaml
-# POST /posts — the signature must also cover the body
+# POST /albums — the signature must also cover the body
 hmac-auth:
   signed_headers: ["@request-target", "date", "digest"]
   validate_request_body: true
@@ -281,7 +288,7 @@ hmac-auth:
   hide_credentials: true
   realm: partner-events
 
-# GET /posts/{postId} — no body, so no digest
+# GET /albums/{albumId} — no body, so no digest
 hmac-auth:
   signed_headers: ["@request-target", "date"]
   validate_request_body: false
@@ -311,7 +318,7 @@ The product, from [`example/products.json`](example/products.json):
 
 | Field | Value | What it means |
 |---|---|---|
-| `name` / `displayName` | `partner-events` / `Partner Events API` | — |
+| `name` / `displayName` | `partner-events` / `Partner Albums API` | — |
 | `apiIds` | `["<API_ID>"]` | Fill in from the import response, or `GET /api/orgs/{orgId}/apis`. |
 | `authMethods` | `["hmac-auth"]` | **Must** name `hmac-auth`. The default is `["helix-auth"]`. |
 | `quota` | `10000` per `1` `hour` | Every product needs one (a product without one is rejected at creation). **Not enforced** here, because no `api-product-enforcer` is on the routes. |
@@ -348,6 +355,26 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
   signature it touches.
 - **Bursts of 401s that look like credential problems.** Clock drift. A device
   fleet without time sync drifts outside the 300-second window.
+- **A correctly signed request gets 401, but one listing `(request-target)` is
+  accepted.** The route's `signed_headers` says `(request-target)`, the older
+  draft-cavage spelling. The gateway treats it as an ordinary header that isn't
+  there and leaves it out of what is signed, so the method and path are not
+  covered at all. Change every entry to `@request-target`, then check that a
+  signature for one path is refused on another.
+- **The read route returns `404 Route Not Found`.** It was created as
+  `/albums/{albumId}`. Routes written directly on the gateway take
+  `/albums/:albumId`; importing the spec converts `{albumId}` for you.
+- **A request signed over only its `keyId` is accepted.** `signed_headers` is
+  missing from the route, so the caller chooses what its signature covers. Set it
+  on each route.
+- **A `POST` with no body is accepted.** `validate_request_body` checks that the
+  body matches its `Digest`, not that there is a body: a `POST` with no body and
+  the empty-body digest passes. Requiring a body is a schema check, and
+  `request-validation` breaks the digest here (see above).
+- **A `GET` caller is asked for a `Digest`.** A bodyless `GET` needs none, unless
+  the route's `signed_headers` lists `digest`, or the caller lists it in
+  `headers=`. Copying the `POST` signing code to a `GET` is the usual way that
+  happens.
 - **Every bodyless GET gets 401.** `hmac-auth` was moved API-wide with the POST
   settings, so the GET now needs a digest. Send the empty-body digest or go back
   to per-route blocks.
@@ -359,15 +386,13 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
   instead.
 - **Leaving `hmac-sha1` allowed.** It is in the plugin's default list. This spec
   narrows it to SHA-256 and SHA-512; keep it that way.
-
-### When the agent takes a wrong turn
-
-| Symptom | Cause |
-|---|---|
-| A signature that looks correct always 401s | The signing base lost its final newline: `$( )` strips it. Pipe `printf` straight into `openssl`. |
-| Every bodyless GET 401s | `hmac-auth` was moved to the API level, so the GET now requires a digest. |
-| The digest stops matching after a "hardening" change | `request-validation` landed on the route and re-encoded the body. |
-| App creation fails on an unsupported auth plugin | The product's `authMethods` is still the `["helix-auth"]` default. |
-| The agent invents a `secret_key` field on the route | There is none. The credential carries it. |
-| You need the secret again | It's returned once and stored encrypted. Rotate instead. |
-| The session ends with `"stream closed with reason: error"` part-way through | Seen in testing: the configuration had already landed correctly (both routes, per-route `signed_headers`, `validate_request_body` on the write route) before the session died on a later step. Read the revision back to see what actually landed, then carry on from there. |
+- **A request signed over only `keyId` is accepted.** `signed_headers` was dropped, so the caller chooses what it signs. Ask for each route to fix what the signature must cover, and read it back.
+- **A modified body is accepted.** `validate_request_body` is off on `POST /albums`, or `digest` is missing from its `signed_headers`.
+- **A signature that looks correct always 401s.** The signing base lost its final newline: `$( )` strips it. Pipe `printf` straight into `openssl`.
+- **Every bodyless GET 401s.** `hmac-auth` was moved to the API level, so the GET now requires a digest.
+- **The digest stops matching after a "hardening" change.** `request-validation` landed on the route and re-encoded the body.
+- **App creation fails on an unsupported auth plugin.** The product's `authMethods` is still the `["helix-auth"]` default.
+- **The agent invents a `secret_key` or `signing_secret` field on the route.** There is none. The credential carries it.
+- **The routes exist with **no plugins**, though every step reported success.** The agent wrapped the plugins in `x-helix-gateway` inside the live route, which a live route silently discards. Ask for a plain top-level `plugins` map and read the revision back; if it still won't, import the spec.
+- **You need the secret again.** It's returned once and stored encrypted. Rotate instead.
+- **The session ends with `stream closed with reason: error` part-way through.** The configuration may already have been saved. Read the revision back to see what landed, then carry on from there.

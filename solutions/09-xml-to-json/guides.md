@@ -22,50 +22,12 @@ Then, for everyone: [See it work](#see-it-work) · [Variations](#variations) ·
 
 ## Build it with the Helix Agent
 
-Works on a **fresh, empty org**. [`helix-agent-prompt.md`](helix-agent-prompt.md)
-has two steps: step 1 creates the API and configures both directions, step 2 asks
-for the commands that prove it. Paste step 1, check the revision, then paste
-step 2 in the same session.
-
-**If your backend is SOAP, this is the wrong prompt.** Use
-[solution 03](../03-soap-to-rest/) — the two produce incompatible documents.
-
-**Why the prompt is shaped the way it is:**
-
-- **`transform_request: true`, stated as a change from the default.** The most
-  likely wrong turn. An agent writes `xml-to-json: {}`, the response direction
-  works, and the request direction quietly never happens.
-- **No `Content-Type` in `proxy-rewrite`.** It runs at 1008 and `xml-to-json` at
-  997, so a change there alters the header the conversion matches on. A recorded
-  defect from [solution 03](../03-soap-to-rest/), and exactly the tidy-up an agent
-  offers.
-- **No `pretty`.** On this build `pretty: true` returns a 503 with the connection
-  dropped before any headers. An agent asked for "readable JSON" reaches for it.
-- **Root name, array item name, namespace.** The root element and namespace are
-  what a real backend's parser checks first. Left to defaults, the backend rejects
-  a document that otherwise looks right.
-- **`cors` must allow `accept`.** The conversion depends on the `Accept` header,
-  so a browser client that can't send it can't ask for JSON at all.
-- **"Only the fields you need."** The agent offered `regex_uri: [null, null]` and
-  `headers: {}`, and the dry-run rejected both in turn. That line saves two round
-  trips.
-- **Step 2's `text/plain` case.** It makes the agent show the silent passthrough
-  rather than describe it — the behaviour most likely to reach production
-  unnoticed.
-
-**If the agent run goes wrong:**
-
-| Symptom | Cause |
-|---|---|
-| The response is still XML | The client didn't send `Accept: application/json`, or the backend's `Content-Type` isn't in `content_types`. |
-| The backend rejects the request body | `transform_request` is false, or the client's content type isn't in `request_content_types`. |
-| Everything returns 200 and the backend still complains | Both passthroughs fail **open**. The gateway's status code is not evidence the conversion happened. |
-| 503 with the connection dropped | `pretty: true` is set. Remove it. |
-| The request direction stops working after an edit | Something added a `Content-Type` to `proxy-rewrite`. |
-| The dry-run fails twice on `proxy-rewrite` | The agent added empty optional fields. Set only `uri`. |
-| `create_api` fails saying the API exists | A previous run left one behind. Use a free name. |
-| Deploy fails: `Only INACTIVE revisions can be updated` | Clone the revision or undeploy, then apply. |
-| Success reported, but the routes have no plugins | The plugins were nested under `x-helix-gateway`, which a live route silently discards. Read the revision back. |
+The fastest path, and it works on a **fresh, empty org**. One prompt does the
+whole build: [`helix-agent-prompt.md`](helix-agent-prompt.md) has it as two
+numbered steps — Step 1 creates the API and its two routes, Step 2 adds the
+conversion in both directions and lets browsers call it. Paste the whole thing as
+one message, then run the checks under [See it work](#see-it-work). If your
+backend is SOAP, use [solution 03](../03-soap-to-rest/) instead.
 
 See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the ground rules these prompts
 assume.
@@ -181,35 +143,34 @@ manual tests: [Tests](tests.md).
 
 ## Variations
 
-Each of these is a follow-up you can paste to the agent after step 2.
+Follow-ups you can paste to the agent in the same chat, once the build is
+standing. Say what you want to be true.
 
 **My backend sends a different Content-Type**
 ```text
-My backend replies with {{backend_content_type}}, not application/xml. Add it to
-content_types on both routes and tell me what else in the config assumes the
-default.
+My backend replies with {{backend_content_type}}, not application/xml. Make the
+conversion recognise it on both routes, and tell me what else assumes the default.
 ```
 
 **I need a stable JSON contract, not a mirror of the XML**
 ```text
 This JSON mirrors the backend's element names, and I need a contract that survives
-a backend refactor. Show me what body-transformer would look like for the GET
-route instead, and be explicit about what I'm taking on by maintaining a template.
+a backend refactor. Show me a template-based transform for the GET route instead,
+and be explicit about what I take on by maintaining the template.
 ```
 
 **My backend validates a strict xs:sequence**
 ```text
 My backend's schema is an xs:sequence, so element order matters. Tell me plainly
-whether the request direction of xml-to-json can guarantee order, and if not, show
-me the body-transformer alternative for the POST route only — keep the response
-direction as it is.
+whether the request conversion can guarantee order, and if not, show me a
+template-based alternative for the POST route only.
 ```
 
-**Put authentication in front of it** — that's [solution 08](../08-api-key/).
+**Put identity in front of it** — that's [solution 08](../08-api-key/).
 ```text
-Add API-key authentication to both routes using helix-auth validate with
-validate_auth_type key-auth, reading the key from the X-Api-Key header. Keep the
-conversion exactly as it is.
+Require an app's API key in the X-Api-Key header on both routes, and keep the
+conversion exactly as it is. Then create a developer, a product and an app, and
+give me the key.
 ```
 
 ## Configuration reference
@@ -297,3 +258,17 @@ Every field of every plugin, and the wider product docs:
 - **`transform_request` also changes the outgoing `Content-Type`.** The backend
   receives `application/xml`, not the client's type.
 - **Confirm `xml-to-json` exists in your org** before you design around it.
+- **Everything returns 200 and the backend still complains.** Both conversion
+  switches fail open, so a 200 from the gateway doesn't prove the conversion
+  happened. Read the backend's own log.
+- **Built with the agent: the routes exist but have no plugins.** The agent nested
+  them under `x-helix-gateway`, which a live route silently ignores. Read the
+  revision back, and ask for them again if they're missing.
+- **Built with the agent: the dry-run fails while it adds a browser preflight
+  route.** A separate catch-all `OPTIONS` route may be refused. The `cors` plugin on
+  the API is enough on its own; read the revision back once the dry-run passes.
+- **Built with the agent: the dry-run fails on `proxy-rewrite`.** The agent added
+  empty optional fields (`headers: {}`, a `regex_uri` of nulls). Ask it to set only
+  `uri`.
+- **Deploy fails with `Only INACTIVE revisions can be updated`.** Clone the
+  revision or undeploy it, then apply the change.
