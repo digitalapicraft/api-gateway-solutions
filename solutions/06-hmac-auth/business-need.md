@@ -1,5 +1,9 @@
 # HMAC request signing at the API gateway
 
+> [Overview](README.md) · **Business need** · [Architecture](architecture.md) · [Guides](guides.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [API reference](api-reference.md)
+
+---
+
 > Your payments partner posts settlement files with an API key you issued three
 > years ago. It's in their runbook, their CI, and a support ticket. Rotating it
 > means a release on their side, so nobody has — and even a safe key says nothing
@@ -27,8 +31,8 @@ Leave that to the caller and it is decoration:
 
 It is authentication and integrity, not authorization, not replay protection
 inside the window, and not for browsers — a secret on a user's device is not a
-secret. [Before/after, the mechanism, and what this does not buy you are in the
-README](README.md#business-need).
+secret. [How it works, and what this does not buy you, are in
+Architecture](architecture.md#limits-worth-knowing).
 
 *Also searched as: HMAC authentication API gateway · signed API requests · webhook
 signature verification · request signing with a shared secret · verify payload

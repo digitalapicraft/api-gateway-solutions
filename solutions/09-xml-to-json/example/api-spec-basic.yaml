@@ -1,0 +1,60 @@
+# Solution 09 — XML and JSON mediation: the basic example spec.
+#
+# Two routes and nothing else: no plugins. Import this when you want to add the
+# plugins yourself in the UI, so you see what each one does. The walkthrough is
+# ../guides.md, "Build it in the UI".
+#
+# The same API with the plugins already in it is api-spec.yaml, next to this file.
+#
+# On its own this does not convert anything, and the routes do not reach the
+# public test backend (httpbin.org) yet: pointing each route at the right
+# backend path is one of the plugins you add.
+
+openapi: 3.0.3
+
+info:
+  title: Catalog API
+  version: 1.0.0
+  description: >-
+    A sample API in front of a stock system that speaks XML. Add the plugins
+    yourself to give JSON clients a JSON front door; point it at your own
+    upstream when ready.
+
+paths:
+  /catalog/items:
+    get:
+      summary: List catalog items
+      parameters:
+        - name: Accept
+          in: header
+          required: true
+          description: The response format the client asks for.
+          schema:
+            type: string
+            default: application/json
+      responses:
+        '200': { description: The catalog document }
+        '502': { description: The backend was unreachable }
+
+  /catalog/orders:
+    post:
+      summary: Place an order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [orderId, lines]
+              properties:
+                orderId: { type: string }
+                lines:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      sku: { type: string }
+                      qty: { type: integer }
+      responses:
+        '200': { description: The backend's acknowledgement }
+        '502': { description: The backend was unreachable }

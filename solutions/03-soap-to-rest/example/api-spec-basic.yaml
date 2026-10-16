@@ -1,0 +1,46 @@
+# Solution 03 — SOAP/XML backend served as REST/JSON: the basic example spec.
+#
+# One route and nothing else: no plugins. Import this when you want to add the
+# plugins yourself in the UI, so you see what each one does. The walkthrough is
+# ../guides.md, "Build it in the UI".
+#
+# The same API with the plugins already in it is api-spec.yaml, next to this file.
+#
+# Until you add the plugins, nothing here converts JSON to XML or back, and the
+# request is forwarded to /locations on your upstream, not to your SOAP handler.
+#
+# You supply the SOAP backend: bind it as the upstream when you deploy.
+
+openapi: 3.0.3
+
+info:
+  title: Partner Locations API
+  version: 1.0.0
+  description: >-
+    Partner-facing location lookup over a SOAP/XML system of record. Add the
+    plugins yourself to send the call to your SOAP handler and convert the body
+    to XML and the response back to JSON.
+
+paths:
+  /locations:
+    post:
+      summary: Look up partner locations (JSON in, JSON out)
+      description: >-
+        Accepts a JSON body. It reaches your SOAP handler as XML, and comes back
+        as JSON, once you add the plugins (see ../guides.md).
+      requestBody:
+        required: false
+        description: >-
+          Query fields for the location lookup, as JSON. The field names must
+          match the elements the SOAP handler reads.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                region:      { type: string, description: Region code to filter by }
+                activeOnly:  { type: boolean, description: Exclude decommissioned sites }
+      responses:
+        '200': { description: Locations, as returned by the upstream }
+        '502': { description: The SOAP backend was unreachable or returned an error }
+        '504': { description: The SOAP backend did not respond in time }

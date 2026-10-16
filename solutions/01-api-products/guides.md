@@ -47,24 +47,98 @@ Screen and button names below are the real ones. The API lives under
   **Admin → Orgs → (your org) → Environments**, not from the API Gateway sidebar,
   and need a Gateway to attach to. Ask your admin if you're not sure.
 
-**1. Import the API**
+**1. Create the API**
+
+Pick one of the two ways below. Both give you the same thing: an API called
+`Posts API` with two routes and no plugins yet.
+
+*Option A — from scratch*
+1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
+2. Choose **Create from scratch**. Set **Display name** to `Posts API`, then
+   **Save**.
+3. On the API's page, open **Configuration → Routes** and add two routes, both
+   with method `GET`:
+   - `/posts`, the list of posts
+   - `/posts/:postId`, one post. The gateway writes a path parameter as
+     `:postId`, not `{postId}`.
+
+*Option B — from an OpenAPI spec*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
 2. Set **Method** to **Import an OpenAPI spec**.
-3. Drag in [`example/api-spec.yaml`](example/api-spec.yaml), or paste its
-   contents, then click **Import**.
+3. Drag in your own OpenAPI 3.0 file, or use our example,
+   [`example/api-spec-basic.yaml`](example/api-spec-basic.yaml): the same two
+   routes, no plugins. Then click **Import**.
 
-This creates the API and its first revision with routes and plugins included.
-It does **not** bind an upstream or deploy, and nothing warns you if you skip
-that. The routes just never go live.
+> **A spec can carry the plugins too.** Add an `x-helix-gateway` block that
+> lists them. At the top level of the file it covers every route; under one
+> path and method it covers that route only:
+>
+> ```yaml
+> x-helix-gateway:
+>   plugins:
+>     helix-auth:
+>       mode: validate
+>       validate_auth_type: key-auth
+>       apikey: { source: header, key: apikey }
+>     api-product-enforcer:
+>       error_policy: fail_close
+> ```
+>
+> [`example/api-spec.yaml`](example/api-spec.yaml) is this API with all its
+> plugins already in place. Import that instead and you can skip step 2.
 
-**2. Give it an upstream, then deploy it**
+Either way, the API is not live yet: it has no upstream and isn't deployed.
+That comes in step 3.
+
+**2. Add the plugins**
+
+Two plugins turn this API into a metered product. Add them **before** you
+deploy: a live revision can't be changed.
+
+On the API's page, open **Configuration → Plugins** and click **Add plugin**.
+Adding a plugin here applies it to every route; adding it on one route (open the
+route under **Configuration → Routes**) applies it to that route only. Fill in
+the settings in the **Properties** form, or switch to the **JSON view** and
+paste them.
+
+1. **`helix-auth` — checks who is calling.** It reads the app's key from the
+   `apikey` header and looks up which products that app is subscribed to.
+
+   | Field | Value |
+   |---|---|
+   | **mode** | `validate` |
+   | **validate_auth_type** | `key-auth` |
+   | **apikey → source** | `header` |
+   | **apikey → key** | `apikey` |
+
+   ```json
+   {"mode":"validate","validate_auth_type":"key-auth","apikey":{"source":"header","key":"apikey"}}
+   ```
+
+2. **`api-product-enforcer` — applies the plan's limit.** Each call uses one
+   request from the calling app's product quota. When the quota is used up, the
+   call gets HTTP 429 (too many requests).
+
+   | Field | Value |
+   |---|---|
+   | **error_policy** | `fail_close` |
+
+   ```json
+   {"error_policy":"fail_close"}
+   ```
+
+Each plugin then appears under **Configuration → Plugins**. What every field
+means, and the two optional extras (`request-id`, `cors`) the full spec adds:
+[Configuration reference](#configuration-reference).
+
+**3. Give it an upstream, then deploy it**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick environment
    `test`, point it at `jsonplaceholder.typicode.com` (or your own host), then
    **Create Upstream**.
 2. Back on the API's page, click **Deploy** on the revision. The dialog asks you
    to map an upstream for `test`. Pick the one you just created, then **Deploy**.
 
-**3. Create the Free product**
+**4. Create the Free product**
 1. Go to **API Distribution → API Products**, click **Add API Product**.
 2. Under **Basic Information**, set **Display Name** to `Free`.
 3. Under **APIs**, click **Add API**, select your API, then **Continue**.
@@ -74,19 +148,19 @@ that. The routes just never go live.
    **Interval** `1`, **Unit** `Minute`.
 6. Click **Create API Product**.
 
-**4. Deploy it**
+**5. Deploy it**
 On the product's page, click **Deploy**, pick `test`, then **Deploy** again. The
 badge changes from **Not deployed** to **Deployed**. This is a *different* deploy
-from step 2. The product needs its own.
+from step 3. The product needs its own.
 
-**5. Create the Pro product**
-Repeat steps 3 and 4 with **Display Name** `Pro` and **Request limit** `1000`.
+**6. Create the Pro product**
+Repeat steps 4 and 5 with **Display Name** `Pro` and **Request limit** `1000`.
 
-**6. Create a developer**
+**7. Create a developer**
 Go to **API Distribution → Developers**, click **Add Developer**, fill in the
 name and email, then **Add**.
 
-**7. Create two apps for that developer**
+**8. Create two apps for that developer**
 Go to **API Distribution → Apps**, click **Add App**. Pick the **Environment**
 and the **Developer**, add the **Free** product, pick an authentication method
 and let credentials auto-generate, then **Create App**.
@@ -95,7 +169,7 @@ Repeat for a second app subscribed to **Pro**. **This must be a second, separate
 app**, not a second product on the same app, or the quota will be shared and
 isolation will look broken.
 
-**8. Get each app's key**
+**9. Get each app's key**
 On each app's page, open **Credentials** and copy the key. That's the value you
 send as the `apikey` header. For key-auth it's the client id.
 
@@ -115,11 +189,12 @@ H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
 
 # 1. Import the spec. It carries helix-auth and api-product-enforcer, and the
 #    import assigns the route a service_id. Keep both ids the response returns.
-curl -s "${H[@]}" -F "file=@example/api-spec.yaml" "$BASE/orgs/$ORG/apis/from-spec"
+curl -s -H "authorization: Bearer $TOKEN" -F "file=@example/api-spec.yaml" \
+  "$BASE/orgs/$ORG/apis/from-spec"     # multipart upload, so no JSON content-type
 # → {"api":{"id":"<API_ID>", ...}, "revision":{"id":"<REVISION_ID>", ...}}
 
-# 2. Import does NOT make the routes live. Create an upstream (no /api prefix on
-#    this one call), bind it to the revision, then deploy the revision.
+# 2. Import does NOT make the routes live. Create an upstream, bind it
+#    to the revision, then deploy the revision.
 curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/envs/<TEST_ENV_ID>/upstreams" \
   -d '{"name":"posts-upstream","specification":{"scheme":"https","nodes":[{"host":"jsonplaceholder.typicode.com","port":443,"weight":1}]}}'
 # → {"id":"<UPSTREAM_ID>", ...}
@@ -240,8 +315,10 @@ leave `api-product-enforcer` exactly as it is.
 
 Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml) for the routes
 and plugins, plus the two products (Free, Pro) created in the UI or via the API.
-[Install it directly](#install-it-directly) has their exact fields. Two plugins
-make this a metered product:
+[Install it directly](#install-it-directly) has their exact fields.
+[`example/api-spec-basic.yaml`](example/api-spec-basic.yaml) is the same routes
+with no plugins, for adding them yourself. Two plugins make this a metered
+product:
 
 ```yaml
 # identity — checks the key AND looks up the app's product subscriptions

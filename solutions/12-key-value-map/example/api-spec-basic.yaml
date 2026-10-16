@@ -1,0 +1,50 @@
+# Solution 12 — per-partner key material: the basic example spec.
+#
+# Two routes and nothing else: no plugins. Import this when you want to add the
+# plugins yourself in the UI, so you see what each one does. The walkthrough is
+# ../guides.md, "Build it in the UI".
+#
+# The same API with the plugins already in it is api-spec.yaml, next to this file.
+#
+# Until you add the plugins, these routes only pass requests on to the upstream:
+# nothing is stored and nothing is encrypted. No key material appears in this file.
+
+openapi: 3.0.3
+
+info:
+  title: Partner Documents API
+  version: 1.0.0
+  description: >-
+    One route that stores a partner's public key, and one that returns a document
+    for the calling partner. Add the plugins yourself to store the keys and encrypt
+    each document to the right partner.
+
+paths:
+  /partners/keys:
+    post:
+      summary: Register or rotate a partner's public key
+      description: >-
+        ADMINISTRATIVE. Protect this route before using it anywhere real.
+      parameters:
+        - { name: X-Partner-Id, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [public_key]
+              properties:
+                public_key:
+                  type: string
+                  description: The partner's ASCII-armored OpenPGP public key.
+      responses:
+        '200': { description: Request accepted }
+
+  /partners/documents:
+    get:
+      summary: Fetch a document for the calling partner
+      parameters:
+        - { name: X-Partner-Id, in: header, required: true, schema: { type: string } }
+      responses:
+        '200': { description: The document }

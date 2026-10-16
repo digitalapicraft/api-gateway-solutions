@@ -1,5 +1,9 @@
 # JSON clients for an XML backend, at the API gateway
 
+> [Overview](README.md) · **Business need** · [Architecture](architecture.md) · [Guides](guides.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [API reference](api-reference.md)
+
+---
+
 > The stock system is REST that answers in XML, because it was written in 2009.
 > The web team wrote a parser, iOS wrote another, Android found a library, and the
 > partner team gave up and asked for a nightly CSV. Four conversions of the same
@@ -24,8 +28,8 @@ Pick the package by what the backend speaks, not by the word "XML":
 The JSON mirrors the XML element for element, so it is not a redesigned API. It is
 not lossless, and it does not keep key order on the way back to XML, so a backend
 that validates a strict `xs:sequence` can reject a complete document. It ships
-unauthenticated. [Before/after, what the conversion does to a document, and what
-this does not buy you are in the README](README.md#business-need).
+unauthenticated. [What the conversion does to a document, and what this does not
+buy you, are in Architecture](architecture.md#what-the-conversion-does-to-your-document).
 
 *Also searched as: XML to JSON at the API gateway · JSON to XML request transform ·
 convert an XML API to JSON · modernise a legacy XML REST API · content negotiation

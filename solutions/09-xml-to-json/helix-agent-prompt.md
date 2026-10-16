@@ -1,11 +1,20 @@
 # Agent-mode prompt — JSON clients for an XML backend
 
+> [Overview](README.md) · [Business need](business-need.md) · [Architecture](architecture.md) · [Guides](guides.md) · **Agent prompt** · [Tests](tests.md) · [API reference](api-reference.md)
+
+---
+
 Paste this to the Helix Agent as one message, replacing the `{{...}}` values. It
 works from a fresh, empty org on a public upstream that serves XML and echoes what
 it receives, so you can see both directions with nothing of your own. If your
-backend is SOAP, use [solution 03](../03-soap-to-rest/) instead. Why the prompt is
-worded this way, what the agent decides on its own, and what to check before you
-trust it are in the [README](README.md#build-it-with-the-helix-agent).
+backend is SOAP, use [solution 03](../03-soap-to-rest/) instead.
+
+When it finishes, read the stored revision back and check that
+`POST /catalog/orders` converts requests too (`transform_request: true`), with the
+`order` root element, `item` array items and the `urn:example:catalog` namespace,
+and that neither route's path rewrite sets a `Content-Type`. Then run
+[`example/verify.sh`](example/verify.sh) against it. See
+[Troubleshooting](guides.md#troubleshooting) if something looks off.
 
 ## Prompt
 

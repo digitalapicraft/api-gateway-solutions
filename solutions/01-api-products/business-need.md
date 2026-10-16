@@ -10,7 +10,7 @@
 >
 > **Both are the same bug: one undifferentiated pool, and no idea who is calling.**
 
-- **Blast radius: everyone → the one app.** The quota attaches to the thing you
+- **A problem stays with the one app that caused it.** The quota attaches to the thing you
   sell and is counted per app, so a bad integration throttles itself.
 - **"Enterprise" becomes a real difference**, which makes hitting the ceiling the
   thing that triggers an upgrade.

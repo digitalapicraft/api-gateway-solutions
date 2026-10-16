@@ -1,0 +1,49 @@
+# Solution 06 — HMAC request signing: the basic example spec.
+#
+# Two routes and nothing else: no plugins. Import this when you want to add the
+# plugins yourself in the UI, so you see what each one does. The walkthrough is
+# ../guides.md, "Build it in the UI".
+#
+# The same API with the plugins already in it is api-spec.yaml, next to this file.
+#
+# RUNNABLE ON A FRESH FREE-TRIAL ORG. The upstream is public
+# https://jsonplaceholder.typicode.com, so POST /albums returns a real 201 with
+# no backend of your own.
+
+openapi: 3.0.3
+
+info:
+  title: Partner Albums API
+  version: 1.0.0
+  description: >-
+    A sample API that proxies the public jsonplaceholder service, so it returns
+    real data on a fresh org. Add the signing plugin yourself to make every
+    request prove who sent it; point it at your own upstream when ready.
+
+paths:
+  /albums:
+    post:
+      summary: Submit an event
+      description: Proxies the upstream's POST /albums.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, userId]
+              properties:
+                title:  { type: string }
+                userId: { type: integer }
+      responses:
+        '201': { description: Accepted and forwarded to the upstream }
+
+  /albums/{albumId}:
+    get:
+      summary: Read an event
+      description: Proxies the upstream's /albums/{albumId}.
+      parameters:
+        - { name: albumId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: The event }
+        '404': { description: Not found }

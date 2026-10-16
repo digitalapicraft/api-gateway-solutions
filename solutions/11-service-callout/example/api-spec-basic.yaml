@@ -1,0 +1,46 @@
+# Solution 11 — enrich a request with a lookup: the basic example spec.
+#
+# Two routes and nothing else: no plugins. Import this when you want to add the
+# plugins yourself in the UI, so you see what each one does. The walkthrough is
+# ../guides.md, "Build it in the UI".
+#
+# The same API with the plugins already in it is api-spec.yaml, next to this file.
+#
+# On its own this makes no lookup, and the routes do not reach the public test
+# backend (httpbin.org) yet: pointing each route at the right backend path is one
+# of the plugins you add.
+
+openapi: 3.0.3
+
+info:
+  title: Storefront API
+  version: 1.0.0
+  description: >-
+    A storefront API whose backend needs to know the calling tenant's plan and
+    account status on every request. Add the plugins yourself to look that up
+    and pass it downstream as headers; point it at your own upstream when ready.
+
+paths:
+  /storefront/orders:
+    get:
+      summary: List orders
+      responses:
+        '200':
+          description: The backend's response
+          content:
+            application/json:
+              schema:
+                type: object
+        '502': { description: The backend was unreachable }
+
+  /storefront/checkout:
+    post:
+      summary: Place an order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200': { description: Accepted by the backend }

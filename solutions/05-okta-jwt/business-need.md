@@ -1,5 +1,9 @@
 # Verify Okta-issued JWTs at the API gateway
 
+> [Overview](README.md) · **Business need** · [Architecture](architecture.md) · [Guides](guides.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [API reference](api-reference.md)
+
+---
+
 > Your company already uses Okta to sign people and apps in. Your APIs don't —
 > they still check a fixed key that someone emailed out years ago, never expires,
 > and is hard to take back. Everyone agrees the APIs should check Okta's tokens
@@ -29,8 +33,8 @@ through a browser, not a program calling an API:
 
 It checks who is calling. It doesn't decide what they may do, count their calls,
 or cancel a token before it expires — and your gateway needs the `openid-connect`
-plugin. [The full comparison, how it works, and what this does not buy you are in
-the README](README.md#business-need).
+plugin. [How it works, and what this does not buy you, are in
+Architecture](architecture.md#when-to-use-this).
 
 *Also searched as: Okta JWT validation at the API gateway · verify external IdP
 tokens · JWKS signature verification · OIDC bearer-only API auth · Auth0 / Entra ID

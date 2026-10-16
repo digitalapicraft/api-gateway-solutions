@@ -1,11 +1,19 @@
 # Agent-mode prompt — mask PII in responses and logs
 
+> [Overview](README.md) · [Business need](business-need.md) · [Architecture](architecture.md) · [Guides](guides.md) · **Agent prompt** · [Tests](tests.md) · [API reference](api-reference.md)
+
+---
+
 Paste this to the Helix Agent as one message, replacing the `{{...}}` values. It
 works from a fresh, empty org on a public upstream whose customer records carry
 email, phone and coordinates, so the masking is visible with nothing of your own.
-Why the prompt is worded this way, what the agent decides on its own, and what to
-check before you trust it are in the
-[README](README.md#build-it-with-the-helix-agent).
+
+When it finishes, read the stored revision back before you deploy: both routes
+should be there, every masking filter should apply to every match (`scope:
+global`), the single-record route should carry the customer id through to the
+backend, and no logger should have been added. Then run
+[`example/verify.sh`](example/verify.sh) against it. See
+[Troubleshooting](guides.md#troubleshooting) if something looks off.
 
 ## Prompt
 
