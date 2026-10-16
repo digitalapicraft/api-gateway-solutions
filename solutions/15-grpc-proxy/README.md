@@ -26,6 +26,23 @@ understand.
 So every team that owns such a service builds its own auth, and every one of them
 builds it slightly differently.
 
+## Business need
+
+The thirty-second version: [`business-need.md`](business-need.md).
+
+| Dimension | Auth built into each streaming service | Auth at the edge |
+|---|---|---|
+| **Implementations** | One per service, each slightly different | One, on the gateway |
+| **Who is connected** | Whatever each service chose to log | An app per stream, in the analytics you already run |
+| **Cutting off one unit** | A code change in the service | Disable its credential; its next connection is refused |
+| **Connection counts and lifetimes** | Built per service, if at all | `requests-count` and `response-time`, per app, with no extra config |
+| **Service change to adopt** | — | None. The stream stays bidirectional and stays open |
+
+The trade: the gateway checks a stream **once, as it opens**. That is what makes
+it cheap enough to put in front of a connection that lasts hours. It is also why
+a revoked key doesn't close a stream that is already open, and why a quota counts
+streams rather than messages.
+
 ## What this does
 
 The gateway terminates the client's HTTP/2 connection, authenticates the stream
@@ -129,49 +146,122 @@ open. That is why this package's two negative tests are plain `curl` calls.
 
 ## Build it with the Helix Agent
 
+Recommended path, about fifteen minutes. The whole build is **one prompt**:
+[`helix-agent-prompt.md`](helix-agent-prompt.md). Paste it as a single message and
+replace the `{{...}}` values. Then run [`example/verify.sh`](example/verify.sh)
+with the key it gives you, as under [Testing](#testing).
+[AGENT-GUIDE.md](../../AGENT-GUIDE.md) carries the standing rules the prompt
+assumes.
+
+> **Check what was stored, not what the agent said.** Read the revision back.
+> There should be **five** routes: the three methods, and **both**
+> `/grpc.reflection.v1.ServerReflection/ServerReflectionInfo` and
+> `/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo`. The 2026-10-14
+> build routed only `v1alpha`. Everything else worked, but `grpcurl list` failed
+> with a 502, because a client asks for `v1` first and stops when nothing answers.
+> Add the `v1` route by hand. The upstream bound to the API should have **`scheme:
+> grpc`**. `helix-auth` (validate, key-auth) can sit API-wide or on each route;
+> both are correct here. Note which header it reads the key from. The prompt
+> doesn't name one, and the 2026-10-15 build chose `apikey`.
+
+### Why the prompt is worded the way it is
+
+It names no plugin, no upstream field and no header. It says what the
+integration team knows about the service, and what must be true of a connection:
+
+- **"Our gRPC service."** That is enough for the agent to create the upstream with
+  `scheme: grpc`. Get the scheme wrong and every call fails before auth matters.
+  The gRPC part of this design lives on the upstream, not on the routes. An
+  earlier wording spelled out "plaintext gRPC, not HTTP, and not TLS"; the shorter
+  one built a working upstream without it.
+- **"Exactly as written."** The method paths contain a dot and are matched
+  literally. Both builds stored them as given.
+- **"Hold these streams open for hours."** The key is checked once, when a stream
+  opens. That is what a revoked key can't reach; see
+  [one stream is one request](#one-stream-is-one-request).
+- **Step 3 asks for the product with the app.** An app subscribes to an API
+  through a product; without one, every stream is refused.
+
+Want the key in a particular header? Say so in step 2, for example *"in the
+X-Unit-Key metadata"*. Otherwise the agent picks one.
+
+**"Plus server reflection"** doesn't name the two versions, and that is why the
+check above matters. Name them if you would rather not add one by hand:
+*"route both the v1 and v1alpha server reflection methods"*.
+
+### What the agent decides for you
+
+| | The prompt says | This package's spec | The 2026-10-15 run |
+|---|---|---|---|
+| Key header | nothing | `X-Unit-Key` | `apikey` |
+| Where `helix-auth` sits | nothing | on each route | not recorded |
+| Reflection versions | "server reflection" | `v1` and `v1alpha` | both |
+| Correlation id | nothing | `request-id`, API-wide | not recorded |
+| Upstream | "our gRPC service" | a separate object, `scheme: grpc` | created by the agent; serves gRPC |
+
+The reflection row and the key header change what a client has to do. Builds
+have differed on reflection: see [Validation status](#validation-status).
+
+## Variations
+
+Follow-ups for the same session, once the build above is standing. Use the same
+register as the prompt and say what you want to be true.
+
+**Count connections per unit**
 ```text
-Create an upstream in my environment called "timing-grpc" whose specification has
-scheme "grpc", type "roundrobin", pass_host "node", and one node with host
-{{grpc_upstream_host}} and port {{grpc_upstream_port}}. Tell me its id.
+Show me how many streams each app opened over the last {{time_window}}, and how
+long the longest one stayed open.
+```
+See [measuring connections](#measuring-connections).
+
+**Limit how many streams a unit opens**
+```text
+Each unit may open at most {{streams_per_day}} streams a day. Enforce that per
+app, and tell me what a unit sees when it goes over.
+```
+The quota counts streams, not messages.
+
+**The service moves to TLS**
+```text
+Our gRPC service now terminates TLS on port {{tls_port}}. Change the API to match
+and tell me what has to be redeployed for it to take effect.
+```
+A scheme change on the upstream doesn't reach a deployed revision until it is
+redeployed.
+
+**Only some units may send commands**
+```text
+Only units in the "controllers" group may call /timing.TimingUnit/Commands. The
+others can still Ping and stream Status. Tell me plainly whether the gateway can
+decide that, and how.
 ```
 
-```text
-Create an API called "Timing Unit Stream API". Don't add routes or plugins yet —
-just create it and tell me its id.
-```
+## When the agent goes wrong
 
-```text
-On the Timing Unit Stream API, add a route POST /timing.TimingUnit/Ping with
-exactly one plugin, keeping the plugin-name level explicit — a "plugins" object
-whose key is "helix-auth":
+**Read the stored revision before you trust any of it.**
 
-helix-auth:
-  mode: validate
-  validate_auth_type: key-auth
-  apikey:
-    source: header
-    key: X-Unit-Key
-
-The path contains a dot and a slash and is the gRPC method path — do not
-normalise it, do not strip the dot, and do not add a leading segment.
-```
-
-```text
-Bind upstream {{upstream_id}} to the current revision of the Timing Unit Stream
-API in my environment, then deploy that revision. Then read the revision back and
-show me the plugins stored on each route.
-```
-
-The read-back is not optional — three of the four known agent-mode defects report
-success at every step the agent shows you.
+| Symptom | Cause |
+|---|---|
+| `grpcurl list` fails with a 502 or an HTTP 404, while calls with a descriptor work | Only one reflection version is routed (seen 2026-10-14, `v1alpha` only). Add `/grpc.reflection.v1.ServerReflection/ServerReflectionInfo`. |
+| Every call fails with a transport error, even with a valid key | The upstream is `http` or `https`, not `grpc`; or a scheme change was made and the revision wasn't redeployed. |
+| 404 on a method that is routed | The path was rewritten: a dropped dot, a changed case, or a leading segment added. gRPC method paths are matched exactly. |
+| 403 with a valid key | The app isn't subscribed to a product that contains this API, or the product isn't deployed to the environment. |
+| A stream without a key is accepted | `helix-auth` is missing from the routes and from the API-wide plugins. |
+| A stream drops after a quiet period | The route's `timeout.read` is shorter than the gap between messages. Each upstream message re-arms it. |
+| A revoked key's stream keeps running | Expected. Auth is evaluated when a stream opens; the next connection is refused. |
+| Deploy fails: `Only INACTIVE revisions can be updated` | Clone the revision or undeploy, then apply. |
 
 ## Testing
 
 ```bash
 GATEWAY=<your-gateway-host> \
 UNIT_KEY=<app credential key> \
+KEY_HEADER=<the header your build reads the key from> \
 ./example/verify.sh
 ```
+
+`KEY_HEADER` defaults to `X-Unit-Key`, the spec's header. An agent build picks
+its own unless the prompt names one.
 
 No `.proto` file is needed — this package routes reflection, so the schema is
 discovered over the connection.
@@ -263,13 +353,15 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
   paths, both reflection versions, and the absence of body-touching plugins.
 - **Gateway dry-run passed** — the spec imports and dry-runs clean.
 - **Gateway deployed** — deployed ACTIVE against a real bidirectional gRPC service.
-- **Functional test passed** — `example/verify.sh` **6/6**: unauthenticated and
-  invalid credentials refused at stream initiation, an authenticated unary call,
-  an authenticated bidirectional stream, a held-open stream that closes cleanly,
-  and reflection resolving with no descriptor file. Verified on two
-  environments with different fronting infrastructure — the second run also
-  held a stream open 30s against server-pushed keepalives every 10s, and the
-  package deployed unmodified on both.
-- **Connection telemetry confirmed** — `requests-count` returned one row per
-  stream and `response-time` returned 24,235 ms for a stream held open ~25s,
-  grouped by method and by app.
+- **Functional test passed** — `example/verify.sh` **6/6** on two environments
+  with different fronting infrastructure: both refusals at stream start, unary,
+  a two-way stream, a held stream, and reflection with no descriptor file.
+- **Connection telemetry confirmed** — one `requests-count` row per stream;
+  `response-time` of 24,235 ms for a stream held ~25s.
+- **Agent, current wording — PASS 6/6**, 2026-10-15, operator, production. Both
+  reflection versions; key header `apikey`. An earlier build of the same wording
+  in the operator's alpha environment routed only `v1alpha`, and streaming failed
+  there because its load balancer doesn't pass HTTP/2 through to the gateway.
+- **Agent, earlier wording — 5/6**, 2026-10-14, `tencent/hy3`. The wording that
+  named the plaintext upstream and `X-Unit-Key`. Checks 1–5 passed; reflection
+  failed, because only `v1alpha` was routed.
