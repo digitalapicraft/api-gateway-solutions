@@ -56,24 +56,110 @@ Screen and button names below are the real ones. The API lives under
 - **You can create APIs.** If you don't see an **Add API** button, ask your org
   admin.
 
-**1. Fill in your Okta values**
+**1. Create the API**
 
-Download [`example/api-spec.yaml`](example/api-spec.yaml) and replace the four
-`<OKTA_...>` placeholders in a local copy. They are plain values: the gateway does
-not resolve `<ENV:...>` or `${...}`, so whatever you type is used exactly as
-written. Keep the completed copy out of version control.
+Pick one of the two ways below. Both give you the same thing: an API called
+`Partner Albums API` with two routes and no plugins yet.
 
-**2. Import the API**
+*Option A — from scratch*
+1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
+2. Choose **Create from scratch**. Set **Display name** to `Partner Albums API`,
+   then **Save**.
+3. On the API's page, open **Configuration → Routes** and add two routes:
+   - `GET` `/albums`, the list of albums
+   - `POST` `/albums`, create an album
+
+*Option B — from an OpenAPI spec*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
 2. Set **Method** to **Import an OpenAPI spec**.
-3. Drag in your completed copy of the spec, or paste its contents, then click
-   **Import**.
+3. Drag in your own OpenAPI 3.0 file, or use our example,
+   [`example/api-spec-basic.yaml`](example/api-spec-basic.yaml): the same two
+   routes, no plugins. Then click **Import**.
 
-The imported spec already carries the `openid-connect` plugin, with every setting
-in the [Configuration reference](#configuration-reference), plus `request-id` and
-`cors`. There is no separate screen to set these up; they come in with the spec.
-Import creates the API and its first revision. It does **not** bind an upstream or
-deploy, and nothing warns you if you skip that.
+> **A spec can carry the plugins too.** Add an `x-helix-gateway` block that
+> lists them. At the top level of the file it covers every route; under one
+> path and method it covers that route only. The start of this package's block:
+>
+> ```yaml
+> x-helix-gateway:
+>   plugins:
+>     openid-connect:
+>       discovery: "<OKTA_DISCOVERY_URL>"
+>       unauth_action: deny
+>       bearer_only: true
+>       use_jwks: true
+>       # ...and the rest of the settings in step 2
+> ```
+>
+> [`example/api-spec.yaml`](example/api-spec.yaml) is this API with all its
+> plugins already in place. Replace its four `<OKTA_...>` placeholders in a
+> local copy, import that, and you can skip step 2. Keep the completed copy out
+> of version control.
+
+Either way, the API is not live yet: it has no upstream and isn't deployed.
+That comes in step 3.
+
+**2. Add the plugins**
+
+One plugin, `openid-connect`, does the job: it checks that each call carries an
+access token your Okta issued. Add it **before** you deploy: a live revision
+can't be changed.
+
+On the API's page, open **Configuration → Plugins** and click **Add plugin**.
+Adding a plugin here applies it to every route, which is what you want: there is
+no route here that must stay open. If `openid-connect` isn't in the list of
+plugins you can add, your org doesn't include it and this solution can't run
+there. Switch to the **JSON view** and paste the settings below.
+
+**`openid-connect` — accepts only your Okta's tokens.** It reads Okta's public
+signing keys, checks each token's signature and issuer, and rejects anything
+else with HTTP 401 (not authenticated) before the call reaches your backend.
+
+Replace the four `<OKTA_...>` values with your own. They are plain values: the
+gateway does not resolve `<ENV:...>` or `${...}`, so whatever you type is used
+exactly as written. [Configuration reference](#configuration-reference) says
+where each one comes from.
+
+```json
+{
+  "discovery": "<OKTA_DISCOVERY_URL>",
+  "client_id": "<OKTA_CLIENT_ID>",
+  "client_secret": "<OKTA_CLIENT_SECRET>",
+  "unauth_action": "deny",
+  "bearer_only": true,
+  "use_jwks": true,
+  "ssl_verify": true,
+  "accept_unsupported_alg": false,
+  "accept_none_alg": false,
+  "token_signing_alg_values_expected": "RS256",
+  "claim_validator": {
+    "issuer": {"valid_issuers": ["<OKTA_ISSUER_URL>"]},
+    "audience": {"required": true, "claim": "aud"}
+  },
+  "jwk_expires_in": 3600,
+  "set_access_token_header": true,
+  "set_id_token_header": false,
+  "set_userinfo_header": false,
+  "set_refresh_token_header": false
+}
+```
+
+Three of these settings are what make the plugin behave like an API guard
+rather than a browser sign-in:
+
+| Field | Value | Why |
+|---|---|---|
+| **bearer_only** | `true` | Treats every caller as an API client with a token. Without it, the deploy fails asking for a browser-session secret. |
+| **unauth_action** | `deny` | Refuse a call with no token instead of sending it to Okta's login page. `bearer_only` already does this; it is set too so the intent is plain to anyone reading. |
+| **use_jwks** | `true` | Checks the token's signature here, against Okta's published keys. Without it, every token is refused, even a genuine one. |
+
+Use the **JSON view** rather than the **Properties** form for this plugin:
+`use_jwks` is not in the plugin's published list of fields, so the form may not
+offer it, but the gateway accepts and keeps it.
+
+The plugin then appears under **Configuration → Plugins**. What every field
+means, and the two optional extras (`request-id`, `cors`) the full spec adds:
+[Configuration reference](#configuration-reference).
 
 **3. Give it an upstream, then deploy it**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick your
@@ -252,8 +338,10 @@ change `discovery` and `valid_issuers` to that provider's values.
 
 ## Configuration reference
 
-Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml). One block,
-applied API-wide at the top of the spec, does the work:
+Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml).
+[`example/api-spec-basic.yaml`](example/api-spec-basic.yaml) is the same routes
+with no plugins, for adding them yourself. One block, applied API-wide at the top
+of the spec, does the work:
 
 ```yaml
 openid-connect:

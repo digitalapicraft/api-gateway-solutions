@@ -79,8 +79,10 @@ A partner nobody registered gets **HTTP 200 (OK) with empty values**, not an
 error. That is a deliberate part of the design; see
 [Architecture](architecture.md#what-this-does-not-do).
 
-**Setting this up in the gateway's UI takes two short steps:** import the API, then
-give it an upstream (never actually called, but required to deploy) and deploy it.
+**Setting this up in the gateway's UI takes three short steps:** create the API
+(from scratch, or from an OpenAPI spec), add the plugins that store each
+partner's values and answer with them, then give it an upstream (never actually
+called, but required to deploy) and deploy it.
 After that you register partners with one request each. Before you expose it,
 protect the registration route.
 [Full click-by-click walkthrough →](guides.md#build-it-in-the-ui)

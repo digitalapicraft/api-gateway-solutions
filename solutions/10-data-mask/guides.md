@@ -45,19 +45,126 @@ Screen and button names below are the real ones. The API lives under
 - **You can create APIs.** If you don't see an **Add API** button, ask your org
   admin.
 
-**1. Import the API**
+**1. Create the API**
+
+Pick one of the two ways below. Both give you the same thing: an API called
+`Support Console API` with two routes and no plugins yet.
+
+*Option A — from scratch*
+1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
+2. Choose **Create from scratch**. Set **Display name** to `Support Console API`,
+   then **Save**.
+3. On the API's page, open **Configuration → Routes** and add two routes, both
+   with method `GET`:
+   - `/support/customers`, the list of customers
+   - `/support/customers/:customerId`, one customer. The gateway writes a path
+     parameter as `:customerId`, not `{customerId}`.
+
+*Option B — from an OpenAPI spec*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
 2. Set **Method** to **Import an OpenAPI spec**.
-3. Drag in [`example/api-spec.yaml`](example/api-spec.yaml), or paste its
-   contents, then click **Import**. Nothing in it needs filling in.
+3. Drag in your own OpenAPI 3.0 file, or use our example,
+   [`example/api-spec-basic.yaml`](example/api-spec-basic.yaml): the same two
+   routes, no plugins. Then click **Import**.
 
-This creates the API and its first revision. The imported spec already carries
-`response-rewrite` (the four filters, each with `scope: global`), `log-data-mask`,
-`proxy-rewrite` on both routes, and `request-id` API-wide, with the settings in
-the [Configuration reference](#configuration-reference). There is no separate
-screen to set them up in this walkthrough.
+> **A spec can carry the plugins too.** Add an `x-helix-gateway` block that
+> lists them. At the top level of the file it covers every route; under one
+> path and method it covers that route only:
+>
+> ```yaml
+> paths:
+>   /support/customers:
+>     get:
+>       x-helix-gateway:
+>         plugins:
+>           response-rewrite:
+>             filters:
+>               - regex: '("phone"\s*:\s*")[^"]*"'
+>                 replace: '$1[redacted]"'
+>                 scope: global
+>           proxy-rewrite:
+>             uri: /users
+> ```
+>
+> [`example/api-spec.yaml`](example/api-spec.yaml) is this API with all its
+> plugins already in place. Import that instead and you can skip step 2.
 
-**2. Give it an upstream, then deploy it**
+Either way, the API is not live yet: it has no upstream and isn't deployed.
+That comes in step 3.
+
+**2. Add the plugins**
+
+Three plugins on each route do the work: one masks what the caller sees, one
+masks what a logger would write, and one sends the call to the right backend
+path. Add them **before** you deploy: a live revision can't be changed.
+
+These go on each route rather than on the whole API: open the route under
+**Configuration → Routes** and add the plugin there. (Adding a plugin under
+**Configuration → Plugins → Add plugin** would apply it to every route.) The
+masking settings are lists of rules, so switch to the **JSON view** and paste
+them; the simpler path settings also fit the **Properties** form.
+
+On **both** routes, `/support/customers` and `/support/customers/:customerId`:
+
+1. **`response-rewrite` — masks what the caller sees.** Four find-and-replace
+   rules over the reply: the part of each email address before the `@`, the
+   whole phone number, and both map coordinates. Each rule names its field, so
+   it can't match text elsewhere. **Keep `scope: global` on every rule**:
+   without it a rule stops after its first match, so in a list only the first
+   customer is masked.
+
+   ```json
+   {
+     "filters": [
+       {"regex": "(\"email\"\\s*:\\s*\")[^\"@]+@", "replace": "$1***@", "scope": "global"},
+       {"regex": "(\"phone\"\\s*:\\s*\")[^\"]*\"", "replace": "$1[redacted]\"", "scope": "global"},
+       {"regex": "(\"lat\"\\s*:\\s*\")[^\"]*\"", "replace": "$1[redacted]\"", "scope": "global"},
+       {"regex": "(\"lng\"\\s*:\\s*\")[^\"]*\"", "replace": "$1[redacted]\"", "scope": "global"}
+     ]
+   }
+   ```
+
+2. **`log-data-mask` — masks what a logger writes.** It replaces `email` and
+   `phone` in the logged reply and drops the caller's credentials from the
+   logged request. It never changes the reply itself, and it does nothing
+   unless the route also has a logger plugin.
+
+   ```json
+   {
+     "response": [
+       {"type": "body", "name": "email", "action": "replace", "value": "[redacted]", "body_format": "json"},
+       {"type": "body", "name": "phone", "action": "replace", "value": "[redacted]", "body_format": "json"}
+     ],
+     "request": [
+       {"type": "header", "name": "authorization", "action": "remove"},
+       {"type": "header", "name": "x-api-key", "action": "remove"}
+     ]
+   }
+   ```
+
+Then one `proxy-rewrite` per route — it sends the call to the backend's path:
+
+3. **On `/support/customers`:** to `/users` on the test backend.
+
+   | Field | Value |
+   |---|---|
+   | **uri** | `/users` |
+
+   ```json
+   {"uri":"/users"}
+   ```
+
+4. **On `/support/customers/:customerId`:** to `/users/` followed by the same
+   customer id, so each customer reaches their own record.
+
+   ```json
+   {"regex_uri":["^/support/customers/(.*)$","/users/$1"]}
+   ```
+
+Each plugin then appears on its route. The optional extra (`request-id`) the
+full spec adds API-wide: [Configuration reference](#configuration-reference).
+
+**3. Give it an upstream, then deploy it**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick environment
    `test`, point it at `jsonplaceholder.typicode.com` (or your own backend), then
    **Create Upstream**.
@@ -66,13 +173,13 @@ screen to set them up in this walkthrough.
 
 No products, developers or apps are needed: the package ships unauthenticated.
 
-**Two things this walkthrough doesn't cover:**
+**Two things to adjust for your own data:**
 
-- **Your own field names.** Change the field names in *both* plugin blocks, and
-  the `proxy-rewrite` paths, in the spec before you import it.
-- **A logger.** The spec carries the log mask, not a logger, and `log-data-mask`
-  does nothing without one. Add a logger plugin block to the routes in the spec
-  before importing, or use the "prove the log half too" prompt under
+- **Your own field names.** In step 2, change the field names in *both* masking
+  plugins, and the `proxy-rewrite` paths, on both routes.
+- **A logger.** This walkthrough adds the log mask, not a logger, and
+  `log-data-mask` does nothing without one. Add a logger plugin to each route in
+  step 2, or use the "prove the log half too" prompt under
   [Variations](#variations).
 
 ## Install it directly
@@ -177,6 +284,8 @@ me the key.
 
 Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml). Both routes
 carry the same two masking blocks.
+[`example/api-spec-basic.yaml`](example/api-spec-basic.yaml) is the same routes
+with no plugins, for adding them yourself.
 
 What the caller sees:
 

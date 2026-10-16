@@ -44,27 +44,119 @@ Screen and button names below are the real ones. The API lives under
 - **You can create APIs, products and apps.** If you don't see an **Add API**,
   **Add API Product** or **Add App** button, ask your org admin.
 
-**1. Import the API**
+**1. Create the API**
+
+Pick one of the two ways below. Both give you the same thing: an API called
+`Terminal API` with two routes and no plugins yet.
+
+*Option A — from scratch*
+1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
+2. Choose **Create from scratch**. Set **Display name** to `Terminal API`, then
+   **Save**.
+3. On the API's page, open **Configuration → Routes** and add two routes:
+   - `GET /fleet/price-list`, where a terminal fetches its price list
+   - `POST /fleet/takings`, where a terminal sends in its takings
+
+*Option B — from an OpenAPI spec*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
 2. Set **Method** to **Import an OpenAPI spec**.
-3. Drag in [`example/api-spec.yaml`](example/api-spec.yaml), or paste its
-   contents, then click **Import**.
+3. Drag in your own OpenAPI 3.0 file, or use our example,
+   [`example/api-spec-basic.yaml`](example/api-spec-basic.yaml): the same two
+   routes, no plugins. Then click **Import**.
 
-There is **nothing to fill in first**: the spec contains no key and no secret. It
-already carries `helix-auth` (reading `X-Device-Key`) and `proxy-rewrite` on each
-route, and `request-id` API-wide, with the settings in the
-[Configuration reference](#configuration-reference). There is no separate screen
-to set these up; they come in with the spec. Import does **not** bind an upstream
-or deploy, and nothing warns you if you skip that.
+> **A spec can carry the plugins too.** Add an `x-helix-gateway` block that
+> lists them. At the top level of the file it covers every route; under one
+> path and method it covers that route only:
+>
+> ```yaml
+> paths:
+>   /fleet/price-list:
+>     get:
+>       x-helix-gateway:
+>         plugins:
+>           helix-auth:
+>             mode: validate
+>             validate_auth_type: key-auth
+>             apikey: { source: header, key: X-Device-Key }
+> ```
+>
+> [`example/api-spec.yaml`](example/api-spec.yaml) is this API with all its
+> plugins already in place, on both routes. It contains no key and no secret.
+> Import that instead and you can skip step 2.
 
-**2. Give it an upstream, then deploy it**
+Either way, the API is not live yet: it has no upstream and isn't deployed.
+That comes in step 3.
+
+**2. Add the plugins**
+
+Two plugins go on each route: one checks the caller's key, the other points the
+route at the right path on your backend. Add them **before** you deploy: a live
+revision can't be changed.
+
+Open each route under **Configuration → Routes** and add the plugins there.
+(Adding a plugin under **Configuration → Plugins** with **Add plugin** would
+apply it to every route.) Fill in the settings in the **Properties** form, or
+switch to the **JSON view** and paste them.
+
+1. **`helix-auth` — checks the caller's key.** It reads the key from the
+   `X-Device-Key` header and looks up which app it belongs to. No key, or a key
+   that belongs to no app, gets HTTP 401 (not authenticated) and never reaches
+   your backend. Add it with the same settings to **both** routes,
+   `GET /fleet/price-list` and `POST /fleet/takings`.
+
+   | Field | Value |
+   |---|---|
+   | **mode** | `validate` |
+   | **validate_auth_type** | `key-auth` |
+   | **apikey → source** | `header` |
+   | **apikey → key** | `X-Device-Key` |
+
+   ```json
+   {"mode":"validate","validate_auth_type":"key-auth","apikey":{"source":"header","key":"X-Device-Key"}}
+   ```
+
+   Fill in **apikey → source** even if the form shows it as optional. Without it
+   the deploy is refused.
+
+   There is **no key to type in here**. The keys live on the apps you create in
+   step 7.
+
+2. **`proxy-rewrite` — sends the call to the right backend path.** The path a
+   terminal calls stays fixed; this changes only the path the gateway forwards
+   to. Each route gets its own value:
+
+   | Route | **uri** |
+   |---|---|
+   | `GET /fleet/price-list` | `/todos/1` |
+   | `POST /fleet/takings` | `/posts` |
+
+   On `GET /fleet/price-list`:
+
+   ```json
+   {"uri":"/todos/1"}
+   ```
+
+   On `POST /fleet/takings`:
+
+   ```json
+   {"uri":"/posts"}
+   ```
+
+   These paths suit the example backend, `jsonplaceholder.typicode.com`. With
+   your own backend, use its paths instead.
+
+Each plugin then appears on its route. What every field means, and the optional
+extra (`request-id`) the full spec adds:
+[Configuration reference](#configuration-reference).
+
+**3. Give it an upstream, then deploy it**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick environment
    `test`, point it at `jsonplaceholder.typicode.com` (or your own host), then
    **Create Upstream**.
 2. Back on the API's page, click **Deploy** on the revision. The dialog asks you
    to map an upstream for `test`. Pick the one you just created, then **Deploy**.
 
-**3. Create a product**
+**4. Create a product**
 1. Go to **API Distribution → API Products**, click **Add API Product**.
 2. Under **Basic Information**, set a **Display Name**, for example `Terminal API`.
 3. Under **APIs**, click **Add API**, select your API, then **Continue**.
@@ -74,22 +166,22 @@ or deploy, and nothing warns you if you skip that.
    Every product needs one, but this solution does not enforce it.
 6. Click **Create API Product**.
 
-**4. Deploy the product**
+**5. Deploy the product**
 On the product's page, click **Deploy**, pick `test`, then **Deploy** again. This
-is a different deploy from step 2. The product needs its own; creating it is
+is a different deploy from step 3. The product needs its own; creating it is
 not enough.
 
-**5. Create a developer**
+**6. Create a developer**
 Go to **API Distribution → Developers**, click **Add Developer**, fill in the
 name and email, then **Add**.
 
-**6. Create one app per caller**
+**7. Create one app per caller**
 Go to **API Distribution → Apps**, click **Add App**. Pick the **Environment**
 and the **Developer**, add the product, pick an authentication method and let
 credentials auto-generate, then **Create App**. Repeat for every device or
 partner job: **one app each**, so each can be switched off on its own.
 
-**7. Get each app's key**
+**8. Get each app's key**
 On each app's page, open **Credentials** and copy the key. That's the value the
 caller sends in the `X-Device-Key` header. It is the credential **key**, not the
 app's id and not its secret.
@@ -234,8 +326,10 @@ app's key in place cuts over immediately.
 
 ## Configuration reference
 
-Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml). One block
-carries the whole solution, and it is on every protected route:
+Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml).
+[`example/api-spec-basic.yaml`](example/api-spec-basic.yaml) is the same routes
+with no plugins, for adding them yourself. One block carries the whole solution,
+and it is on every protected route:
 
 ```yaml
 helix-auth:

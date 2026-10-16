@@ -95,9 +95,10 @@ JSON is a mechanical copy of your system's XML, not a contract someone designed 
 [Architecture](architecture.md#why-the-json-shape-is-derived-not-designed) explains
 what that means for your partners.
 
-**Setting this up in the gateway's UI takes three short steps:** put your SOAP
-handler's path into the spec and import it, point an upstream at your SOAP service,
-then deploy. [Full click-by-click walkthrough →](guides.md#build-it-in-the-ui)
+**Setting this up in the gateway's UI takes three short steps:** create the API
+(from scratch, or from an OpenAPI spec), add the two plugins that send the call to
+your SOAP handler and convert JSON to XML and back, then point an upstream at your
+SOAP service and deploy. [Full click-by-click walkthrough →](guides.md#build-it-in-the-ui)
 
 [Build it any of three ways, then see it work →](guides.md)
 

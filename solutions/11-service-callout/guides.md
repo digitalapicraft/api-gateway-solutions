@@ -43,20 +43,197 @@ Screen and button names below are the real ones. The API lives under
 - **You can create APIs.** If you don't see an **Add API** button, ask your org
   admin.
 
-**1. Import the API**
+**1. Create the API**
+
+Pick one of the two ways below. Both give you the same thing: an API called
+`Storefront API` with two routes and no plugins yet.
+
+*Option A — from scratch*
+1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
+2. Choose **Create from scratch**. Set **Display name** to `Storefront API`, then
+   **Save**.
+3. On the API's page, open **Configuration → Routes** and add two routes:
+   - `GET /storefront/orders`, the list of orders
+   - `POST /storefront/checkout`, placing an order
+
+*Option B — from an OpenAPI spec*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
 2. Set **Method** to **Import an OpenAPI spec**.
-3. Drag in [`example/api-spec.yaml`](example/api-spec.yaml), or paste its
-   contents, then click **Import**. Nothing in it needs filling in.
+3. Drag in your own OpenAPI 3.0 file, or use our example,
+   [`example/api-spec-basic.yaml`](example/api-spec-basic.yaml): the same two
+   routes, no plugins. Then click **Import**.
 
-This creates the API and its first revision. The imported spec already carries
-`service-callout` (phase `rewrite`, fail-open on the read route, fail-close on the
-write route), `proxy-rewrite` with the three `headers.set` entries, and
-`request-id` API-wide, with the settings in the
-[Configuration reference](#configuration-reference). There is no separate screen
-to set them up in this walkthrough.
+> **A spec can carry the plugins too.** Add an `x-helix-gateway` block that
+> lists them. At the top level of the file it covers every route; under one
+> path and method it covers that route only:
+>
+> ```yaml
+> paths:
+>   /storefront/orders:
+>     get:
+>       x-helix-gateway:
+>         plugins:
+>           service-callout:
+>             uri: https://jsonplaceholder.typicode.com/users/1
+>             phase: rewrite
+>             map_response_to_ctx:
+>               tenant_plan: body.company.name
+>           proxy-rewrite:
+>             uri: /headers
+>             headers:
+>               set:
+>                 X-Tenant-Plan: "${ctx.helix.service_callout.tenant_plan}"
+> ```
+>
+> [`example/api-spec.yaml`](example/api-spec.yaml) is this API with all its
+> plugins already in place. Import that instead and you can skip step 2.
 
-**2. Give it an upstream, then deploy it**
+Either way, the API is not live yet: it has no upstream and isn't deployed.
+That comes in step 3.
+
+**2. Add the plugins**
+
+Two plugins on each route do the work: one looks up the tenant's profile, the
+other passes what it found to the backend as headers and sends the call to the
+right backend path. Add them **before** you deploy: a live revision can't be
+changed.
+
+The two routes get different settings, so add these on each route rather than
+on the whole API: open the route under **Configuration → Routes** and add the
+plugin there. (Adding a plugin under **Configuration → Plugins → Add plugin**
+would apply it to every route.) Fill in the settings in the **Properties** form,
+or switch to the **JSON view** and paste them. The tables show the simple
+fields; the nested settings are easiest to paste as JSON.
+
+Two rules hold on both routes:
+
+- **`phase` must be `rewrite`.** That makes the lookup finish before the header
+  values are filled in. Set to `access`, it runs too late and the headers arrive
+  empty, with no error.
+- **Copy the `${ctx.helix.service_callout.…}` header values exactly, dots
+  included.** Each one is the name under which the lookup stored a field; a
+  typo gives an empty header, again with no error.
+
+On the `GET /storefront/orders` route, the lookup is **fail-open**: if the
+profile service is down, the call still reaches the backend, just without the
+headers.
+
+1. **`service-callout` — looks up the tenant's profile.** It calls the profile
+   service and keeps three fields from the reply: the plan, the contact email,
+   and the reply's status code.
+
+   | Field | Value |
+   |---|---|
+   | **uri** | `https://jsonplaceholder.typicode.com/users/1` |
+   | **method** | `GET` |
+   | **phase** | `rewrite` |
+   | **timeout** | `3000` |
+   | **ssl_verify** | `true` |
+   | **error_handling → policy** | `fail-open` |
+
+   ```json
+   {
+     "uri": "https://jsonplaceholder.typicode.com/users/1",
+     "method": "GET",
+     "phase": "rewrite",
+     "timeout": 3000,
+     "ssl_verify": true,
+     "map_response_to_ctx": {
+       "tenant_plan": "body.company.name",
+       "tenant_contact": "body.email",
+       "profile_status": "status"
+     },
+     "error_handling": {
+       "policy": "fail-open"
+     },
+     "keepalive": {
+       "enabled": true,
+       "pool_size": 32,
+       "timeout": 60000
+     }
+   }
+   ```
+
+2. **`proxy-rewrite` — passes the profile on as headers.** It sends the call to
+   `/headers` on the test backend, which echoes back the headers it received,
+   and sets three `X-Tenant-*` headers from the lookup.
+
+   ```json
+   {
+     "uri": "/headers",
+     "headers": {
+       "set": {
+         "X-Tenant-Plan": "${ctx.helix.service_callout.tenant_plan}",
+         "X-Tenant-Contact": "${ctx.helix.service_callout.tenant_contact}",
+         "X-Profile-Status": "${ctx.helix.service_callout.profile_status}"
+       }
+     }
+   }
+   ```
+
+On the `POST /storefront/checkout` route, the lookup is **fail-close**: if the
+profile service can't be reached, the gateway answers HTTP 503 (service
+unavailable) with `tenant profile unavailable`, and the backend is never called.
+Taking an order without knowing the account's status is worse than refusing it.
+
+1. **`service-callout` — the same lookup, refusing to go on without it.** It
+   keeps two fields this time: the plan and the reply's status code.
+
+   | Field | Value |
+   |---|---|
+   | **uri** | `https://jsonplaceholder.typicode.com/users/1` |
+   | **method** | `GET` |
+   | **phase** | `rewrite` |
+   | **timeout** | `3000` |
+   | **ssl_verify** | `true` |
+   | **error_handling → policy** | `fail-close` |
+   | **error_handling → message** | `tenant profile unavailable` |
+
+   ```json
+   {
+     "uri": "https://jsonplaceholder.typicode.com/users/1",
+     "method": "GET",
+     "phase": "rewrite",
+     "timeout": 3000,
+     "ssl_verify": true,
+     "map_response_to_ctx": {
+       "tenant_plan": "body.company.name",
+       "profile_status": "status"
+     },
+     "error_handling": {
+       "policy": "fail-close",
+       "message": "tenant profile unavailable"
+     },
+     "keepalive": {
+       "enabled": true,
+       "pool_size": 32,
+       "timeout": 60000
+     }
+   }
+   ```
+
+2. **`proxy-rewrite` — passes the profile on as headers.** It sends the call to
+   `/post` on the test backend, which echoes back what it received.
+
+   ```json
+   {
+     "uri": "/post",
+     "headers": {
+       "set": {
+         "X-Tenant-Plan": "${ctx.helix.service_callout.tenant_plan}",
+         "X-Profile-Status": "${ctx.helix.service_callout.profile_status}"
+       }
+     }
+   }
+   ```
+
+Each plugin then appears on its route. The optional extra (`request-id`) the
+full spec adds API-wide: [Configuration reference](#configuration-reference).
+
+**Using your own profile service?** In this step, change the callout `uri` to
+your service, and the `map_response_to_ctx` paths to its response shape.
+
+**3. Give it an upstream, then deploy it**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick environment
    `test`, point it at `httpbin.org` (or your own backend), then
    **Create Upstream**.
@@ -64,10 +241,6 @@ to set them up in this walkthrough.
    to map an upstream for `test`. Pick the one you just created, then **Deploy**.
 
 No products, developers or apps are needed: the package ships unauthenticated.
-
-**Using your own profile service?** Before importing, change the callout `uri` in
-the spec to your service, and the `map_response_to_ctx` paths to its response
-shape.
 
 ## Install it directly
 
@@ -164,6 +337,8 @@ exactly as it is.
 ## Configuration reference
 
 Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml).
+[`example/api-spec-basic.yaml`](example/api-spec-basic.yaml) is the same routes
+with no plugins, for adding them yourself.
 
 The read route:
 

@@ -82,8 +82,10 @@ A support agent looks up customers. For the first one in the list:
 
 …and the same for every customer in the list, not only the first.
 
-**Setting this up in the gateway's UI takes two short steps:** import the API,
-then give it an upstream and deploy it. Both masks come with the imported spec.
+**Setting this up in the gateway's UI takes three short steps:** create the
+API (from scratch, or from an OpenAPI spec), add the plugins that mask the reply
+and the logs and point each route at the right backend path, then give it an
+upstream and deploy it.
 [Full click-by-click walkthrough →](guides.md#build-it-in-the-ui)
 
 [Build it any of three ways, then see it work →](guides.md)

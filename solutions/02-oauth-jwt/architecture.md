@@ -120,9 +120,9 @@ each believe they are in charge of identity, and you find out during an incident
 
 ## Where the signing secret lives
 
-The signing secret is written into the spec, in four places: on `POST
-/oauth/token` (where it signs) and on each of the three `/posts` routes (where it
-checks). Two things follow:
+The signing secret is a setting of `helix-auth`, entered in four places (in the
+spec, or in each route's plugin settings): on `POST /oauth/token`, where it
+signs, and on each of the three `/posts` routes, where it checks. Two things follow:
 
 - **All four must be the same value.** If they differ, every newly issued token is
   rejected, and nothing in either plugin block hints that the value is shared.

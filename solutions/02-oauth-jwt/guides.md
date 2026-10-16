@@ -45,24 +45,108 @@ Screen and button names below are the real ones. The API lives under
   `test` environment, which is all this walkthrough needs.
 - **You can create APIs, products and apps.** If you don't see an **Add API**,
   **Add API Product** or **Add App** button, ask your org admin.
-- **You have a signing secret ready** — a long random value. There is no screen
-  for it: it travels inside the spec you import.
+- **You have a signing secret ready** — a long random value, for example from a
+  password generator. You paste it into the plugin settings in step 2.
 
-**1. Put your signing secret into the spec**
-Open [`example/api-spec.yaml`](example/api-spec.yaml) and replace all four
-`<YOUR_JWT_SIGNING_SECRET>` placeholders with your value — the same value in each.
-Keep this filled-in copy out of version control.
+**1. Create the API**
 
-**2. Import the API**
+Pick one of the two ways below. Both give you the same thing: an API called
+`Posts API` with four routes and no plugins yet.
+
+*Option A — from scratch*
+1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
+2. Choose **Create from scratch**. Set **Display name** to `Posts API`, then
+   **Save**.
+3. On the API's page, open **Configuration → Routes** and add four routes:
+   - `POST` `/oauth/token`, the token endpoint
+   - `GET` `/posts`, the list of posts
+   - `POST` `/posts`, create a post
+   - `GET` `/posts/:postId`, one post. The gateway writes a path parameter as
+     `:postId`, not `{postId}`.
+
+*Option B — from an OpenAPI spec*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
 2. Set **Method** to **Import an OpenAPI spec**.
-3. Drag in your edited `api-spec.yaml`, or paste its contents, then click
-   **Import**.
+3. Drag in your own OpenAPI 3.0 file, or use our example,
+   [`example/api-spec-basic.yaml`](example/api-spec-basic.yaml): the same four
+   routes, no plugins. Then click **Import**.
 
-This creates the API and its first revision. The imported spec already carries
-`helix-auth` in *generate* mode on `/oauth/token` and in *validate* mode on the
-three `/posts` routes, plus `request-id` and `cors` across the API. Import does
-**not** bind an upstream or deploy, and nothing warns you if you skip that.
+> **A spec can carry the plugins too.** Add an `x-helix-gateway` block under a
+> path and method, and it covers that route only. This one goes on the token
+> route; the three `/posts` routes get the same block with `mode: validate`:
+>
+> ```yaml
+> /oauth/token:
+>   post:
+>     x-helix-gateway:
+>       plugins:
+>         helix-auth:
+>           mode: generate
+>           token_ttl: 900
+>           signing_secret: "<YOUR_JWT_SIGNING_SECRET>"
+> ```
+>
+> [`example/api-spec.yaml`](example/api-spec.yaml) is this API with all its
+> plugins already in place. Replace its four `<YOUR_JWT_SIGNING_SECRET>`
+> placeholders with your secret, import it, and you can skip step 2. Keep that
+> filled-in copy out of version control.
+
+Either way, the API is not live yet: it has no upstream and isn't deployed.
+That comes in step 3.
+
+**2. Add the plugins**
+
+One plugin, `helix-auth`, does the whole job, set up two ways: on the token
+route it hands out tokens, and on the three `/posts` routes it checks them. Add
+it **before** you deploy: a live revision can't be changed.
+
+Add it **on each route, never across the whole API.** On the API's page, open
+**Configuration → Routes**, open the route, and add the plugin there so it
+applies to that route only. (Adding it under **Configuration → Plugins** would
+cover every route, including `/oauth/token`, and then no caller could ever get a
+first token.) Fill in the settings in the **Properties** form, or switch to the
+**JSON view** and paste them.
+
+**About the signing secret.** Where you see `<YOUR_JWT_SIGNING_SECRET>` below,
+type your own long random value instead. It must be **exactly the same on all
+four routes**: the token route signs with it, and the other three check with it.
+The gateway uses the text exactly as written, so if you leave the placeholder in,
+anyone who has read this page can make tokens your API accepts. Never save the
+real value anywhere it could be shared, such as a code repository.
+
+1. **On `POST /oauth/token`: `helix-auth` hands out tokens.** It checks the
+   app's client id **and** secret, then signs a token that lasts 900 seconds
+   (15 minutes). This route must stay reachable without a token, since a caller
+   has none yet.
+
+   | Field | Value |
+   |---|---|
+   | **mode** | `generate` |
+   | **token_ttl** | `900` |
+   | **signing_secret** | `<YOUR_JWT_SIGNING_SECRET>` |
+
+   ```json
+   {"mode":"generate","token_ttl":900,"signing_secret":"<YOUR_JWT_SIGNING_SECRET>"}
+   ```
+
+2. **On `GET /posts`, `POST /posts` and `GET /posts/:postId`: `helix-auth`
+   checks the token.** A call with no token, an expired one, or one this gateway
+   didn't sign gets HTTP 401 (not authenticated), and never reaches your backend.
+   Add the same settings on each of the three routes.
+
+   | Field | Value |
+   |---|---|
+   | **mode** | `validate` |
+   | **validate_auth_type** | `jwt-auth` |
+   | **signing_secret** | `<YOUR_JWT_SIGNING_SECRET>` |
+
+   ```json
+   {"mode":"validate","validate_auth_type":"jwt-auth","signing_secret":"<YOUR_JWT_SIGNING_SECRET>"}
+   ```
+
+Each route then lists `helix-auth` under its plugins. What every field means, and
+the two optional extras (`request-id`, `cors`) the full spec adds across the API:
+[Configuration reference](#configuration-reference).
 
 **3. Give it an upstream, then deploy it**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick environment
@@ -258,8 +342,9 @@ plugin. That's [solution 01](../01-api-products/).
 
 ## Configuration reference
 
-Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml). Two blocks carry
-the whole solution.
+Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml).
+[`example/api-spec-basic.yaml`](example/api-spec-basic.yaml) is the same routes
+with no plugins, for adding them yourself. Two blocks carry the whole solution.
 
 On the token endpoint, `POST /oauth/token`:
 

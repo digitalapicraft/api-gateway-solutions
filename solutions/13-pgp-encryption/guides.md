@@ -48,26 +48,120 @@ Screen and button names below are the real ones. The API lives under
   partner's armored public key (for outbound). For a first test, one pair can fill
   both. Which key goes where: [Architecture](architecture.md#two-parties-four-key-halves).
 
-**1. Put your keys into a local copy of the spec**
+**1. Create the API**
 
-Copy [`example/api-spec.yaml`](example/api-spec.yaml) and replace
-`<PGP_PRIVATE_KEY>` and `<PGP_PUBLIC_KEY>` with the real armored blocks. The
-gateway uses these values exactly as written — it does not resolve `<ENV:...>` or
-`${...}` — so a placeholder left in place fails at runtime. **Keep the filled-in
-copy out of version control.**
+Pick one of the two ways below. Both give you the same thing: an API called
+`Statements API` with two routes and no plugins yet.
 
-**2. Import the API**
+*Option A — from scratch*
+1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
+2. Choose **Create from scratch**. Set **Display name** to `Statements API`, then
+   **Save**.
+3. On the API's page, open **Configuration → Routes** and add two routes:
+   - `POST` `/statements/inbound`, where the partner sends you an encrypted file
+   - `GET` `/statements/:statementId`, where the partner fetches a statement. The
+     gateway writes a path parameter as `:statementId`, not `{statementId}`.
+
+*Option B — from an OpenAPI spec*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
 2. Set **Method** to **Import an OpenAPI spec**.
-3. Drag in your filled-in copy, or paste its contents, then click **Import**.
+3. Drag in your own OpenAPI 3.0 file, or use our example,
+   [`example/api-spec-basic.yaml`](example/api-spec-basic.yaml): the same two
+   routes, no plugins. Then click **Import**.
 
-This creates the API and its first revision with both routes and their plugins:
-`pgp-crypto` (decrypt on the inbound route, encrypt on the outbound one),
-`proxy-rewrite` on both, and `request-id` API-wide. These settings are carried by
-the imported spec; there is no separate screen to set them on.
+> **A spec can carry the plugins too.** Add an `x-helix-gateway` block that
+> lists them. At the top level of the file it covers every route; under one
+> path and method it covers that route only. This is the inbound route's:
+>
+> ```yaml
+> /statements/inbound:
+>   post:
+>     x-helix-gateway:
+>       plugins:
+>         pgp-crypto:
+>           decrypt:
+>             target: request
+>             source: body
+>             private_key: "<PGP_PRIVATE_KEY>"
+>             passphrase: ""
+>             fail_policy: fail-close
+>             fail_close_status: 400
+>         proxy-rewrite:
+>           uri: /post
+> ```
+>
+> [`example/api-spec.yaml`](example/api-spec.yaml) is this API with all its
+> plugins already in place. To use it, copy it and replace `<PGP_PRIVATE_KEY>`
+> and `<PGP_PUBLIC_KEY>` with your real armored key blocks first, then import
+> your copy and you can skip step 2. **Keep the filled-in copy out of version
+> control.**
 
-Import does **not** bind an upstream or deploy, and nothing warns you if you skip
-that. The routes just never go live.
+Either way, the API is not live yet: it has no upstream and isn't deployed.
+That comes in step 3.
+
+**2. Add the plugins**
+
+These plugins decrypt what your partner sends and encrypt what you send back. Add
+them **before** you deploy: a live revision can't be changed.
+
+Each one goes on one route, not on the whole API. On the API's page, open
+**Configuration → Routes**, open the route, and add the plugin there. Fill in the
+settings in the **Properties** form, or switch to the **JSON view** and paste
+them.
+
+**About the keys.** Replace `<PGP_PRIVATE_KEY>` and `<PGP_PUBLIC_KEY>` with the
+whole armored key block, from `-----BEGIN PGP …-----` to `-----END PGP …-----`.
+The gateway uses the value exactly as written: it does not fill in `<ENV:...>` or
+`${...}`, so a placeholder left in place fails when a request arrives. In the
+JSON view, each line break inside the key is written as `\n`. The two keys are
+not a pair: the private key is yours, the public key is your partner's.
+[Which key goes where](architecture.md#two-parties-four-key-halves).
+
+On the **`POST /statements/inbound`** route:
+
+1. **`pgp-crypto` — decrypts the file your partner sends.** The backend receives
+   the plain file and never sees the encrypted one. If the body can't be
+   decrypted, the caller gets HTTP 400 (a bad request) and the backend is not
+   called.
+
+   ```json
+   {"decrypt":{"target":"request","source":"body","private_key":"<PGP_PRIVATE_KEY>","passphrase":"","fail_policy":"fail-close","fail_close_status":400,"fail_close_message":"request body is not a PGP message this gateway can decrypt"},"max_body_size":1048576,"gpg_timeout_ms":5000}
+   ```
+
+2. **`proxy-rewrite` — sends the request to the right backend path.**
+
+   | Field | Value |
+   |---|---|
+   | **uri** | `/post` |
+
+   ```json
+   {"uri":"/post"}
+   ```
+
+On the **`GET /statements/:statementId`** route:
+
+1. **`pgp-crypto` — encrypts the statement to your partner's key.** It encrypts
+   the whole response body, never one field of it. If the statement can't be
+   encrypted, the caller gets HTTP 500 (a server-side error), never the statement
+   in readable form.
+
+   ```json
+   {"encrypt":{"target":"response","source":"body","public_key":"<PGP_PUBLIC_KEY>","fail_policy":"fail-close","fail_close_status":500,"fail_close_message":"statement could not be encrypted"},"max_body_size":1048576,"gpg_timeout_ms":5000}
+   ```
+
+2. **`proxy-rewrite` — sends the request to the right backend path.**
+
+   | Field | Value |
+   |---|---|
+   | **uri** | `/json` |
+
+   ```json
+   {"uri":"/json"}
+   ```
+
+Each plugin then appears on its route under **Configuration → Routes**. What
+every field means, and the optional extra (`request-id`) the full spec adds:
+[Configuration reference](#configuration-reference).
 
 **3. Give it an upstream, then deploy it**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick environment
@@ -77,8 +171,8 @@ that. The routes just never go live.
    to map an upstream for `test`. Pick the one you just created, then **Deploy**.
 
 The control plane stores the key fields encrypted once supplied, but they still
-travel in the document you import and still appear in the revision you can read
-back.
+appear in the revision you can read back, and in any spec file you import them
+in.
 
 ## Install it directly
 
@@ -235,6 +329,8 @@ If you want the rest of the document intact, encrypt the whole body.
 ## Configuration reference
 
 Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml).
+[`example/api-spec-basic.yaml`](example/api-spec-basic.yaml) is the same routes
+with no plugins, for adding them yourself.
 
 Inbound:
 

@@ -81,16 +81,17 @@ A partner app has a client id and secret. Here is what it sees:
 | The right client id with the wrong secret | `401`, and no token is issued |
 | The same token, 15 minutes later | `401` — it fetches a new one |
 
-**Setting this up in the gateway's UI takes eight short steps:** put your own
-signing secret into the spec, import it, give it an upstream and deploy it, create
-a product and deploy that too, add a developer, create an app for them, then copy
-the app's client id and secret.
+**Setting this up in the gateway's UI takes eight short steps:** create the API
+(from scratch, or from an OpenAPI spec), add the plugin that hands out tokens on
+one route and checks them on the others, with your own signing secret, give it an
+upstream and deploy it, create a product and deploy that too, add a developer,
+create an app for them, then copy the app's client id and secret.
 [Full click-by-click walkthrough →](guides.md#build-it-in-the-ui)
 
 [Build it any of three ways, then see it work →](guides.md)
 
-**One thing you must do:** replace `<YOUR_JWT_SIGNING_SECRET>` in the spec with a
-long random value of your own. The gateway uses that text exactly as written to
+**One thing you must do:** replace `<YOUR_JWT_SIGNING_SECRET>` (in the spec, or
+in the plugin settings) with a long random value of your own. The gateway uses that text exactly as written to
 sign tokens, so if you deploy the placeholder, anyone who has read this page can
 make tokens your API will accept.
 

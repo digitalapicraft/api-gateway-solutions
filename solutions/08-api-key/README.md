@@ -86,9 +86,11 @@ A fleet of terminals calls two routes: `GET /fleet/price-list` and
 | A key that doesn't exist, or belongs to a deleted app | 401, *Invalid API key in request* |
 | Its own key, but in the URL instead of the header | 401 |
 
-**Setting this up in the gateway's UI takes seven short steps:** import the API,
-give it an upstream and deploy it, create a product with the API in it, deploy
-the product, add a developer, create one app per caller, then copy each app's key.
+**Setting this up in the gateway's UI takes eight short steps:** create the API
+(from scratch, or from an OpenAPI spec), add the plugins that check the key and
+point each route at your backend, give it an upstream and deploy it, create a
+product with the API in it, deploy the product, add a developer, create one app
+per caller, then copy each app's key.
 [Full click-by-click walkthrough →](guides.md#build-it-in-the-ui)
 
 [Build it any of three ways, then see it work →](guides.md)

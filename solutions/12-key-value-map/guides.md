@@ -44,35 +44,141 @@ Screen and button names below are the real ones. The API lives under
 - **You have an OpenPGP public key with an encryption subkey** to register. How to
   check one: [See it work](#see-it-work).
 
-**1. Import the API**
+**1. Create the API**
+
+Pick one of the two ways below. Both give you the same thing: an API called
+`Partner Documents API` with two routes and no plugins yet.
+
+*Option A — from scratch*
+1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
+2. Choose **Create from scratch**. Set **Display name** to `Partner Documents API`,
+   then **Save**.
+3. On the API's page, open **Configuration → Routes** and add two routes:
+   - `POST` `/partners/keys`, where an operator registers a partner's public key
+   - `GET` `/partners/documents`, where a partner fetches a document
+
+*Option B — from an OpenAPI spec*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
 2. Set **Method** to **Import an OpenAPI spec**.
-3. Drag in [`example/api-spec.yaml`](example/api-spec.yaml), or paste its
-   contents, then click **Import**.
+3. Drag in your own OpenAPI 3.0 file, or use our example,
+   [`example/api-spec-basic.yaml`](example/api-spec-basic.yaml): the same two
+   routes, no plugins. Then click **Import**.
 
-This creates the API and its first revision with both routes and all their
-plugins: `key-value-map` on both routes, `pgp-crypto` on the document route,
-`proxy-rewrite` on both, and `request-id` API-wide. Nothing in the file needs
-filling in. These plugin settings are carried by the imported spec; there is no
-separate screen to set them on.
+> **A spec can carry the plugins too.** Add an `x-helix-gateway` block that
+> lists them. At the top level of the file it covers every route; under one
+> path and method it covers that route only. This is the document route's:
+>
+> ```yaml
+> /partners/documents:
+>   get:
+>     x-helix-gateway:
+>       plugins:
+>         key-value-map:
+>           fail_action: close
+>           fetch:
+>             keys:
+>               - key: "$request.headers.x-partner-id"
+>         pgp-crypto:
+>           keys_ctx_namespace: key_value_map
+>           encrypt:
+>             target: response
+>             source: body
+>             public_key: "$request.headers.x-partner-id"
+>             fail_policy: fail-close
+>             fail_close_status: 500
+>             fail_close_message: "no usable key is registered for this partner"
+>           max_body_size: 1048576
+> ```
+>
+> [`example/api-spec.yaml`](example/api-spec.yaml) is this API with all its
+> plugins already in place, and nothing in it needs filling in. Import that
+> instead and you can skip step 2.
 
-Import does **not** bind an upstream or deploy, and nothing warns you if you skip
-that. The routes just never go live.
+Either way, the API is not live yet: it has no upstream and isn't deployed.
+That comes in step 3.
 
-**2. Give it an upstream, then deploy it**
+**2. Add the plugins**
+
+These plugins store each partner's key and encrypt each document to the right
+one. Add them **before** you deploy: a live revision can't be changed.
+
+Each one goes on one route, not on the whole API. On the API's page, open
+**Configuration → Routes**, open the route, and add the plugin there. Fill in the
+settings in the **Properties** form, or switch to the **JSON view** and paste
+them.
+
+Keep every value that starts with `$` exactly as written, such as
+`$request.headers.x-partner-id`. It is not a placeholder for you to fill in: the
+gateway reads it from each request as it arrives, so the partner id in the
+`X-Partner-Id` header picks the entry.
+
+On the **`POST /partners/keys`** route:
+
+1. **`key-value-map` — stores the partner's key.** It saves the `public_key`
+   from the request body under the partner id. Sending the same id again
+   replaces the key, so rotating a key needs no deploy. If the store can't be
+   written, the request fails rather than pretending it worked.
+
+   ```json
+   {"fail_action":"close","inserts":[{"key":"$request.headers.x-partner-id","value":"$request.body.public_key"}]}
+   ```
+
+2. **`proxy-rewrite` — sends the request to the right backend path.**
+
+   | Field | Value |
+   |---|---|
+   | **uri** | `/post` |
+
+   ```json
+   {"uri":"/post"}
+   ```
+
+On the **`GET /partners/documents`** route:
+
+1. **`key-value-map` — looks up the calling partner's key.** It fetches the
+   entry stored under the partner id, ready for the next plugin to use.
+
+   ```json
+   {"fail_action":"close","fetch":{"keys":[{"key":"$request.headers.x-partner-id"}]}}
+   ```
+
+2. **`pgp-crypto` — encrypts the document to that key.** It uses the same `$`
+   reference as the lookup, so it reads the same partner's key. If no usable key
+   is registered for the partner, the caller gets HTTP 500 (a server-side error)
+   with a short message, never the document in readable form.
+
+   ```json
+   {"keys_ctx_namespace":"key_value_map","encrypt":{"target":"response","source":"body","public_key":"$request.headers.x-partner-id","fail_policy":"fail-close","fail_close_status":500,"fail_close_message":"no usable key is registered for this partner"},"max_body_size":1048576}
+   ```
+
+3. **`proxy-rewrite` — sends the request to the right backend path.**
+
+   | Field | Value |
+   |---|---|
+   | **uri** | `/json` |
+
+   ```json
+   {"uri":"/json"}
+   ```
+
+Each plugin then appears on its route under **Configuration → Routes**. What
+every field means, and the optional extra (`request-id`) the full spec adds:
+[Configuration reference](#configuration-reference).
+
+**3. Give it an upstream, then deploy it**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick environment
    `test`, point it at `httpbin.org`, then **Create Upstream**. If an `httpbin`
    upstream already exists in your org, reuse it.
 2. Back on the API's page, click **Deploy** on the revision. The dialog asks you
    to map an upstream for `test`. Pick the one you just created, then **Deploy**.
 
-**3. Register a partner's key**
+**4. Register a partner's key**
 
 There is no screen for this, and no control-plane API either: on this build, the
 registration route is the only way to write an entry. Send the request from
 [See it work](#see-it-work).
 
-**4. Protect the registration route before real use**
+**5. Protect the registration route before real use**
 
 As shipped it is open to anyone who can reach it. Add authentication to
 `/partners/keys` only, as in [solution 08](../08-api-key/), and restrict it to
@@ -211,6 +317,8 @@ this package does not change.
 ## Configuration reference
 
 Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml).
+[`example/api-spec-basic.yaml`](example/api-spec-basic.yaml) is the same routes
+with no plugins, for adding them yourself.
 
 Registration — the value comes from the **request body**, never from this file:
 

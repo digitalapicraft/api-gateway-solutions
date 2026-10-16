@@ -79,9 +79,11 @@ sees the profile service's value. If the profile service is down, the read route
 still reaches the backend — without the headers — while `POST /storefront/checkout`
 returns 503 with `tenant profile unavailable`.
 
-**Setting this up in the gateway's UI takes two short steps:** import the API,
-then give it an upstream and deploy it. The callout and the headers come with the
-imported spec. [Full click-by-click walkthrough →](guides.md#build-it-in-the-ui)
+**Setting this up in the gateway's UI takes three short steps:** create the
+API (from scratch, or from an OpenAPI spec), add the plugins that look up the
+tenant's profile and pass it to the backend as headers, then give it an upstream
+and deploy it.
+[Full click-by-click walkthrough →](guides.md#build-it-in-the-ui)
 
 [Build it any of three ways, then see it work →](guides.md)
 

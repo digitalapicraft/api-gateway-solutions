@@ -79,8 +79,9 @@ moments later the event is on your Kafka topic, carrying that same id. A POST
 missing `event_id` gets a 400 and nothing is published.
 
 **Setting this up in the gateway's UI takes four short steps:** create the Kafka
-topic, put your broker and topic into the spec file, import it, then give the API
-an upstream and deploy it.
+topic, create the API (from scratch, or from an OpenAPI spec), add the three
+plugins that check the event, answer the caller and publish to your broker and
+topic, then give the API an upstream and deploy it.
 [Full click-by-click walkthrough →](guides.md#build-it-in-the-ui)
 
 [Build it any of three ways, then see it work →](guides.md)

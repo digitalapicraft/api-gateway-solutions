@@ -1,0 +1,41 @@
+# Solution 13 — OpenPGP at the edge: the basic example spec.
+#
+# Two routes and nothing else: no plugins. Import this when you want to add the
+# plugins yourself in the UI, so you see what each one does. The walkthrough is
+# ../guides.md, "Build it in the UI".
+#
+# The same API with the plugins already in it is api-spec.yaml, next to this file.
+#
+# Until you add the plugins, nothing is decrypted or encrypted: these routes only
+# pass requests on to the upstream. No key material appears in this file.
+
+openapi: 3.0.3
+
+info:
+  title: Statements API
+  version: 1.0.0
+  description: >-
+    The two directions of a partner integration: the partner posts an instruction
+    file, and the backend returns a statement. Add the plugins yourself to decrypt
+    what arrives and encrypt what leaves.
+
+paths:
+  /statements/inbound:
+    post:
+      summary: Accept an instruction file
+      requestBody:
+        required: true
+        content:
+          text/plain:
+            schema:
+              type: string
+      responses:
+        '200': { description: The backend's response }
+
+  /statements/{statementId}:
+    get:
+      summary: Return a statement
+      parameters:
+        - { name: statementId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: The statement }

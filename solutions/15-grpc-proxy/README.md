@@ -84,9 +84,10 @@ so a quota counts connections, not messages; and **a refusal is a plain HTTP
 response**, which gRPC clients report as a confusing transport error.
 [Why →](architecture.md#one-stream-is-one-request)
 
-**Setting this up takes five short steps:** create an upstream whose scheme is
-`grpc`, import the API, deploy it with that upstream, then create a product, a
-developer and an app, and copy the app's key.
+**Setting this up in the gateway's UI takes seven short steps:** create the API
+(from scratch, or from an OpenAPI spec), add the plugin that checks each caller's
+key, create an upstream whose scheme is `grpc` and deploy the API with it, then
+create a product, a developer and an app, and copy the app's key.
 [Full click-by-click walkthrough →](guides.md#build-it-in-the-ui)
 
 [Build it any of three ways, then see it work →](guides.md)

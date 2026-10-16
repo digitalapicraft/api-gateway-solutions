@@ -86,8 +86,10 @@ One format detail catches everyone: the file travels as **base64 of the
 ASCII-armored message**, not the armored message itself, in both directions. Tell
 your partner that up front. [How →](guides.md#the-note-to-send-your-partner)
 
-**Setting this up in the gateway's UI takes three short steps:** put your keys into
-a local copy of the spec, import it, then give it an upstream and deploy it.
+**Setting this up in the gateway's UI takes three short steps:** create the API
+(from scratch, or from an OpenAPI spec), add the plugins that decrypt what
+arrives and encrypt what leaves, with your keys in them, then give it an upstream
+and deploy it.
 [Full click-by-click walkthrough →](guides.md#build-it-in-the-ui)
 
 [Build it any of three ways, then see it work →](guides.md)

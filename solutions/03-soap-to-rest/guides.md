@@ -51,23 +51,92 @@ under **API Gateway** in the left sidebar.
 - **Your SOAP service is reachable from the gateway**, and you know its handler
   path.
 
-**1. Put your handler path into the spec**
-Open [`example/api-spec.yaml`](example/api-spec.yaml) and replace
-`<SOAP_HANDLER_PATH>` with your handler's path. If your handler needs a
-`SOAPAction` header, add it under `proxy-rewrite` now — see
-[Troubleshooting](#troubleshooting). There is no screen for either; they travel
-inside the spec you import.
+**1. Create the API**
 
-**2. Import the API**
+Pick one of the two ways below. Both give you the same thing: an API called
+`Partner Locations API` with one route and no plugins yet.
+
+*Option A — from scratch*
+1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
+2. Choose **Create from scratch**. Set **Display name** to
+   `Partner Locations API`, then **Save**.
+3. On the API's page, open **Configuration → Routes** and add one route:
+   - `POST` `/locations`, the JSON lookup partners call
+
+*Option B — from an OpenAPI spec*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
 2. Set **Method** to **Import an OpenAPI spec**.
-3. Drag in your edited `api-spec.yaml`, or paste its contents, then click
-   **Import**.
+3. Drag in your own OpenAPI 3.0 file, or use our example,
+   [`example/api-spec-basic.yaml`](example/api-spec-basic.yaml): the same
+   route, no plugins. Then click **Import**.
 
-This creates the API and its first revision. The imported spec already carries
-`proxy-rewrite` and `xml-to-json` (both directions on) on `/locations`, plus
-`request-id` and `cors` across the API. Import does **not** bind an upstream or
-deploy, and nothing warns you if you skip that.
+> **A spec can carry the plugins too.** Add an `x-helix-gateway` block under a
+> path and method, and it covers that route only:
+>
+> ```yaml
+> /locations:
+>   post:
+>     x-helix-gateway:
+>       plugins:
+>         proxy-rewrite:
+>           uri: <SOAP_HANDLER_PATH>
+>         xml-to-json:
+>           transform_request: true
+>           transform_response: true
+> ```
+>
+> [`example/api-spec.yaml`](example/api-spec.yaml) is this API with all its
+> plugins already in place. Replace its `<SOAP_HANDLER_PATH>` with your
+> handler's path, import it, and you can skip step 2.
+
+Either way, the API is not live yet: it has no upstream and isn't deployed.
+That comes in step 3.
+
+**2. Add the plugins**
+
+Two plugins do the translation, both on the `POST /locations` route only. Add
+them **before** you deploy: a live revision can't be changed.
+
+On the API's page, open **Configuration → Routes**, open `POST /locations`, and
+add each plugin there so it applies to that route only. Fill in the settings in
+the **Properties** form, or switch to the **JSON view** and paste them.
+
+1. **`proxy-rewrite` — sends the call to your SOAP handler.** Partners call
+   `/locations`; your handler answers on its own path. Replace
+   `<SOAP_HANDLER_PATH>` with that path, for example `/Service.asmx`.
+
+   | Field | Value |
+   |---|---|
+   | **uri** | `<SOAP_HANDLER_PATH>` |
+
+   ```json
+   {"uri":"<SOAP_HANDLER_PATH>"}
+   ```
+
+   **Set the path only. Do not set a `Content-Type` header here**, even though
+   your handler wants XML. This plugin runs before the conversion, so it would
+   relabel the JSON body before `xml-to-json` looks at it, and the body would
+   never be converted. If your handler needs a `SOAPAction` header, that one is
+   safe to add here — see [Troubleshooting](#troubleshooting).
+
+2. **`xml-to-json` — converts in both directions.** It turns the partner's JSON
+   body into XML on the way in, and the handler's XML reply into JSON on the way
+   out. Converting the request is **off by default**, so `transform_request` must
+   be set. The reply is converted only when the caller sends
+   `Accept: application/json`.
+
+   | Field | Value |
+   |---|---|
+   | **transform_request** | `true` |
+   | **transform_response** | `true` |
+
+   ```json
+   {"transform_request":true,"transform_response":true}
+   ```
+
+The route then lists both plugins. What every field means, and the two optional
+extras (`request-id`, `cors`) the full spec adds across the API:
+[Configuration reference](#configuration-reference).
 
 **3. Point an upstream at your SOAP service, then deploy**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick environment
@@ -245,8 +314,10 @@ covered in [solution 04](../04-analytics/).
 
 ## Configuration reference
 
-Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml). Two blocks on
-`POST /locations` carry the translation:
+Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml).
+[`example/api-spec-basic.yaml`](example/api-spec-basic.yaml) is the same route
+with no plugins, for adding them yourself. Two blocks on `POST /locations` carry
+the translation:
 
 ```yaml
 # 1. path only — NO Content-Type setting (it runs before the conversion and defeats it)

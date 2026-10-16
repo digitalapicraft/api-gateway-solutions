@@ -51,32 +51,121 @@ Screen and button names below are the real ones. The API lives under
 - **You can create APIs, products and apps.** If you don't see an **Add API**,
   **Add API Product** or **Add App** button, ask your org admin.
 
-**1. Import the API**
+**1. Create the API**
+
+Pick one of the two ways below. Both give you the same thing: an API called
+`Partner Albums API` with two routes and no plugins yet.
+
+*Option A — from scratch*
+1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
+2. Choose **Create from scratch**. Set **Display name** to `Partner Albums API`,
+   then **Save**.
+3. On the API's page, open **Configuration → Routes** and add two routes:
+   - `POST /albums`, which sends in an event with a JSON body
+   - `GET /albums/:albumId`, which reads one event back. The gateway writes a
+     path parameter as `:albumId`, not `{albumId}`.
+
+*Option B — from an OpenAPI spec*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
 2. Set **Method** to **Import an OpenAPI spec**.
-3. Drag in [`example/api-spec.yaml`](example/api-spec.yaml), or paste its
-   contents, then click **Import**.
+3. Drag in your own OpenAPI 3.0 file, or use our example,
+   [`example/api-spec-basic.yaml`](example/api-spec-basic.yaml): the same two
+   routes, no plugins. Then click **Import**.
 
-There is **nothing to fill in first**: the spec contains no secret and no
-placeholder. It already carries `hmac-auth` on each route, with the settings in
-the [Configuration reference](#configuration-reference), plus `request-id`
-API-wide. There is no separate screen to set these up; they come in with the spec.
-Import does **not** bind an upstream or deploy, and nothing warns you if you skip
-that.
+> **A spec can carry the plugins too.** Add an `x-helix-gateway` block that
+> lists them. At the top level of the file it covers every route; under one
+> path and method it covers that route only. Signing goes on each route here,
+> because each route signs a different set of headers:
+>
+> ```yaml
+> paths:
+>   /albums:
+>     post:
+>       x-helix-gateway:
+>         plugins:
+>           hmac-auth:
+>             signed_headers: ["@request-target", "date", "digest"]
+>             validate_request_body: true
+> ```
+>
+> [`example/api-spec.yaml`](example/api-spec.yaml) is this API with all its
+> plugins already in place, on both routes. It contains no secret and no
+> placeholder. Import that instead and you can skip step 2.
 
-**2. Give it an upstream, then deploy it**
+Either way, the API is not live yet: it has no upstream and isn't deployed.
+That comes in step 3.
+
+**2. Add the plugins**
+
+One plugin, `hmac-auth`, makes each route accept only signed requests. Add it
+**before** you deploy: a live revision can't be changed.
+
+`hmac-auth` goes on **each route separately**, not on the whole API, because
+the two routes check different things. Open the route under
+**Configuration → Routes** and add the plugin there. (Adding a plugin under
+**Configuration → Plugins** with **Add plugin** would apply it to every route.)
+Fill in the settings in the **Properties** form, or switch to the **JSON view**
+and paste them.
+
+There is **no secret to type in here**. The secret lives on the app you create
+in step 7, and the gateway looks it up from the key id each request carries.
+
+1. **`hmac-auth` on `POST /albums` — checks the signature, and that the body
+   wasn't changed.** The caller signs the method, the path, the `Date` header and
+   a fingerprint of the body (the `Digest` header). If any of these was altered
+   on the way, or the signature is missing, wrong or too old, the call gets
+   HTTP 401 (not authenticated) and never reaches your upstream.
+
+   | Field | Value |
+   |---|---|
+   | **signed_headers** | `@request-target`, `date`, `digest` |
+   | **validate_request_body** | `true` |
+   | **clock_skew** | `300` |
+   | **allowed_algorithms** | `hmac-sha256`, `hmac-sha512` |
+   | **hide_credentials** | `true` |
+   | **realm** | `partner-events` |
+
+   ```json
+   {"signed_headers":["@request-target","date","digest"],"validate_request_body":true,"clock_skew":300,"allowed_algorithms":["hmac-sha256","hmac-sha512"],"hide_credentials":true,"realm":"partner-events"}
+   ```
+
+2. **`hmac-auth` on `GET /albums/:albumId` — checks the signature.** A read has
+   no body, so the signature covers only the method, the path and the `Date`
+   header, and there is no body check.
+
+   | Field | Value |
+   |---|---|
+   | **signed_headers** | `@request-target`, `date` |
+   | **validate_request_body** | `false` |
+   | **clock_skew** | `300` |
+   | **allowed_algorithms** | `hmac-sha256`, `hmac-sha512` |
+   | **hide_credentials** | `true` |
+   | **realm** | `partner-events` |
+
+   ```json
+   {"signed_headers":["@request-target","date"],"validate_request_body":false,"clock_skew":300,"allowed_algorithms":["hmac-sha256","hmac-sha512"],"hide_credentials":true,"realm":"partner-events"}
+   ```
+
+Don't leave `signed_headers` out on either route: without it the caller decides
+what its own signature covers, and the route is effectively open.
+
+Each plugin then appears on its route. What every field means, and the optional
+extra (`request-id`) the full spec adds:
+[Configuration reference](#configuration-reference).
+
+**3. Give it an upstream, then deploy it**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick environment
    `test`, point it at `jsonplaceholder.typicode.com` (or your own host), then
    **Create Upstream**.
 2. Back on the API's page, click **Deploy** on the revision. The dialog asks you
    to map an upstream for `test`. Pick the one you just created, then **Deploy**.
 
-**3. Create the product**
+**4. Create the product**
 1. Go to **API Distribution → API Products**, click **Add API Product**.
 2. Under **Basic Information**, set **Display Name** to `Partner Albums API`.
 3. Under **APIs**, click **Add API**, select your API, then **Continue**.
 4. Under **Authentication Methods**, pick **`hmac-auth`**. Left blank, it defaults
-   to `helix-auth`, and the app you create in step 6 is then rejected.
+   to `helix-auth`, and the app you create in step 7 is then rejected.
 5. Under **Quota**, turn on **Enable request quota** and enter the values from
    [`example/products.json`](example/products.json) (10,000 requests per hour).
    Every product needs a quota, even though this solution does not enforce it.
@@ -85,20 +174,20 @@ that.
 The product is here only because it is how an app gets a credential. Its quota is
 not enforced unless you add the quota check (see [Variations](#variations)).
 
-**4. Deploy the product**
+**5. Deploy the product**
 On the product's page, click **Deploy**, pick `test`, then **Deploy** again. This
-is a different deploy from step 2. The product needs its own.
+is a different deploy from step 3. The product needs its own.
 
-**5. Create a developer**
+**6. Create a developer**
 Go to **API Distribution → Developers**, click **Add Developer**, fill in the
 partner's name and email, then **Add**.
 
-**6. Create an app for that developer**
+**7. Create an app for that developer**
 Go to **API Distribution → Apps**, click **Add App**. Pick the **Environment** and
 the **Developer**, add the product, pick **`hmac-auth`** as the authentication
 method and let credentials auto-generate, then **Create App**.
 
-**7. Get the `key_id` and `secret_key`**
+**8. Get the `key_id` and `secret_key`**
 On the app's page, open **Credentials**. The `secret_key` is returned **once**,
 when the credentials are generated, and stored encrypted after that. Copy both
 values then. If you don't see the secret, create the app through
@@ -276,7 +365,9 @@ Create a second app for the same partner, move them to it, then delete the first
 
 Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml) for the routes
 and plugins, plus the product in [`example/products.json`](example/products.json).
-Each route carries its own `hmac-auth` block:
+[`example/api-spec-basic.yaml`](example/api-spec-basic.yaml) is the same routes
+with no plugins, for adding them yourself. Each route carries its own
+`hmac-auth` block:
 
 ```yaml
 # POST /albums — the signature must also cover the body

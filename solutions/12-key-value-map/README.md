@@ -78,9 +78,10 @@ Say you send statements to partners, each encrypted to that partner's own key:
 
 No revision, no route change and no deploy at any step.
 
-**Setting this up in the gateway's UI takes two short steps:** import the API,
-then give it an upstream and deploy it. After that you register each partner's key
-with one request. Before this goes anywhere real, put authentication in front of
+**Setting this up in the gateway's UI takes three short steps:** create the API
+(from scratch, or from an OpenAPI spec), add the plugins that store each
+partner's key and encrypt each document to it, then give it an upstream and
+deploy it. After that you register each partner's key with one request. Before this goes anywhere real, put authentication in front of
 the registration route.
 [Full click-by-click walkthrough →](guides.md#build-it-in-the-ui)
 

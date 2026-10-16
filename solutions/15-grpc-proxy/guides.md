@@ -50,32 +50,100 @@ Screen and button names below are the real ones. The API lives under
   **Add API Product** or **Add App** button, ask your org admin.
 - **You have a gRPC backend the gateway can reach**, and know its host and port.
 
-**1. Create the gRPC upstream**
+**1. Create the API**
 
-Go to **API Gateway → Upstreams → Add Upstream**. Name it (for example
-`timing-grpc`), pick environment `test`, point it at your gRPC backend's host and
-port, then **Create Upstream**.
+Pick one of the two ways below. Both give you the same thing: an API called
+`Timing Unit Stream API` with five routes and no plugins yet.
 
-The upstream's scheme must be `grpc` (or `grpcs` for a TLS backend). This guide
-has not confirmed a scheme choice on that screen. If you don't see one, create the
-upstream with the API call in [Install it directly](#install-it-directly), step 2,
-then carry on here.
+*Option A — from scratch*
+1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
+2. Choose **Create from scratch**. Set **Display name** to
+   `Timing Unit Stream API`, then **Save**.
+3. On the API's page, open **Configuration → Routes** and add five routes, all
+   with method `POST`. Each path is a gRPC method path, written
+   `/<package>.<Service>/<Method>`, because every gRPC call is a `POST` to one:
+   - `/timing.TimingUnit/Ping`, a quick one-off health check
+   - `/timing.TimingUnit/Status`, the long-lived status stream
+   - `/timing.TimingUnit/Commands`, the long-lived command stream
+   - `/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo` and
+     `/grpc.reflection.v1.ServerReflection/ServerReflectionInfo`, which let a
+     client discover the service's methods. Add **both**: a client tries `v1`
+     first and only falls back to `v1alpha` if `v1` answers cleanly.
 
-**2. Import the API**
+*Option B — from an OpenAPI spec*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
 2. Set **Method** to **Import an OpenAPI spec**.
-3. Drag in [`example/api-spec.yaml`](example/api-spec.yaml), or paste its
-   contents, then click **Import**.
+3. Drag in your own OpenAPI 3.0 file, or use our example,
+   [`example/api-spec-basic.yaml`](example/api-spec-basic.yaml): the same five
+   routes, no plugins. Then click **Import**.
 
-This creates the API with five routes — `Ping`, `Status`, `Commands` and both
-reflection versions — each carrying `helix-auth` (validate, key-auth, key read
-from `X-Unit-Key`), plus `request-id` API-wide. These settings are carried by the
-imported spec; there is no separate screen to set them on.
+> **A spec can carry the plugins too.** Add an `x-helix-gateway` block that
+> lists them. At the top level of the file it covers every route; under one
+> path and method it covers that route only. This is one route's:
+>
+> ```yaml
+> /timing.TimingUnit/Ping:
+>   post:
+>     x-helix-gateway:
+>       plugins:
+>         helix-auth:
+>           mode: validate
+>           validate_auth_type: key-auth
+>           apikey: { source: header, key: X-Unit-Key }
+> ```
+>
+> [`example/api-spec.yaml`](example/api-spec.yaml) is this API with all its
+> plugins already in place. Import that instead and you can skip step 2.
 
-**3. Deploy it with the gRPC upstream**
+Either way, the API is not live yet: it has no upstream and isn't deployed.
+That comes in step 3.
 
-Back on the API's page, click **Deploy** on the revision. The dialog asks you to
-map an upstream for `test`. Pick the gRPC upstream from step 1, then **Deploy**.
+**2. Add the plugins**
+
+One plugin checks every caller. Add it **before** you deploy: a live revision
+can't be changed.
+
+It goes on each of the five routes, the same way every time. On the API's page,
+open **Configuration → Routes**, open the route, and add the plugin there. Fill
+in the settings in the **Properties** form, or switch to the **JSON view** and
+paste them.
+
+On **every route** (`Ping`, `Status`, `Commands` and both reflection routes):
+
+1. **`helix-auth` — checks who is calling.** It reads the app's key from the
+   `X-Unit-Key` gRPC metadata once, when the call or stream opens. A missing or
+   unknown key gets HTTP 401 (not authenticated) before the backend is contacted.
+
+   | Field | Value |
+   |---|---|
+   | **mode** | `validate` |
+   | **validate_auth_type** | `key-auth` |
+   | **apikey → source** | `header` |
+   | **apikey → key** | `X-Unit-Key` |
+
+   ```json
+   {"mode":"validate","validate_auth_type":"key-auth","apikey":{"source":"header","key":"X-Unit-Key"}}
+   ```
+
+Don't add a plugin that reads or changes the message body on these routes: a
+streaming route can't carry one.
+
+Each plugin then appears on its route under **Configuration → Routes**. What
+every field means, and the optional extra (`request-id`) the full spec adds:
+[Configuration reference](#configuration-reference).
+
+**3. Create the gRPC upstream, then deploy it**
+1. Go to **API Gateway → Upstreams → Add Upstream**. Name it (for example
+   `timing-grpc`), pick environment `test`, point it at your gRPC backend's host
+   and port, then **Create Upstream**.
+
+   The upstream's scheme must be `grpc` (or `grpcs` for a TLS backend). This
+   guide has not confirmed a scheme choice on that screen. If you don't see one,
+   create the upstream with the API call in
+   [Install it directly](#install-it-directly), step 2, then carry on here.
+2. Back on the API's page, click **Deploy** on the revision. The dialog asks you
+   to map an upstream for `test`. Pick the gRPC upstream you just created, then
+   **Deploy**.
 
 **4. Create a product for it**
 1. Go to **API Distribution → API Products**, click **Add API Product**.
@@ -245,6 +313,8 @@ cannot do per-message billing.
 
 Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml) for the routes
 and plugins, plus the upstream object, which the spec cannot carry.
+[`example/api-spec-basic.yaml`](example/api-spec-basic.yaml) is the same routes
+with no plugins, for adding them yourself.
 
 Every route — `Ping`, `Status`, `Commands` and both reflection versions — carries
 the same block:

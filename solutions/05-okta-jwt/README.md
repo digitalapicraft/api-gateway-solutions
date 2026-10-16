@@ -74,9 +74,11 @@ Say you have a partner albums API and Okta already knows your partners' apps.
 | A forged or unsigned token | 401 |
 | A real token from a *different* Okta authorization server | 401 |
 
-**Setting this up in the gateway's UI takes four short steps:** check the
-`openid-connect` plugin is in your org, fill your four Okta values into the
-example spec, import it, then give it an upstream and deploy it.
+**Setting this up in the gateway's UI takes four short steps,** once you have
+checked the `openid-connect` plugin is in your org: create the API (from scratch,
+or from an OpenAPI spec), add the plugin that checks Okta's tokens with your four
+Okta values, give it an upstream and deploy it, then get a token from Okta and
+call the API.
 [Full click-by-click walkthrough →](guides.md#build-it-in-the-ui)
 
 [Build it any of three ways, then see it work →](guides.md)

@@ -83,9 +83,11 @@ The example API has two routes on a public test backend:
 | `GET /catalog/items` with `Accept: application/xml` | The backend's XML, untouched |
 | `POST /catalog/orders` with a JSON body | The backend receives `<order xmlns="urn:example:catalog">…</order>` |
 
-**Setting this up in the gateway's UI takes two short steps:** import the API,
-then give it an upstream and deploy it. The conversion settings come with the
-imported spec. [Full click-by-click walkthrough →](guides.md#build-it-in-the-ui)
+**Setting this up in the gateway's UI takes three short steps:** create the
+API (from scratch, or from an OpenAPI spec), add the plugins that convert
+between XML and JSON and point each route at the right backend path, then give
+it an upstream and deploy it.
+[Full click-by-click walkthrough →](guides.md#build-it-in-the-ui)
 
 [Build it any of three ways, then see it work →](guides.md)
 

@@ -80,10 +80,11 @@ records, so the paths say "albums".)
 | A signature dated 20 minutes ago | 401 |
 | The exact same signed request again, within 300 seconds | 201 — accepted again (see [Architecture](architecture.md#limits-worth-knowing)) |
 
-**Setting this up in the gateway's UI takes six short steps:** import the API,
-give it an upstream and deploy it, create a product that uses `hmac-auth`, deploy
-the product, add a developer, then create an app to get its `key_id` and
-`secret_key`.
+**Setting this up in the gateway's UI takes eight short steps:** create the
+API (from scratch, or from an OpenAPI spec), add the signing plugin to each
+route, give it an upstream and deploy it, create a product that uses
+`hmac-auth`, deploy the product, add a developer, create an app for them, then
+copy the app's `key_id` and `secret_key`.
 [Full click-by-click walkthrough →](guides.md#build-it-in-the-ui)
 
 [Build it any of three ways, then see it work →](guides.md)

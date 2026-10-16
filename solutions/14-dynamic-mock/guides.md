@@ -46,21 +46,140 @@ Screen and button names below are the real ones. The API lives under
 - **The environment has the key-value store available.** It is infrastructure this
   spec uses, not something it creates.
 
-**1. Import the API**
+**1. Create the API**
+
+Pick one of the two ways below. Both give you the same thing: an API called
+`Partner Sandbox API` with three routes and no plugins yet.
+
+*Option A — from scratch*
+1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
+2. Choose **Create from scratch**. Set **Display name** to `Partner Sandbox API`,
+   then **Save**.
+3. On the API's page, open **Configuration → Routes** and add three routes:
+   - `POST` `/sandbox/partners`, where an operator registers a partner's values
+   - `GET` `/sandbox/profile`, which answers a partner with their own values
+   - `GET` `/sandbox/diagnostics`, a teaching route that shows how a stored value
+     is referenced
+
+*Option B — from an OpenAPI spec*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
 2. Set **Method** to **Import an OpenAPI spec**.
-3. Drag in [`example/api-spec.yaml`](example/api-spec.yaml), or paste its
-   contents, then click **Import**.
+3. Drag in your own OpenAPI 3.0 file, or use our example,
+   [`example/api-spec-basic.yaml`](example/api-spec-basic.yaml): the same three
+   routes, no plugins. Then click **Import**.
 
-This creates the API and its first revision with all three routes, each carrying
-`key-value-map` and `mocking`, plus `request-id` and `cors` API-wide. These plugin
-settings are carried by the imported spec; there is no separate screen to set them
-on.
+> **A spec can carry the plugins too.** Add an `x-helix-gateway` block that
+> lists them. At the top level of the file it covers every route; under one
+> path and method it covers that route only. This is the profile route's:
+>
+> ```yaml
+> /sandbox/profile:
+>   get:
+>     x-helix-gateway:
+>       plugins:
+>         key-value-map:
+>           fail_action: close
+>           fetch:
+>             keys:
+>               - key: "tier:$request.headers.x-partner-id"
+>                 alias: tier
+>               - key: "settlement:$request.headers.x-partner-id"
+>                 alias: settlement
+>         mocking:
+>           content_type: application/json
+>           response_headers:
+>             X-Partner-Tier: "$ctx.helix.key_value_map.tier"
+>           response_example: |-
+>             {"partner":"$http_x_partner_id","tier":"$ctx.helix.key_value_map.tier","settlement":"$ctx.helix.key_value_map.settlement"}
+> ```
+>
+> [`example/api-spec.yaml`](example/api-spec.yaml) is this API with all its
+> plugins already in place. Import that instead and you can skip step 2.
 
-Import does **not** bind an upstream or deploy, and nothing warns you if you skip
-that. The routes just never go live.
+Either way, the API is not live yet: it has no upstream and isn't deployed.
+That comes in step 3.
 
-**2. Give it an upstream, then deploy it**
+**2. Add the plugins**
+
+Two plugins on each route turn it into a sandbox: `key-value-map` stores or looks
+up the partner's values, and `mocking` answers the request with them, so no
+backend is ever called. Add them **before** you deploy: a live revision can't be
+changed.
+
+Each one goes on one route, not on the whole API. On the API's page, open
+**Configuration → Routes**, open the route, and add the plugin there. Fill in the
+settings in the **Properties** form, or switch to the **JSON view** and paste
+them.
+
+Keep every value that starts with `$` exactly as written. They are not
+placeholders for you to fill in: the gateway reads them as each request arrives.
+`$request.headers.x-partner-id` is the caller's partner id, and
+`$ctx.helix.key_value_map.tier` is the value just stored or looked up. Write the
+second kind with a bare `$` and no braces: `${...}` around it always comes out
+empty. A hyphen ends that kind of reference, so keep the names in it to letters,
+digits and underscores.
+
+On the **`POST /sandbox/partners`** route:
+
+1. **`key-value-map` — stores the partner's values.** It saves the tier and the
+   settlement account from the request headers under the partner id, for one day
+   (86400 seconds). Registering the same id again replaces them.
+
+   ```json
+   {"fail_action":"close","inserts":[{"key":"tier:$request.headers.x-partner-id","value":"$request.headers.x-tier","ttl":86400},{"key":"settlement:$request.headers.x-partner-id","value":"$request.headers.x-settlement-account","ttl":86400}]}
+   ```
+
+2. **`mocking` — answers with what was stored.** The caller gets HTTP 202
+   (accepted) and the stored values back.
+
+   | Field | Value |
+   |---|---|
+   | **response_status** | `202` |
+   | **content_type** | `application/json` |
+   | **response_example** | `{"registered":true,"stored":$ctx.helix.key_value_map.inserted}` |
+
+   ```json
+   {"response_status":202,"content_type":"application/json","response_example":"{\"registered\":true,\"stored\":$ctx.helix.key_value_map.inserted}"}
+   ```
+
+On the **`GET /sandbox/profile`** route:
+
+1. **`key-value-map` — looks up the calling partner's values.** `alias` gives each
+   value a fixed name (`tier`, `settlement`), so the next plugin can refer to it
+   whichever partner is calling.
+
+   ```json
+   {"fail_action":"close","fetch":{"keys":[{"key":"tier:$request.headers.x-partner-id","alias":"tier"},{"key":"settlement:$request.headers.x-partner-id","alias":"settlement"}]}}
+   ```
+
+2. **`mocking` — answers with that partner's profile.** It also puts the tier in
+   an `X-Partner-Tier` response header.
+
+   ```json
+   {"content_type":"application/json","response_headers":{"X-Partner-Tier":"$ctx.helix.key_value_map.tier"},"response_example":"{\"partner\":\"$http_x_partner_id\",\"tier\":\"$ctx.helix.key_value_map.tier\",\"settlement\":\"$ctx.helix.key_value_map.settlement\"}"}
+   ```
+
+On the **`GET /sandbox/diagnostics`** route:
+
+1. **`key-value-map` — looks up the calling partner's tier.**
+
+   ```json
+   {"fail_action":"close","fetch":{"keys":[{"key":"tier:$request.headers.x-partner-id","alias":"tier"}]}}
+   ```
+
+2. **`mocking` — shows the same value written two ways.** The bare `$` form
+   resolves and the `${...}` form comes out empty, which makes the difference
+   easy to see.
+
+   ```json
+   {"content_type":"text/plain","response_example":"bare_form   = $ctx.helix.key_value_map.tier\nbrace_form  = ${ctx.helix.key_value_map.tier}\nnamespace   = $ctx.helix.key_value_map"}
+   ```
+
+Each plugin then appears on its route under **Configuration → Routes**. What
+every field means, and the two optional extras (`request-id`, `cors`) the full
+spec adds: [Configuration reference](#configuration-reference).
+
+**3. Give it an upstream, then deploy it**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick environment
    `test`, point it at any host (for example `httpbin.org`), then **Create
    Upstream**. It is never contacted — `mocking` answers every route — but the
@@ -68,13 +187,13 @@ that. The routes just never go live.
 2. Back on the API's page, click **Deploy** on the revision. The dialog asks you
    to map an upstream for `test`. Pick the one you just created, then **Deploy**.
 
-**3. Register partners**
+**4. Register partners**
 
 There is no screen for sandbox values, and no control-plane API either: on this
 build, the registration route is the only way to write an entry. Send the requests
 in [See it work](#see-it-work).
 
-**4. Before you expose it**
+**5. Before you expose it**
 
 Protect `/sandbox/partners` ([solution 08](../08-api-key/)) and drop
 `/sandbox/diagnostics`, which shows the store's contents to any caller.
@@ -182,6 +301,8 @@ reject bad requests.
 ## Configuration reference
 
 Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml).
+[`example/api-spec-basic.yaml`](example/api-spec-basic.yaml) is the same routes
+with no plugins, for adding them yourself.
 
 Registration route:
 

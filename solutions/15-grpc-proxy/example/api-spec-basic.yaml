@@ -1,0 +1,58 @@
+# Solution 15 — gRPC through the gateway: the basic example spec.
+#
+# Five routes and nothing else: no plugins. Import this when you want to add the
+# plugins yourself in the UI, so you see what each one does. The walkthrough is
+# ../guides.md, "Build it in the UI".
+#
+# The same API with the plugins already in it is api-spec.yaml, next to this file.
+#
+# Each path is a gRPC method path (/<package>.<Service>/<Method>), and every gRPC
+# call is a POST. What makes this gRPC is the UPSTREAM, whose scheme must be grpc
+# (or grpcs for a TLS backend); nothing in this file sets that. Until you add the
+# plugins, any caller who can reach these routes is let through.
+
+openapi: 3.0.3
+
+info:
+  title: Timing Unit Stream API
+  version: 1.0.0
+  description: >-
+    A bidirectional-streaming gRPC service exposed through the gateway. Add the
+    plugins yourself to check each caller's key as their stream opens.
+
+paths:
+  /timing.TimingUnit/Ping:
+    post:
+      summary: Unary health probe
+      responses:
+        '200': { description: gRPC response }
+
+  /timing.TimingUnit/Status:
+    post:
+      summary: Bidirectional status stream
+      responses:
+        '200': { description: gRPC bidirectional stream }
+
+  /timing.TimingUnit/Commands:
+    post:
+      summary: Bidirectional command channel
+      responses:
+        '200': { description: gRPC bidirectional stream }
+
+  /grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo:
+    post:
+      summary: gRPC server reflection (v1alpha)
+      description: >-
+        Route both reflection versions. A client tries v1 first and falls back to
+        v1alpha only if the v1 call gets a clean gRPC answer.
+      responses:
+        '200': { description: The service descriptors, as a gRPC stream }
+
+  /grpc.reflection.v1.ServerReflection/ServerReflectionInfo:
+    post:
+      summary: gRPC server reflection (v1)
+      description: >-
+        The version a client tries first. Route it alongside v1alpha, or schema
+        discovery fails.
+      responses:
+        '200': { description: The service descriptors, as a gRPC stream }

@@ -50,24 +50,136 @@ Screen and button names below are the real ones. The API lives under
 - **You have a Kafka broker the gateway can reach**, and you have created the
   topic.
 
-**1. Put your broker and topic into the spec**
-Open [`example/api-spec.yaml`](example/api-spec.yaml). Replace
-`<YOUR_KAFKA_BROKER>` with a broker hostname the **gateway** can reach (not one
-only your laptop can reach), and change `kafka_topic: events` to your topic.
-Neither value is a secret. If your broker needs SASL, the `brokers` entry takes a
-`sasl_config` object; check the plugin's schema in your org.
+**1. Create the API**
 
-**2. Import the API**
+Pick one of the two ways below. Both give you the same thing: an API called
+`Event Ingest API` with one route and no plugins yet.
+
+*Option A — from scratch*
+1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
+2. Choose **Create from scratch**. Set **Display name** to `Event Ingest API`,
+   then **Save**.
+3. On the API's page, open **Configuration → Routes** and add one route:
+   - `POST /events`, where callers send their events
+
+*Option B — from an OpenAPI spec*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
 2. Set **Method** to **Import an OpenAPI spec**.
-3. Drag in your edited `api-spec.yaml`, or paste its contents, then click
-   **Import**.
+3. Drag in your own OpenAPI 3.0 file, or use our example,
+   [`example/api-spec-basic.yaml`](example/api-spec-basic.yaml): the same
+   route, no plugins. Then click **Import**.
 
-This creates the API and its first revision. The imported spec already carries
-all four plugins — `request-validation`, `mocking`, `kafka-logger` and
-`request-id` — with the settings in the
-[Configuration reference](#configuration-reference). There is no separate screen
-to set them up in this walkthrough.
+> **A spec can carry the plugins too.** Add an `x-helix-gateway` block that
+> lists them. At the top level of the file it covers every route; under one
+> path and method it covers that route only:
+>
+> ```yaml
+> paths:
+>   /events:
+>     post:
+>       x-helix-gateway:
+>         plugins:
+>           kafka-logger:
+>             brokers:
+>               - host: "<YOUR_KAFKA_BROKER>"
+>                 port: 9092
+>             kafka_topic: events
+> ```
+>
+> [`example/api-spec.yaml`](example/api-spec.yaml) is this API with all its
+> plugins already in place. Replace `<YOUR_KAFKA_BROKER>` with your broker and
+> `events` with your topic, then import that instead and you can skip step 2.
+
+Either way, the API is not live yet: it has no upstream and isn't deployed.
+That comes in step 3.
+
+**2. Add the plugins**
+
+Three plugins turn this route into an event intake that publishes to Kafka. Add
+them **before** you deploy: a live revision can't be changed.
+
+All three go on the `POST /events` route only. Open the route under
+**Configuration → Routes** and add each plugin there. (Adding a plugin under
+**Configuration → Plugins** with **Add plugin** would apply it to every route.)
+Fill in the settings in the **Properties** form, or switch to the **JSON view**
+and paste them. The gateway runs the three in its own fixed order, whatever
+order you add them in.
+
+1. **`request-validation` — turns away malformed events.** An event missing
+   `event_id`, `event_type` or `occurred_at` gets HTTP 400 (bad request), and is
+   not published.
+
+   | Field | Value |
+   |---|---|
+   | **rejected_code** | `400` |
+   | **rejected_msg** | `the event failed schema validation` |
+
+   `body_schema` is the list of required fields, so paste it in the JSON view:
+
+   ```json
+   {
+     "body_schema": {
+       "type": "object",
+       "required": ["event_id", "event_type", "occurred_at"],
+       "properties": {
+         "event_id":    {"type": "string", "minLength": 1},
+         "event_type":  {"type": "string", "minLength": 1},
+         "occurred_at": {"type": "string"},
+         "payload":     {"type": "object"}
+       }
+     },
+     "rejected_code": 400,
+     "rejected_msg": "the event failed schema validation"
+   }
+   ```
+
+2. **`mocking` — answers the caller from the gateway.** A valid event gets
+   HTTP 202 (accepted) and `{"accepted":true}` straight away. No backend is
+   contacted.
+
+   | Field | Value |
+   |---|---|
+   | **response_status** | `202` |
+   | **content_type** | `application/json` |
+   | **response_example** | `{"accepted":true}` |
+   | **with_mock_header** | `false` |
+
+   ```json
+   {"response_status":202,"content_type":"application/json","response_example":"{\"accepted\":true}","with_mock_header":false}
+   ```
+
+3. **`kafka-logger` — publishes each accepted event to your topic.** It sends
+   the event after the caller has had its 202, and only for calls that got a 202,
+   so a rejected event never reaches the topic.
+
+   Paste this in the JSON view, then replace `<YOUR_KAFKA_BROKER>` with a broker
+   hostname the **gateway** can reach (not one only your laptop can reach), and
+   `events` with your topic. Neither value is a secret. If your broker needs
+   SASL, the `brokers` entry takes a `sasl_config` object; check the plugin's
+   schema in your org.
+
+   ```json
+   {
+     "brokers": [{"host": "<YOUR_KAFKA_BROKER>", "port": 9092}],
+     "kafka_topic": "events",
+     "_meta": {"filter": [["status", "==", 202]]},
+     "include_req_body": true,
+     "log_format": {
+       "event": "$request_body",
+       "request_id": "$apisix_request_id",
+       "received_at": "$time_iso8601"
+     },
+     "producer_type": "sync",
+     "batch_max_size": 1,
+     "required_acks": -1,
+     "max_retry_count": 3,
+     "retry_delay": 1
+   }
+   ```
+
+Each plugin then appears on the route. What every field means, and the optional
+extra (`request-id`) the full spec adds API-wide:
+[Configuration reference](#configuration-reference).
 
 **3. Give it an upstream, then deploy it**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick environment
@@ -193,8 +305,10 @@ Through the agent, keep that schema to `type` and `required` only — no
 
 ## Configuration reference
 
-Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml). The `/events`
-route carries three plugins, and `request-id` is set API-wide:
+Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml).
+[`example/api-spec-basic.yaml`](example/api-spec-basic.yaml) is the same route
+with no plugins, for adding them yourself. The `/events` route carries three
+plugins, and `request-id` is set API-wide:
 
 ```yaml
 request-validation:

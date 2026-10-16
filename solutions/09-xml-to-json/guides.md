@@ -45,19 +45,131 @@ Screen and button names below are the real ones. The API lives under
 - **You can create APIs.** If you don't see an **Add API** button, ask your org
   admin.
 
-**1. Import the API**
+**1. Create the API**
+
+Pick one of the two ways below. Both give you the same thing: an API called
+`Catalog API` with two routes and no plugins yet.
+
+*Option A — from scratch*
+1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
+2. Choose **Create from scratch**. Set **Display name** to `Catalog API`, then
+   **Save**.
+3. On the API's page, open **Configuration → Routes** and add two routes:
+   - `GET /catalog/items`, the list of catalog items
+   - `POST /catalog/orders`, placing an order
+
+*Option B — from an OpenAPI spec*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
 2. Set **Method** to **Import an OpenAPI spec**.
-3. Drag in [`example/api-spec.yaml`](example/api-spec.yaml), or paste its
-   contents, then click **Import**. Nothing in it needs filling in.
+3. Drag in your own OpenAPI 3.0 file, or use our example,
+   [`example/api-spec-basic.yaml`](example/api-spec-basic.yaml): the same two
+   routes, no plugins. Then click **Import**.
 
-This creates the API and its first revision. The imported spec already carries
-`xml-to-json` (both directions on the POST route), `proxy-rewrite`, `request-id`
-and `cors`, with the settings in the
-[Configuration reference](#configuration-reference). There is no separate screen
-to set them up in this walkthrough.
+> **A spec can carry the plugins too.** Add an `x-helix-gateway` block that
+> lists them. At the top level of the file it covers every route; under one
+> path and method it covers that route only:
+>
+> ```yaml
+> paths:
+>   /catalog/orders:
+>     post:
+>       x-helix-gateway:
+>         plugins:
+>           xml-to-json:
+>             transform_request: true
+>             transform_response: true
+>           proxy-rewrite:
+>             uri: /post
+> ```
+>
+> [`example/api-spec.yaml`](example/api-spec.yaml) is this API with all its
+> plugins already in place. Import that instead and you can skip step 2.
 
-**2. Give it an upstream, then deploy it**
+Either way, the API is not live yet: it has no upstream and isn't deployed.
+That comes in step 3.
+
+**2. Add the plugins**
+
+Two plugins on each route do the work: one converts between XML and JSON, the
+other sends the call to the right backend path. Add them **before** you deploy:
+a live revision can't be changed.
+
+Both routes get their own settings, so add these on each route rather than on
+the whole API: open the route under **Configuration → Routes** and add the
+plugin there. (Adding a plugin under **Configuration → Plugins → Add plugin**
+would apply it to every route.) Fill in the settings in the **Properties** form,
+or switch to the **JSON view** and paste them. The tables show the simple
+fields; lists and nested settings are easiest to paste as JSON.
+
+On the `GET /catalog/items` route:
+
+1. **`xml-to-json` — turns the backend's XML reply into JSON.** It only does so
+   when the caller sends `Accept: application/json`, and only for the reply
+   types listed in `content_types`.
+
+   | Field | Value |
+   |---|---|
+   | **transform_response** | `true` |
+
+   ```json
+   {"transform_response":true,"content_types":["application/xml","text/xml"]}
+   ```
+
+2. **`proxy-rewrite` — sends the call to the backend's path.** Here, `/xml` on
+   the test backend.
+
+   | Field | Value |
+   |---|---|
+   | **uri** | `/xml` |
+
+   ```json
+   {"uri":"/xml"}
+   ```
+
+On the `POST /catalog/orders` route:
+
+1. **`xml-to-json` — converts in both directions.** The caller's JSON body is
+   turned into XML (wrapped in an `<order>` element with the namespace your
+   backend expects) before the backend sees it, and the backend's XML reply is
+   turned back into JSON. **`transform_request` must be `true`**: it defaults to
+   `false`, and then the backend receives the JSON unchanged. Leave `pretty`
+   unset: on this build it makes the route fail with HTTP 503 (service
+   unavailable).
+
+   | Field | Value |
+   |---|---|
+   | **transform_request** | `true` |
+   | **transform_response** | `true` |
+   | **request_root_name** | `order` |
+   | **array_item_name** | `item` |
+   | **max_body_size** | `1048576` |
+
+   ```json
+   {"transform_request":true,"transform_response":true,"request_content_types":["application/json"],"content_types":["application/xml","text/xml"],"request_root_name":"order","array_item_name":"item","root_attributes":{"xmlns":"urn:example:catalog"},"max_body_size":1048576}
+   ```
+
+2. **`proxy-rewrite` — sends the call to the backend's path.** Here, `/post`,
+   which echoes back what it received so you can see the generated XML. Set the
+   path only: a `Content-Type` set here would stop the request conversion from
+   recognising the body.
+
+   | Field | Value |
+   |---|---|
+   | **uri** | `/post` |
+
+   ```json
+   {"uri":"/post"}
+   ```
+
+Each plugin then appears on its route. What every field means, and the two
+optional extras (`request-id`, `cors`) the full spec adds API-wide:
+[Configuration reference](#configuration-reference).
+
+**Using your own backend?** In this step, set each `proxy-rewrite` `uri` to your
+backend's path instead of `/xml` and `/post`, and make `content_types` match the
+`Content-Type` your backend actually sends.
+
+**3. Give it an upstream, then deploy it**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick environment
    `test`, point it at `httpbin.org` (or your own XML backend), then
    **Create Upstream**.
@@ -65,10 +177,6 @@ to set them up in this walkthrough.
    to map an upstream for `test`. Pick the one you just created, then **Deploy**.
 
 No products, developers or apps are needed: the package ships unauthenticated.
-
-**Using your own backend?** Before importing, change the `proxy-rewrite` paths in
-the spec (`/xml`, `/post`) to your backend's, and make `content_types` match the
-`Content-Type` your backend actually sends.
 
 ## Install it directly
 
@@ -176,6 +284,8 @@ give me the key.
 ## Configuration reference
 
 Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml).
+[`example/api-spec-basic.yaml`](example/api-spec-basic.yaml) is the same routes
+with no plugins, for adding them yourself.
 
 The read route — response direction only, the minimum useful block:
 
