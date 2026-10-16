@@ -4,8 +4,8 @@
 # — never the other way round.
 
 solution:
-  name: Per-partner key material fetched at request time
-  slug: 12-key-value-map
+  name: Per-partner PGP keys, fetched from the key-value store at request time
+  slug: 14-per-partner-pgp-keys
   version: 1.0.0
   category:
     - Security & Access
@@ -120,7 +120,7 @@ limitations:
     only plan-gated plugin on this build, so pgp-crypto is the only way to put a
     stored value into a proxied call here. Reading a value back is not restricted:
     mocking resolves $ctx.helix.key_value_map.<key> on any plan (solution
-    14-dynamic-mock), but short-circuits the request, so it cannot hand the value
+    12-key-value-store), but short-circuits the request, so it cannot hand the value
     to an upstream.
   - Every limitation of solution 13 still applies to the crypto itself.
 

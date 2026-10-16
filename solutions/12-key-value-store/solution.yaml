@@ -4,8 +4,8 @@
 # — never the other way round.
 
 solution:
-  name: A sandbox that answers every partner with that partner's own values
-  slug: 14-dynamic-mock
+  name: Key-value store — a sandbox that answers every partner with that partner's own values
+  slug: 12-key-value-store
   version: 1.0.0
   category:
     - Developer Experience

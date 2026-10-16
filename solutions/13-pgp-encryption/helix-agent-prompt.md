@@ -128,7 +128,7 @@ I have {{partner_count}} partners, each with their own key. Tell me plainly what
 route shape costs at that number, then show me the key-value-map version where the
 key is fetched per request from a partner id in the request.
 ```
-(That's [solution 12](../12-key-value-map/).)
+(That's [solution 14](../14-per-partner-pgp-keys/).)
 
 **Write the counterparty's side for me**
 ```text
@@ -178,7 +178,7 @@ called.
 
 ## Related
 
-- **[Solution 12 — Key-value map](../12-key-value-map/helix-agent-prompt.md)** —
+- **[Solution 14 — Per-partner PGP keys](../14-per-partner-pgp-keys/helix-agent-prompt.md)** —
   the same crypto with per-partner keys fetched at request time.
 - **[Solution 06 — Signed requests](../06-hmac-auth/helix-agent-prompt.md)** —
   authenticity rather than confidentiality.

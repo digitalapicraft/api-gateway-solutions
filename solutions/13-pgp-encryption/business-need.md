@@ -64,7 +64,7 @@ a deploy every time one of them rotates a key.
 
 If you have more than one counterparty, budget for that from the start — the key
 material belongs in a store the route reads at request time, not in the route.
-[Solution 12](../12-key-value-map/) is that shape, and rotation there is a data
+[Solution 14](../14-per-partner-pgp-keys/) is that shape, and rotation there is a data
 change rather than a deploy.
 
 ## What it does not buy you

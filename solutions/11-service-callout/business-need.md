@@ -1,74 +1,34 @@
-# Business need — one lookup, one cache, one failure policy
+# Enrich requests from a lookup service, at the API gateway
 
-## The risk today
+> Every service starts the same way: call the customer-profile service, find out
+> what plan the tenant is on, then do the actual work. Orders caches it for five
+> minutes, billing for an hour, and notifications not at all, which is why profile
+> gets paged. When the field name changed last quarter, the seventh copy of that
+> call turned up in a service nobody had touched since 2023.
+>
+> **Make the call once, before the request is proxied, and hand the answer to the
+> backend as headers.**
 
-A shared lookup implemented N times is not N copies of the same code. It is N
-different systems that happen to call the same endpoint.
+- **Copies of the lookup: one per service → one, in configuration.** A new service
+  reads a header instead of building the call first.
+- **Failure behaviour: whatever each team chose → one policy per route, written
+  down.** Reads can proceed without the answer; writes can refuse.
+- **Calls on the profile service: one per service per request → one per request.**
 
-**N caching strategies, of which at most one is right.** Five minutes here, an
-hour there, none at all in the service nobody has touched since 2023. When the
-underlying data changes, different parts of the estate act on different versions of
-the truth for different lengths of time, and reconciling that during an incident is
-guesswork.
+The policy is the decision that matters, and it is made per route:
 
-**N failure behaviours, none of them written down.** One retries, one fails open,
-one fails the request. Nobody chose this — each was decided by whoever wrote that
-service, on the day, under a deadline. The first time the profile service is slow
-you discover what the estate actually does, in production.
+| If the lookup fails on… | Choose | The caller gets |
+|---|---|---|
+| a read, where acting without the answer is survivable | fail-open | a 200, and the backend gets no enrichment headers |
+| a write, where acting without it is worse than failing | fail-close | a 503, and the backend is never called |
 
-**N places to change.** A field rename in the profile service's contract becomes a
-hunt, a coordinated release, and a long tail of services that were not found. The
-seventh copy is discovered by the incident, not by the search.
+It fetches an answer; it doesn't decide whether a caller is allowed. The
+dependency is consolidated, not removed: one synchronous call stays in the request
+path, and nothing is cached unless you add it. [Before/after, the two settings that
+make it work, and what this does not buy you are in the
+README](README.md#business-need).
 
-**N × the load.** Every service makes its own call, so the profile service is sized
-for the multiple rather than for the requests.
-
-## What the gateway changes
-
-The call happens once, at the edge, before the request is proxied. The answer is
-handed to the backend as headers. The backend reads a header instead of making a
-call — and a new service reads the same header on day one without implementing
-anything.
-
-Three things become properties of the path rather than of each service:
-
-- **One cache and one timeout**, configured where the traffic is, rather than
-  inherited from whoever wrote each service.
-- **One failure policy per route, chosen deliberately.** A read path can proceed
-  without the answer; a write path should not. Those are business decisions and
-  they are now visible in one file instead of implied by seven codebases.
-- **One place to change** when the contract moves.
-
-## The part that pays for the work
-
-Not the deduplication — the **onboarding**. Once the enrichment is on the route,
-every new service that sits behind it starts with the answer already in hand. The
-lookup stops being the first thing each team builds and becomes something they
-inherit, which is the difference between a shared concern and a shared library
-nobody upgrades.
-
-## The business outcome
-
-| Before | After |
-|---|---|
-| The lookup is implemented in every service | It is implemented once, in configuration |
-| Each service caches differently | One cache, one timeout, set where the traffic is |
-| Failure behaviour varies and is undocumented | An explicit policy per route: fail-open on reads, fail-close on writes |
-| A contract change is a hunt across the estate | One place to change |
-| The profile service carries N calls per request | It carries one |
-| A new service implements the lookup first | A new service reads a header |
-
-## What it does not buy you
-
-- **It is not an authorization decision.** The callout fetches an answer; it does
-  not act on it. A route that must *reject* a caller based on the response needs a
-  plugin built to return a verdict.
-- **It does not remove the dependency.** There is still one synchronous call in the
-  request path, and its timeout is now part of your latency budget. You have
-  consolidated the dependency, not eliminated it.
-- **It does not cache by itself.** Every request makes the call unless you put
-  caching in front of it deliberately.
-- **It is not free at the backend.** Under a fail-open policy the headers can be
-  absent, and every backend reading them has to decide what that means. That is a
-  small amount of work in N services — but it is honest work, replacing N
-  undocumented behaviours with one documented one.
+*Also searched as: service callout at the API gateway · enrich requests with data
+from another service · inject headers from a lookup · request enrichment before
+proxying · call an external service in the gateway · tenant context headers ·
+remove a shared lookup from every microservice.*

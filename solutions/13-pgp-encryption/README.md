@@ -284,7 +284,7 @@ secret and is usually shared with a counterparty.
 **If you have more than one counterparty, do not copy this route N times with N
 key pairs.** Fourteen partners becomes fourteen routes, fourteen keys in the
 document, and a deploy every time one of them rotates. Fetch the key per request
-instead — [solution 12](../12-key-value-map/) does exactly that and keeps key
+instead — [solution 14](../14-per-partner-pgp-keys/) does exactly that and keeps key
 material out of the spec entirely.
 
 ## Build it with the Helix Agent
@@ -428,7 +428,7 @@ partner cannot read.
   a round-trip test catches it.
 - **`fail-open` on the response direction returns the plaintext.** Do not.
 - **Rotation is a hard cutover.** Old and new keys cannot both be live on one
-  route. [Solution 12](../12-key-value-map/) turns this into a data change.
+  route. [Solution 14](../14-per-partner-pgp-keys/) turns this into a data change.
 - **Crypto buffers the whole body.** `max_body_size` rejects rather than streams;
   month-end batch files are how people discover this.
 - **Encryption is not authentication.** Anyone who can reach the route gets a
@@ -454,7 +454,7 @@ Don't use it when:
   more, this adds key management for no gain.
 - **You need to prove who sent it.** That is a signature —
   [solution 06](../06-hmac-auth/).
-- **You have many counterparties.** Use [solution 12](../12-key-value-map/) rather
+- **You have many counterparties.** Use [solution 14](../14-per-partner-pgp-keys/) rather
   than N routes with N key pairs.
 - **The payloads are large.** Crypto buffers the body and costs CPU per request.
 - **The backend must never see plaintext.** This decrypts *for* the backend. If the
@@ -468,7 +468,7 @@ Don't use it when:
 - **`field` on encrypt returns only that field's ciphertext.**
 - **Key material is a literal in the document**, with no environment indirection.
 - **Rotation is a hard cutover** on a route.
-- **One key pair per route**, hence [solution 12](../12-key-value-map/).
+- **One key pair per route**, hence [solution 14](../14-per-partner-pgp-keys/).
 - **Generic errors** to the caller, by design.
 - **A wrong recipient key is undetectable at the gateway.**
 - **Whole-body buffering**, bounded by `max_body_size`.
@@ -503,7 +503,7 @@ could complete, and this package doesn't claim otherwise.
 
 ## Related solutions
 
-- **[12 — Key-value map](../12-key-value-map/)** — the same crypto with the key
+- **[14 — Per-partner PGP keys](../14-per-partner-pgp-keys/)** — the same crypto with the key
   fetched per request. Go there the moment you have a second counterparty.
 - **[06 — Signed requests](../06-hmac-auth/)** — confidentiality is not
   authenticity. If you need to know who sent it, you need a signature.

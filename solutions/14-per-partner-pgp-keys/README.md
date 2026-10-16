@@ -1,4 +1,4 @@
-# Solution 12 — one route, fourteen partners, and rotation without a deploy
+# Solution 14 — Per-partner PGP keys: one route, fourteen partners, and rotation without a deploy
 
 **Key material in a route is fine until the second counterparty. This fetches the
 key per request instead, so adding a partner is a write and rotating one is a
@@ -17,29 +17,25 @@ write — neither is a release.**
 
 ## What this package is about
 
-**The store.** Seeding a per-caller value, resolving it from something on the
-request, and replacing it without a deploy. That is the whole subject, and it is
-the part that transfers to any value you want to keep out of your configuration.
+**Two earlier packages, combined for one job.** [Solution 12](../12-key-value-store/)
+is the gateway's key-value store: seeding a per-caller value, resolving it from
+something on the request, and replacing it without a deploy.
+[Solution 13](../13-pgp-encryption/) is PGP at the edge, with the key in the route.
+This package keeps each partner's PGP key in the store, so one route serves every
+partner and a rotation is a write. Read 12 for the store and 13 for the crypto;
+this README assumes both and covers what the combination adds.
 
-The crypto is plumbing, not the lesson. A stored value has to be *consumed* by
-something for you to see it work, and the choice of consumer turns on one
-distinction: **observing** a stored value and **using** one are different jobs.
-
-`mocking` can *observe* a stored value — it reads `ctx.helix.key_value_map`
-directly, needs no crypto and no Enterprise plan. That is
-[solution 14](../14-dynamic-mock/), and it is the shortest way to see the store
-work. But `mocking` short-circuits the request, so it can never put a stored value
-into a call that reaches your backend.
-
-This package *uses* one, on a real proxied response, and for that the consumer set
-is narrower: `pgp-crypto` and `lua-callout` are the only plugins that resolve a KVM
-reference themselves. `lua-callout` carries `enterpriseOnly: true` and is refused
-at import **on a free-trial organisation** — which is why this package is built on
-`pgp-crypto`, and why it runs anywhere. On an organisation that is not on a free
-trial, `lua-callout` imports and deploys normally and becomes a second option;
-test the import rather than trusting the catalogue flag, which does not change. If you want to understand the crypto itself, that is
-[solution 13](../13-pgp-encryption/) — read it if you need it, skip it if you
-don't. Everything below is about the store.
+Why the store needs a consumer like PGP here: **observing** a stored value and
+**using** one are different jobs. 12's `mocking` observes one, reading
+`ctx.helix.key_value_map` directly, but it short-circuits the request, so it can
+never put a stored value into a call that reaches your backend. This package *uses*
+one on a real proxied response, and for that the consumer set is narrower:
+`pgp-crypto` and `lua-callout` are the only plugins that resolve a store reference
+themselves. `lua-callout` carries `enterpriseOnly: true` and is refused at import
+**on a free-trial organisation**, which is why this package is built on
+`pgp-crypto` and runs anywhere. Off a free trial, `lua-callout` imports and deploys
+and becomes a second option; test the import rather than trusting the catalogue
+flag, which does not change.
 
 The one difference from 13, in a line: **13 writes the key into the route; this
 fetches it per request.**
@@ -72,6 +68,46 @@ Three costs, and they all scale with the number of counterparties:
 3. **Rotation is a release**, on the counterparty's timetable rather than yours —
    and on a single route the old and new keys cannot both be live, so it is a hard
    cutover that has to be coordinated.
+
+## Business need
+
+The thirty-second version: [`business-need.md`](business-need.md).
+
+| Dimension | A key in every route | Keys in the gateway's store |
+|---|---|---|
+| **Routes** | One per counterparty | One for all of them |
+| **Key material in configuration** | In every document you import and every revision you read back | None |
+| **Adding a counterparty** | A new route, a review, a deploy | A write |
+| **Rotation** | A release, as a hard cutover, on the partner's timetable | A write, effective on the next request |
+| **A change to the route's shape** | N edits, and the Nth gets missed | One edit |
+
+What it costs, and two of these are enough to decide against it for a single
+integration:
+
+- **A write path you have to protect.** There is no control-plane API for these
+  entries on this build, so the only way in is a route. That route writes key
+  material, so it is administrative. An unauthenticated write to your key store is
+  worse than a key in a configuration document.
+- **A second moving part.** Two plugins, a store, and a reference grammar that
+  fails silently when it is wrong. `header` instead of `headers` produces no error
+  anywhere and looks exactly like "no key registered".
+
+The crossover is the second counterparty. Starting here when you can see one coming
+is less work than migrating N routes later.
+
+What this does **not** buy you:
+
+- **Access control.** The partner id arrives in a header the caller controls. Any
+  caller can request any partner's document. They receive something encrypted to
+  that partner's key and cannot read it, which is a reason not to panic, not a
+  reason to call it authorization.
+- **Key history.** Registration replaces the entry. There is no versioning, and a
+  bad write destroys the previous value.
+- **Validation of what you store.** A wrong key is accepted, and found only when a
+  counterparty cannot read a document. See
+  [a registered key can be unusable](#a-registered-key-can-be-unusable-and-the-status-will-not-tell-you).
+
+No ROI figure is claimed anywhere in this package.
 
 ## How a request flows
 
@@ -184,7 +220,7 @@ empty value with no error. Raise it with `_meta.priority`.
 
 This is narrower than it sounds, and the boundary is worth knowing: **reading** a
 stored value needs neither. `mocking` resolves `$ctx.helix.key_value_map.<key>`
-on any plan — see [solution 14](../14-dynamic-mock/) — it simply short-circuits
+on any plan — see [solution 12](../12-key-value-store/) — it simply short-circuits
 the request, so what it cannot do is hand the value to your backend.
 
 **The registration route is administrative, and ships unauthenticated.** Every
@@ -204,81 +240,105 @@ so the key can be keyed on that instead of on a header.
 
 ## Build it with the Helix Agent
 
-Two steps. Full prompt with the reasoning, tweak knobs and failure modes:
-[`helix-agent-prompt.md`](helix-agent-prompt.md).
+Recommended path, about twenty minutes. The whole build is **one prompt**:
+[`helix-agent-prompt.md`](helix-agent-prompt.md). Paste it as a single message and
+replace the `{{...}}` values. Then register a key and run
+[`example/verify.sh`](example/verify.sh) against it, as under [Testing](#testing).
+[AGENT-GUIDE.md](../../AGENT-GUIDE.md) carries the standing rules the prompt
+assumes.
 
-**Step 1 — the registration route**
+> **Check what was stored, not what the agent said.** Read the revision back. The
+> registration route should carry `key-value-map` with an `inserts` entry whose key
+> is `$request.headers.x-partner-id` and whose value is `$request.body.public_key`.
+> The document route should carry a `key-value-map` `fetch` of the same key, and
+> `pgp-crypto` with its settings **under `encrypt`**, `fail_policy: fail-close`, and
+> a `public_key` that points at what the fetch stored: either the same reference,
+> or `$ctx.helix.key_value_map.<alias>` when the fetch names an alias. A literal
+> value anywhere a reference belongs serves one partner forever.
 
+### Why the prompt is worded the way it is
+
+It names no plugin. It describes the store and the encryption, and names the two
+things earlier runs got wrong in prose:
+
+- **"`$request.headers.x-partner-id`, written exactly that way … left for the
+  gateway to resolve."** The reference grammar is the whole mechanism, and the
+  schema does not teach it. An agent that treats the reference as a placeholder
+  substitutes a value, and the route then serves one partner. `headers` is plural;
+  the singular resolves to nothing, silently.
+- **"The encryption settings sit under `encrypt`."** Asked in prose, an earlier
+  agent wrote `pgp-crypto` flat, which the schema rejects.
+- **"Never the document in the clear."** That is `fail_policy: fail-close` on
+  `pgp-crypto`. A missing entry is not an error to the store; the consuming plugin
+  decides, and `fail-open` there returns the backend's document unencrypted.
+
+What the prompt no longer carries: the two literal route objects; the plugin and
+field names; `request-id`; the `plugins`-map and `x-helix-gateway` instructions;
+and the two-step split. On 2026-10-13, on `tencent/hy3`, the agent built both
+routes in one session, and `verify.sh` passed all seven checks, including
+decryption and rotation. See [Validation status](#validation-status).
+
+### What the agent decides for you
+
+| | The prompt says | This package's spec | The 2026-10-13 run |
+|---|---|---|---|
+| How `pgp-crypto` finds the key | the same reference, everywhere | `public_key: "$request.headers.x-partner-id"` | the fetch names an alias, and `public_key: "$ctx.helix.key_value_map.partner_public_key"`. Both work |
+| The stored value at rest | nothing | plain | `encrypt: true` on the insert (the store encrypts it; the fetch decrypts it) |
+| `fail_action` on the store | nothing | `close` | not set |
+| Fail-close message | a 500 | `no usable key is registered for this partner` | the plugin's default, `failed to encrypt response` |
+| Correlation id | nothing | `request-id`, API-wide | `request-id`, API-wide |
+
+None of these decides whether a partner gets its own key. The reference on both
+sides of the store, and `fail-close`, do.
+
+## Variations
+
+Follow-ups for the same session, once the build above is standing. Use the same
+register as the prompt and say what you want to be true.
+
+**Protect the registration route** *(do this before anything else)*
 ```text
-Create a REST API "Partner Documents API" with ONE route for now. Upstream
-https://httpbin.org — reuse it if it already exists as an upstream in this org;
-the org's upstream limit is low. Environment test.
+Require an operator's API key in the X-Admin-Key header on the key registration
+route only. Leave the document route as it is, and tell me what is still open
+after that change.
+```
+That is [08](../08-api-key/).
 
-Route: POST /partners/keys -> proxy-rewrite uri /post, with key-value-map. The
-route object must look exactly like this:
-
-{
-  "name": "partners-keys",
-  "uri": "/partners/keys",
-  "methods": ["POST"],
-  "service_id": "<the api id>",
-  "plugins": {
-    "proxy-rewrite": { "uri": "/post" },
-    "key-value-map": {
-      "fail_action": "close",
-      "inserts": [
-        { "key": "$request.headers.x-partner-id", "value": "$request.body.public_key" }
-      ]
-    }
-  }
-}
-
-Those $ references are key-value-map templates, not shell variables — leave them
-exactly as written, don't substitute values. It is "headers" plural; the singular
-resolves to nothing, silently.
-
-Put request-id in the SERVICE spec so it applies API-wide. No "x-helix-gateway"
-key anywhere in a route object — a live route discards it silently and deploys
-with no plugins.
-
-Bind the upstream, run dry_run_deploy, then read the revision back. Wait before
-deploying.
+**Key on the authenticated caller instead of a header**
+```text
+The partner id currently comes from a header the caller controls. Identify the
+calling app on the document route, and key the stored entry on that app instead of
+on X-Partner-Id. Explain what that changes about who can request what.
 ```
 
-**Step 2 — the document route**
-
+**Store something other than a key**
 ```text
-Add a second route, keeping the first exactly as it is:
-
-  GET /partners/documents -> proxy-rewrite uri /json
-
-with two plugins. key-value-map FETCHES the same reference the other route writes,
-and pgp-crypto resolves that same reference against what it fetched — they agree
-only because the template is identical, so don't paraphrase either one:
-
-  "key-value-map": {
-    "fail_action": "close",
-    "fetch": { "keys": [ { "key": "$request.headers.x-partner-id" } ] }
-  },
-  "pgp-crypto": {
-    "keys_ctx_namespace": "key_value_map",
-    "encrypt": {
-      "target": "response",
-      "source": "body",
-      "public_key": "$request.headers.x-partner-id",
-      "fail_policy": "fail-close",
-      "fail_close_status": 500,
-      "fail_close_message": "no usable key is registered for this partner"
-    }
-  }
-
-The crypto config is NESTED under "encrypt", not flat. Send routeSpec as a JSON
-array of both routes, then read the revision back and run dry_run_deploy.
+I also want a per-partner upstream path stored alongside the key. Show me how to
+fetch two entries on one route, and how a second plugin would read the other one.
 ```
 
-> If a step ends in `stream closed with reason: error`, nothing was written — a
-> tool-argument defect in the agent, not your prompt. Retry once, then import
-> [`example/api-spec.yaml`](example/api-spec.yaml) for the remaining step.
+**Go back to the simple shape**
+```text
+I only have one counterparty after all. Show me this with the key in the route
+instead, and be explicit about what I lose and what I stop having to protect.
+```
+That is [13](../13-pgp-encryption/).
+
+## When the agent goes wrong
+
+**Read the stored revision before you trust any of it.**
+
+| Symptom | Cause |
+|---|---|
+| Every partner gets the fail-close error | The reference resolves to nothing. Check `headers` plural, that the client sends the id header, and that `pgp-crypto` points at what the fetch stored (the same reference, or the fetch's alias). |
+| One partner works and the rest fail | A fixed string was written where a reference belongs. |
+| The agent substitutes a value for `$request.headers.x-partner-id` | Reply: leave the reference as written; the gateway resolves it on each request. |
+| The schema rejects `pgp-crypto` | It was written flat. The crypto settings are nested under `encrypt`. |
+| The document comes back readable | `fail_policy` is `fail-open` on `pgp-crypto`, which returns the backend's document in the clear. |
+| A registered partner gets **200 with an error message in the body** | The stored key has no encryption subkey: what `gpg --quick-generate-key` produces. See [above](#a-registered-key-can-be-unusable-and-the-status-will-not-tell-you). |
+| `stream closed with reason: error` after a route write | Malformed tool arguments; nothing was written. Seen on an older model with large route writes. Retry once, then import [`example/api-spec.yaml`](example/api-spec.yaml). |
+| The routes exist with **no plugins**, at exit 0 | The agent wrapped them in `x-helix-gateway` inside the live route object, which a live route silently discards. |
+| Deploy fails: `Only INACTIVE revisions can be updated` | Clone the revision or undeploy, then apply. |
 
 ## Install it directly
 
@@ -427,7 +487,7 @@ Don't use it when:
 - **The *injecting* consumer cannot be swapped on a free-trial org.** `lua-callout`
   is the one plan-gated plugin on this build, which leaves `pgp-crypto` as the only
   way to put a stored value into a proxied call. Reading one back is unrestricted —
-  `mocking` does it on any plan ([solution 14](../14-dynamic-mock/)).
+  `mocking` does it on any plan ([solution 12](../12-key-value-store/)).
 - **Entries are stored encrypted at rest and scoped per environment**, which says
   nothing about how the value reached the gateway.
 - **Everything in [solution 13's](../13-pgp-encryption/) limitations still applies.**
@@ -445,6 +505,7 @@ Full list: [`solution.yaml`](solution.yaml) § `limitations`.
 | Gateway dry-run | **PASS** | Non-destructive, against a temporary import. |
 | Gateway deployed | **DEPLOYED** | Revision ACTIVE in a test environment. |
 | Functional tests | **PASS (7/7)** | Including rotation: re-registering changed which key the document was encrypted to, with no deploy, and the old key could no longer read it. |
+| Agent-mode run | **PASS (config + 7/7 functional)**, 2026-10-13, `tencent/hy3` | The current prompt, run once. The registration route stored the insert keyed on `$request.headers.x-partner-id`; the document route fetched it under an alias and pointed `pgp-crypto` at `$ctx.helix.key_value_map.partner_public_key`, with its settings under `encrypt` and `fail-close`. `verify.sh` passed all seven checks against the agent-built routes, with two throwaway key pairs: unregistered partners refused, decryption with the partner's private key, and rotation to a second key with no deploy. The routes ran under an `/agentrun-12` prefix, because this package's reference API holds the bare paths in that environment |
 
 Overall: **READY.** The store, the reference grammar and the rotation claim were
 all exercised against a live gateway, not inferred from the schema.

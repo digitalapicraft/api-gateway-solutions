@@ -43,7 +43,7 @@ decrypts and forwards.
 
 The one place the custom service wins is the *many counterparties* case, because it
 can look a key up per request. That capability exists here too, and it is
-[solution 12](../12-key-value-map/) — the same plugin, with the key fetched from a
+[solution 14](../14-per-partner-pgp-keys/) — the same plugin, with the key fetched from a
 store instead of written into the route.
 
 ## Why `fail-close` on both directions, for different reasons
@@ -113,14 +113,14 @@ That means:
 
 For a single long-lived partner integration that is acceptable and simple. Past
 the first counterparty it is the dominant cost of the design, which is why the
-package points at [solution 12](../12-key-value-map/) before you get there rather
+package points at [solution 14](../14-per-partner-pgp-keys/) before you get there rather
 than after.
 
 ## When not to use this shape
 
 - **TLS already meets the requirement** — this adds key management for no gain.
 - **You need to know who sent it** — that is a signature, not encryption.
-- **Many counterparties** — [solution 12](../12-key-value-map/).
+- **Many counterparties** — [solution 14](../14-per-partner-pgp-keys/).
 - **Large payloads** — whole-body buffering, CPU per request.
 - **The backend is the thing you are protecting the data from** — this decrypts
   *for* the backend.
