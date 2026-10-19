@@ -1,0 +1,6 @@
+### Case: read-traces — the records a session captured, newest first.
+###
+### Records arrive a few seconds after the request. Poll; do not sleep once and
+### assume. Each item's raw_json is the full record as a JSON string.
+GET {{CONTROL_PLANE}}/api/orgs/{{ORG}}/trace/sessions/{{SESSION_ID}}/traces?limit=100
+authorization: Bearer {{TOKEN}}

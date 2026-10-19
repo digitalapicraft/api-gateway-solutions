@@ -1,0 +1,11 @@
+{
+  "status": 200,
+  "body": {
+    "status": "active",
+    "session_id": "<SESSION_ID>",
+    "max_requests": 10,
+    "requests_traced": 0,
+    "disabled_at": null,
+    "filter": null
+  }
+}

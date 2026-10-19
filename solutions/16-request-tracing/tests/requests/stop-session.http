@@ -1,0 +1,5 @@
+### Case: stop-session — end the session before its time runs out.
+###
+### Expect 200 and status "disabled". Requests after this are not recorded.
+POST {{CONTROL_PLANE}}/api/orgs/{{ORG}}/apis/{{API_ID}}/envs/{{ENV_ID}}/trace/sessions/{{SESSION_ID}}/stop
+authorization: Bearer {{TOKEN}}
