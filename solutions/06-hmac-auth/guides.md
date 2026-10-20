@@ -100,12 +100,20 @@ That comes in step 3.
 One plugin, `hmac-auth`, makes each route accept only signed requests. Add it
 **before** you deploy: a live revision can't be changed.
 
+On the API's page, open **Configuration → Plugins** and click **Configure
+plugin**. A short wizard opens:
+
+1. **Plugin** — pick the plugin from the catalog.
+2. **Scope** — **Entire Revision** applies it to every route; **Specific
+   endpoint** applies it to one route.
+3. **Configure** — the JSON editor and the Properties list sit side by side.
+   Paste the JSON below, or fill in the fields. Then **Next**.
+4. **Review** — shows the configuration before and after. Click **Apply**.
+
 `hmac-auth` goes on **each route separately**, not on the whole API, because
-the two routes check different things. Open the route under
-**Configuration → Routes** and add the plugin there. (Adding a plugin under
-**Configuration → Plugins** with **Add plugin** would apply it to every route.)
-Fill in the settings in the **Properties** form, or switch to the **JSON view**
-and paste them.
+the two routes check different things. Run the wizard twice, choosing
+**Specific endpoint** each time and picking the route named below. (**Entire
+Revision** would apply one setting to every route.)
 
 There is **no secret to type in here**. The secret lives on the app you create
 in step 7, and the gateway looks it up from the key id each request carries.
@@ -149,7 +157,7 @@ in step 7, and the gateway looks it up from the key id each request carries.
 Don't leave `signed_headers` out on either route: without it the caller decides
 what its own signature covers, and the route is effectively open.
 
-Each plugin then appears on its route. What every field means, and the optional
+Repeat for the second route. What every field means, and the optional
 extra (`request-id`) the full spec adds:
 [Configuration reference](#configuration-reference).
 
@@ -166,10 +174,15 @@ extra (`request-id`) the full spec adds:
 3. Under **APIs**, click **Add API**, select your API, then **Continue**.
 4. Under **Authentication Methods**, pick **`hmac-auth`**. Left blank, it defaults
    to `helix-auth`, and the app you create in step 7 is then rejected.
-5. Under **Quota**, turn on **Enable request quota** and enter the values from
-   [`example/products.json`](example/products.json) (10,000 requests per hour).
+5. Under **Quota**, make sure **Enable request quota** is on. It is by default,
+   set to 1000 per 1 hour, so don't click the switch: that turns the quota off.
    Every product needs a quota, even though this solution does not enforce it.
-6. Click **Create API Product**.
+   Change **Request limit** to `10000`, and keep **Interval** at `1` and **Unit**
+   at **Hour**, the values in [`example/products.json`](example/products.json).
+   The summary line should read *"Subscribers can make up to 10000 requests per
+   1 hour"*.
+6. Leave **Quota scope** on **App level**, so every app gets its own allowance.
+7. Click **Create API Product**.
 
 The product is here only because it is how an app gets a credential. Its quota is
 not enforced unless you add the quota check (see [Variations](#variations)).
@@ -188,9 +201,13 @@ the **Developer**, add the product, pick **`hmac-auth`** as the authentication
 method and let credentials auto-generate, then **Create App**.
 
 **8. Get the `key_id` and `secret_key`**
-On the app's page, open **Credentials**. The `secret_key` is returned **once**,
-when the credentials are generated, and stored encrypted after that. Copy both
-values then. If you don't see the secret, create the app through
+On the app's **Overview** tab, find the **Authentication** card. It shows
+`hmac-auth` with a key and a secret, both hidden, each with a show and a copy
+button. The key is the `key_id` and the secret is the `secret_key`; the caller
+needs both to sign. The `secret_key` is returned **once**, when the credentials
+are generated, and stored encrypted after that, so copy both values then.
+**Generate New Credentials**, in the same card, issues a new pair. If you don't
+see the secret, create the app through
 [Install it directly](#install-it-directly) instead, where it is in the create
 response.
 

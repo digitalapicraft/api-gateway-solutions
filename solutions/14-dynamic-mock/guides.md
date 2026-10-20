@@ -106,10 +106,19 @@ up the partner's values, and `mocking` answers the request with them, so no
 backend is ever called. Add them **before** you deploy: a live revision can't be
 changed.
 
-Each one goes on one route, not on the whole API. On the API's page, open
-**Configuration → Routes**, open the route, and add the plugin there. Fill in the
-settings in the **Properties** form, or switch to the **JSON view** and paste
-them.
+Each one goes on one route, not on the whole API.
+
+On the API's page, open **Configuration → Plugins** and click **Configure
+plugin**. A short wizard opens:
+
+1. **Plugin** — pick the plugin from the catalog.
+2. **Scope** — choose **Specific endpoint** and pick the route. (**Entire
+   Revision** would apply it to every route.)
+3. **Configure** — the JSON editor and the Properties list sit side by side.
+   Paste the JSON below, or fill in the fields. Then **Next**.
+4. **Review** — shows the configuration before and after. Click **Apply**.
+
+Run the wizard once for each plugin on each route: six times in all.
 
 Keep every value that starts with `$` exactly as written. They are not
 placeholders for you to fill in: the gateway reads them as each request arrives.
@@ -119,7 +128,8 @@ second kind with a bare `$` and no braces: `${...}` around it always comes out
 empty. A hyphen ends that kind of reference, so keep the names in it to letters,
 digits and underscores.
 
-On the **`POST /sandbox/partners`** route:
+On the **`POST /sandbox/partners`** route (Scope: **Specific endpoint**, that
+route):
 
 1. **`key-value-map` — stores the partner's values.** It saves the tier and the
    settlement account from the request headers under the partner id, for one day
@@ -142,7 +152,8 @@ On the **`POST /sandbox/partners`** route:
    {"response_status":202,"content_type":"application/json","response_example":"{\"registered\":true,\"stored\":$ctx.helix.key_value_map.inserted}"}
    ```
 
-On the **`GET /sandbox/profile`** route:
+On the **`GET /sandbox/profile`** route (Scope: **Specific endpoint**, that
+route):
 
 1. **`key-value-map` — looks up the calling partner's values.** `alias` gives each
    value a fixed name (`tier`, `settlement`), so the next plugin can refer to it
@@ -159,7 +170,8 @@ On the **`GET /sandbox/profile`** route:
    {"content_type":"application/json","response_headers":{"X-Partner-Tier":"$ctx.helix.key_value_map.tier"},"response_example":"{\"partner\":\"$http_x_partner_id\",\"tier\":\"$ctx.helix.key_value_map.tier\",\"settlement\":\"$ctx.helix.key_value_map.settlement\"}"}
    ```
 
-On the **`GET /sandbox/diagnostics`** route:
+On the **`GET /sandbox/diagnostics`** route (Scope: **Specific endpoint**,
+that route):
 
 1. **`key-value-map` — looks up the calling partner's tier.**
 
@@ -175,8 +187,7 @@ On the **`GET /sandbox/diagnostics`** route:
    {"content_type":"text/plain","response_example":"bare_form   = $ctx.helix.key_value_map.tier\nbrace_form  = ${ctx.helix.key_value_map.tier}\nnamespace   = $ctx.helix.key_value_map"}
    ```
 
-Each plugin then appears on its route under **Configuration → Routes**. What
-every field means, and the two optional extras (`request-id`, `cors`) the full
+Repeat for each plugin and route. What every field means, and the two optional extras (`request-id`, `cors`) the full
 spec adds: [Configuration reference](#configuration-reference).
 
 **3. Give it an upstream, then deploy it**

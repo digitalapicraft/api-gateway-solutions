@@ -102,17 +102,27 @@ That comes in step 3.
 These plugins store each partner's key and encrypt each document to the right
 one. Add them **before** you deploy: a live revision can't be changed.
 
-Each one goes on one route, not on the whole API. On the API's page, open
-**Configuration → Routes**, open the route, and add the plugin there. Fill in the
-settings in the **Properties** form, or switch to the **JSON view** and paste
-them.
+Each one goes on one route, not on the whole API.
+
+On the API's page, open **Configuration → Plugins** and click **Configure
+plugin**. A short wizard opens:
+
+1. **Plugin** — pick the plugin from the catalog.
+2. **Scope** — choose **Specific endpoint** and pick the route. (**Entire
+   Revision** would apply it to every route.)
+3. **Configure** — the JSON editor and the Properties list sit side by side.
+   Paste the JSON below, or fill in the fields. Then **Next**.
+4. **Review** — shows the configuration before and after. Click **Apply**.
+
+Run the wizard once for each plugin on each route: five times in all.
 
 Keep every value that starts with `$` exactly as written, such as
 `$request.headers.x-partner-id`. It is not a placeholder for you to fill in: the
 gateway reads it from each request as it arrives, so the partner id in the
 `X-Partner-Id` header picks the entry.
 
-On the **`POST /partners/keys`** route:
+On the **`POST /partners/keys`** route (Scope: **Specific endpoint**, that
+route):
 
 1. **`key-value-map` — stores the partner's key.** It saves the `public_key`
    from the request body under the partner id. Sending the same id again
@@ -133,7 +143,8 @@ On the **`POST /partners/keys`** route:
    {"uri":"/post"}
    ```
 
-On the **`GET /partners/documents`** route:
+On the **`GET /partners/documents`** route (Scope: **Specific endpoint**, that
+route):
 
 1. **`key-value-map` — looks up the calling partner's key.** It fetches the
    entry stored under the partner id, ready for the next plugin to use.
@@ -161,8 +172,7 @@ On the **`GET /partners/documents`** route:
    {"uri":"/json"}
    ```
 
-Each plugin then appears on its route under **Configuration → Routes**. What
-every field means, and the optional extra (`request-id`) the full spec adds:
+Repeat for each plugin and route. What every field means, and the optional extra (`request-id`) the full spec adds:
 [Configuration reference](#configuration-reference).
 
 **3. Give it an upstream, then deploy it**

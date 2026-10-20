@@ -95,11 +95,17 @@ That comes in step 3.
 Two plugins turn this API into a metered product. Add them **before** you
 deploy: a live revision can't be changed.
 
-On the API's page, open **Configuration → Plugins** and click **Add plugin**.
-Adding a plugin here applies it to every route; adding it on one route (open the
-route under **Configuration → Routes**) applies it to that route only. Fill in
-the settings in the **Properties** form, or switch to the **JSON view** and
-paste them.
+On the API's page, open **Configuration → Plugins** and click **Configure
+plugin**. A short wizard opens:
+
+1. **Plugin** — pick the plugin from the catalog.
+2. **Scope** — **Entire Revision** applies it to every route; **Specific
+   endpoint** applies it to one route.
+3. **Configure** — the JSON editor and the Properties list sit side by side.
+   Paste the JSON below, or fill in the fields. Then **Next**.
+4. **Review** — shows the configuration before and after. Click **Apply**.
+
+Do this once for each plugin below. Both go on the **Entire Revision**.
 
 1. **`helix-auth` — checks who is calling.** It reads the app's key from the
    `apikey` header and looks up which products that app is subscribed to.
@@ -144,9 +150,16 @@ means, and the two optional extras (`request-id`, `cors`) the full spec adds:
 3. Under **APIs**, click **Add API**, select your API, then **Continue**.
 4. Under **Authentication Methods**, pick a method for apps to use. Left blank,
    it defaults to `helix-auth`.
-5. Under **Quota**, turn on **Enable request quota**. Set **Request limit** `5`,
-   **Interval** `1`, **Unit** `Minute`.
-6. Click **Create API Product**.
+5. Under **Quota**, make sure **Enable request quota** is on. It is by default,
+   set to 1000 per 1 hour, so don't click the switch: that turns the quota off,
+   and every product needs one (see [Troubleshooting](#troubleshooting)). Change
+   **Request limit** to `5` and **Unit** from **Hour** to **Minute**, and keep
+   **Interval** at `1`. The summary line should read *"Subscribers can make up
+   to 5 requests per 1 minute"*.
+6. Leave **Quota scope** on **App level**, so every app gets its own allowance.
+   **Developer level** makes all of a developer's apps share one; see
+   [Variations](#variations).
+7. Click **Create API Product**.
 
 **5. Deploy it**
 On the product's page, click **Deploy**, pick `test`, then **Deploy** again. The
@@ -154,7 +167,8 @@ badge changes from **Not deployed** to **Deployed**. This is a *different* deplo
 from step 3. The product needs its own.
 
 **6. Create the Pro product**
-Repeat steps 4 and 5 with **Display Name** `Pro` and **Request limit** `1000`.
+Repeat steps 4 and 5 with **Display Name** `Pro`, **Request limit** `1000` and
+**Unit** **Minute**.
 
 **7. Create a developer**
 Go to **API Distribution → Developers**, click **Add Developer**, fill in the
@@ -170,12 +184,11 @@ app**, not a second product on the same app, or the quota will be shared and
 isolation will look broken.
 
 **9. Get each app's key**
-On each app's page, open **Credentials** and copy the key. That's the value you
-send as the `apikey` header. For key-auth it's the client id.
-
-One gap worth knowing: the UI has no field for `quota_key_scope` (pooling a
-developer's apps into one budget). That's only settable through the API or the
-spec today. See [Variations](#variations).
+On each app's **Overview** tab, find the **Authentication** card. It shows
+`helix-auth` with a key and a secret, both hidden, each with a show and a copy
+button. Copy the **key**, not the secret: the key (the app's client id) is what
+you send in the `apikey` header. **Generate New Credentials**, in the same card,
+issues a new pair.
 
 ## Install it directly
 
@@ -272,6 +285,12 @@ contract (window length, backoff with jitter) in your own docs, and show
 remaining quota in your developer portal or analytics instead. See
 [solution 04](../04-analytics/).
 
+You may see `x-ratelimit-limit` and `x-ratelimit-remaining` on the successful
+200 responses. Those come from the jsonplaceholder test backend (the same
+responses carry its `x-powered-by: Express`), not from the gateway, and have
+nothing to do with your product quota. To hide them in a demo, strip them from
+the response with the `response-rewrite` plugin.
+
 To run all five checks as a script, including the isolation case:
 
 ```bash
@@ -286,7 +305,9 @@ not just that a rate limit exists. What each check proves, plus the manual tests
 
 ## Variations
 
-**Pool a developer's apps into one budget.** Add `quota_key_scope` to a product:
+**Pool a developer's apps into one budget.** In the product's **Quota** section,
+set **Quota scope** to **Developer level**. Through the API or a script, that's
+`quota_key_scope` on the product's quota:
 
 ```json
 {"name":"posts-pro","apiIds":["<API_ID>"],

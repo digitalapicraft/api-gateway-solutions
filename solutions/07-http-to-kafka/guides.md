@@ -98,12 +98,19 @@ That comes in step 3.
 Three plugins turn this route into an event intake that publishes to Kafka. Add
 them **before** you deploy: a live revision can't be changed.
 
-All three go on the `POST /events` route only. Open the route under
-**Configuration → Routes** and add each plugin there. (Adding a plugin under
-**Configuration → Plugins** with **Add plugin** would apply it to every route.)
-Fill in the settings in the **Properties** form, or switch to the **JSON view**
-and paste them. The gateway runs the three in its own fixed order, whatever
-order you add them in.
+On the API's page, open **Configuration → Plugins** and click **Configure
+plugin**. A short wizard opens:
+
+1. **Plugin** — pick the plugin from the catalog.
+2. **Scope** — **Entire Revision** applies it to every route; **Specific
+   endpoint** applies it to one route.
+3. **Configure** — the JSON editor and the Properties list sit side by side.
+   Paste the JSON below, or fill in the fields. Then **Next**.
+4. **Review** — shows the configuration before and after. Click **Apply**.
+
+Do this once for each plugin below. All three go on **Specific endpoint**, with
+`POST /events` picked as the route. The gateway runs the three in its own fixed
+order, whatever order you add them in.
 
 1. **`request-validation` — turns away malformed events.** An event missing
    `event_id`, `event_type` or `occurred_at` gets HTTP 400 (bad request), and is
@@ -114,7 +121,8 @@ order you add them in.
    | **rejected_code** | `400` |
    | **rejected_msg** | `the event failed schema validation` |
 
-   `body_schema` is the list of required fields, so paste it in the JSON view:
+   `body_schema` is the list of required fields, so paste it into the JSON
+   editor:
 
    ```json
    {
@@ -152,7 +160,7 @@ order you add them in.
    the event after the caller has had its 202, and only for calls that got a 202,
    so a rejected event never reaches the topic.
 
-   Paste this in the JSON view, then replace `<YOUR_KAFKA_BROKER>` with a broker
+   Paste this into the JSON editor, then replace `<YOUR_KAFKA_BROKER>` with a broker
    hostname the **gateway** can reach (not one only your laptop can reach), and
    `events` with your topic. Neither value is a secret. If your broker needs
    SASL, the `brokers` entry takes a `sasl_config` object; check the plugin's
@@ -177,7 +185,7 @@ order you add them in.
    }
    ```
 
-Each plugin then appears on the route. What every field means, and the optional
+Repeat for each plugin. What every field means, and the optional
 extra (`request-id`) the full spec adds API-wide:
 [Configuration reference](#configuration-reference).
 

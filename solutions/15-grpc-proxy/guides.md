@@ -103,12 +103,22 @@ That comes in step 3.
 One plugin checks every caller. Add it **before** you deploy: a live revision
 can't be changed.
 
-It goes on each of the five routes, the same way every time. On the API's page,
-open **Configuration → Routes**, open the route, and add the plugin there. Fill
-in the settings in the **Properties** form, or switch to the **JSON view** and
-paste them.
+It goes on each of the five routes, the same way every time.
 
-On **every route** (`Ping`, `Status`, `Commands` and both reflection routes):
+On the API's page, open **Configuration → Plugins** and click **Configure
+plugin**. A short wizard opens:
+
+1. **Plugin** — pick the plugin from the catalog.
+2. **Scope** — choose **Specific endpoint** and pick the route. (**Entire
+   Revision** would apply it to every route.)
+3. **Configure** — the JSON editor and the Properties list sit side by side.
+   Paste the JSON below, or fill in the fields. Then **Next**.
+4. **Review** — shows the configuration before and after. Click **Apply**.
+
+Run the wizard once for each of the five routes.
+
+On **every route** (`Ping`, `Status`, `Commands` and both reflection routes),
+each time with Scope **Specific endpoint** and that route:
 
 1. **`helix-auth` — checks who is calling.** It reads the app's key from the
    `X-Unit-Key` gRPC metadata once, when the call or stream opens. A missing or
@@ -128,8 +138,7 @@ On **every route** (`Ping`, `Status`, `Commands` and both reflection routes):
 Don't add a plugin that reads or changes the message body on these routes: a
 streaming route can't carry one.
 
-Each plugin then appears on its route under **Configuration → Routes**. What
-every field means, and the optional extra (`request-id`) the full spec adds:
+Repeat for each route. What every field means, and the optional extra (`request-id`) the full spec adds:
 [Configuration reference](#configuration-reference).
 
 **3. Create the gRPC upstream, then deploy it**
@@ -150,9 +159,15 @@ every field means, and the optional extra (`request-id`) the full spec adds:
 2. Under **Basic Information**, set a **Display Name**.
 3. Under **APIs**, click **Add API**, select this API, then **Continue**.
 4. Under **Authentication Methods**, leave the default (`helix-auth`).
-5. Under **Quota**, turn on **Enable request quota** and set a limit. A product
-   needs a quota; here it counts **streams, not messages**.
-6. Click **Create API Product**, then **Deploy** it to `test`.
+5. Under **Quota**, make sure **Enable request quota** is on. It is by default,
+   set to 1000 per 1 hour, so don't click the switch: that turns the quota off,
+   and a product with no quota gets HTTP 403 (forbidden) on every call. Set
+   **Request limit**, **Interval** and **Unit** to the allowance you want; here
+   it counts **streams, not messages**. Check the summary line, for example
+   *"Subscribers can make up to 1000 requests per 1 hour"*.
+6. Leave **Quota scope** on **App level**, so every app gets its own allowance.
+   **Developer level** makes all of a developer's apps share one.
+7. Click **Create API Product**, then **Deploy** it to `test`.
 
 **5. Create a developer**
 
@@ -167,8 +182,11 @@ let credentials auto-generate, then **Create App**.
 
 **7. Get the app's key**
 
-On the app's page, open **Credentials** and copy the key. Clients send it as the
-`X-Unit-Key` gRPC metadata.
+On the app's **Overview** tab, find the **Authentication** card. It shows
+`helix-auth` with a key and a secret, both hidden, each with a show and a copy
+button. Copy the **key**, not the secret: the key (the app's client id) is what
+clients send as the `X-Unit-Key` gRPC metadata. **Generate New Credentials**, in
+the same card, issues a new pair.
 
 ## Install it directly
 

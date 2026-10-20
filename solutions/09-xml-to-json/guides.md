@@ -94,14 +94,23 @@ Two plugins on each route do the work: one converts between XML and JSON, the
 other sends the call to the right backend path. Add them **before** you deploy:
 a live revision can't be changed.
 
-Both routes get their own settings, so add these on each route rather than on
-the whole API: open the route under **Configuration → Routes** and add the
-plugin there. (Adding a plugin under **Configuration → Plugins → Add plugin**
-would apply it to every route.) Fill in the settings in the **Properties** form,
-or switch to the **JSON view** and paste them. The tables show the simple
-fields; lists and nested settings are easiest to paste as JSON.
+Both routes get their own settings, so each plugin goes on one route, not on
+the whole API.
 
-On the `GET /catalog/items` route:
+On the API's page, open **Configuration → Plugins** and click **Configure
+plugin**. A short wizard opens:
+
+1. **Plugin** — pick the plugin from the catalog.
+2. **Scope** — choose **Specific endpoint** and pick the route. (**Entire
+   Revision** would apply it to every route.)
+3. **Configure** — the JSON editor and the Properties list sit side by side.
+   Paste the JSON below, or fill in the fields. Then **Next**. The tables show
+   the simple fields; lists and nested settings are easiest to paste as JSON.
+4. **Review** — shows the configuration before and after. Click **Apply**.
+
+Run the wizard once for each plugin on each route: four times in all.
+
+On the `GET /catalog/items` route (Scope: **Specific endpoint**, that route):
 
 1. **`xml-to-json` — turns the backend's XML reply into JSON.** It only does so
    when the caller sends `Accept: application/json`, and only for the reply
@@ -126,7 +135,7 @@ On the `GET /catalog/items` route:
    {"uri":"/xml"}
    ```
 
-On the `POST /catalog/orders` route:
+On the `POST /catalog/orders` route (Scope: **Specific endpoint**, that route):
 
 1. **`xml-to-json` — converts in both directions.** The caller's JSON body is
    turned into XML (wrapped in an `<order>` element with the namespace your
@@ -161,7 +170,7 @@ On the `POST /catalog/orders` route:
    {"uri":"/post"}
    ```
 
-Each plugin then appears on its route. What every field means, and the two
+Repeat for each plugin and route. What every field means, and the two
 optional extras (`request-id`, `cors`) the full spec adds API-wide:
 [Configuration reference](#configuration-reference).
 

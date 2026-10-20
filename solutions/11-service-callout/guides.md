@@ -98,12 +98,21 @@ other passes what it found to the backend as headers and sends the call to the
 right backend path. Add them **before** you deploy: a live revision can't be
 changed.
 
-The two routes get different settings, so add these on each route rather than
-on the whole API: open the route under **Configuration → Routes** and add the
-plugin there. (Adding a plugin under **Configuration → Plugins → Add plugin**
-would apply it to every route.) Fill in the settings in the **Properties** form,
-or switch to the **JSON view** and paste them. The tables show the simple
-fields; the nested settings are easiest to paste as JSON.
+The two routes get different settings, so each plugin goes on one route, not
+on the whole API.
+
+On the API's page, open **Configuration → Plugins** and click **Configure
+plugin**. A short wizard opens:
+
+1. **Plugin** — pick the plugin from the catalog.
+2. **Scope** — choose **Specific endpoint** and pick the route. (**Entire
+   Revision** would apply it to every route.)
+3. **Configure** — the JSON editor and the Properties list sit side by side.
+   Paste the JSON below, or fill in the fields. Then **Next**. The tables show
+   the simple fields; the nested settings are easiest to paste as JSON.
+4. **Review** — shows the configuration before and after. Click **Apply**.
+
+Run the wizard once for each plugin on each route: four times in all.
 
 Two rules hold on both routes:
 
@@ -114,7 +123,8 @@ Two rules hold on both routes:
   included.** Each one is the name under which the lookup stored a field; a
   typo gives an empty header, again with no error.
 
-On the `GET /storefront/orders` route, the lookup is **fail-open**: if the
+On the `GET /storefront/orders` route (Scope: **Specific endpoint**, that
+route), the lookup is **fail-open**: if the
 profile service is down, the call still reaches the backend, just without the
 headers.
 
@@ -171,7 +181,8 @@ headers.
    }
    ```
 
-On the `POST /storefront/checkout` route, the lookup is **fail-close**: if the
+On the `POST /storefront/checkout` route (Scope: **Specific endpoint**, that
+route), the lookup is **fail-close**: if the
 profile service can't be reached, the gateway answers HTTP 503 (service
 unavailable) with `tenant profile unavailable`, and the backend is never called.
 Taking an order without knowing the account's status is worse than refusing it.
@@ -227,8 +238,8 @@ Taking an order without knowing the account's status is worse than refusing it.
    }
    ```
 
-Each plugin then appears on its route. The optional extra (`request-id`) the
-full spec adds API-wide: [Configuration reference](#configuration-reference).
+Repeat for each plugin and route. The optional extra (`request-id`) the full
+spec adds API-wide: [Configuration reference](#configuration-reference).
 
 **Using your own profile service?** In this step, change the callout `uri` to
 your service, and the `map_response_to_ctx` paths to its response shape.

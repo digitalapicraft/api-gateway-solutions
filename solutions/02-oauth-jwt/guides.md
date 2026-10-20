@@ -100,12 +100,20 @@ One plugin, `helix-auth`, does the whole job, set up two ways: on the token
 route it hands out tokens, and on the three `/posts` routes it checks them. Add
 it **before** you deploy: a live revision can't be changed.
 
-Add it **on each route, never across the whole API.** On the API's page, open
-**Configuration → Routes**, open the route, and add the plugin there so it
-applies to that route only. (Adding it under **Configuration → Plugins** would
-cover every route, including `/oauth/token`, and then no caller could ever get a
-first token.) Fill in the settings in the **Properties** form, or switch to the
-**JSON view** and paste them.
+On the API's page, open **Configuration → Plugins** and click **Configure
+plugin**. A short wizard opens:
+
+1. **Plugin** — pick the plugin from the catalog.
+2. **Scope** — **Entire Revision** applies it to every route; **Specific
+   endpoint** applies it to one route.
+3. **Configure** — the JSON editor and the Properties list sit side by side.
+   Paste the JSON below, or fill in the fields. Then **Next**.
+4. **Review** — shows the configuration before and after. Click **Apply**.
+
+Add it **on each route, never across the whole API**: choose **Specific
+endpoint** and pick the route, and run the wizard once per route, four times in
+all. (**Entire Revision** would cover every route, including `/oauth/token`, and
+then no caller could ever get a first token.)
 
 **About the signing secret.** Where you see `<YOUR_JWT_SIGNING_SECRET>` below,
 type your own long random value instead. It must be **exactly the same on all
@@ -114,7 +122,8 @@ The gateway uses the text exactly as written, so if you leave the placeholder in
 anyone who has read this page can make tokens your API accepts. Never save the
 real value anywhere it could be shared, such as a code repository.
 
-1. **On `POST /oauth/token`: `helix-auth` hands out tokens.** It checks the
+1. **On `POST /oauth/token` (Scope: Specific endpoint): `helix-auth` hands out
+   tokens.** It checks the
    app's client id **and** secret, then signs a token that lasts 900 seconds
    (15 minutes). This route must stay reachable without a token, since a caller
    has none yet.
@@ -129,10 +138,11 @@ real value anywhere it could be shared, such as a code repository.
    {"mode":"generate","token_ttl":900,"signing_secret":"<YOUR_JWT_SIGNING_SECRET>"}
    ```
 
-2. **On `GET /posts`, `POST /posts` and `GET /posts/:postId`: `helix-auth`
-   checks the token.** A call with no token, an expired one, or one this gateway
-   didn't sign gets HTTP 401 (not authenticated), and never reaches your backend.
-   Add the same settings on each of the three routes.
+2. **On `GET /posts`, `POST /posts` and `GET /posts/:postId` (Scope: Specific
+   endpoint, once for each): `helix-auth` checks the token.** A call with no
+   token, an expired one, or one this gateway didn't sign gets HTTP 401 (not
+   authenticated), and never reaches your backend. Add the same settings on each
+   of the three routes.
 
    | Field | Value |
    |---|---|
@@ -144,7 +154,7 @@ real value anywhere it could be shared, such as a code repository.
    {"mode":"validate","validate_auth_type":"jwt-auth","signing_secret":"<YOUR_JWT_SIGNING_SECRET>"}
    ```
 
-Each route then lists `helix-auth` under its plugins. What every field means, and
+Repeat until all four routes carry `helix-auth`. What every field means, and
 the two optional extras (`request-id`, `cors`) the full spec adds across the API:
 [Configuration reference](#configuration-reference).
 
@@ -161,10 +171,13 @@ the two optional extras (`request-id`, `cors`) the full spec adds across the API
 3. Under **APIs**, click **Add API**, select your API, then **Continue**.
 4. Under **Authentication Methods**, pick a method for apps to use. Left blank, it
    defaults to `helix-auth`.
-5. Under **Quota**, turn on **Enable request quota** and set a limit high enough
-   not to get in your way while testing. This solution doesn't meter callers;
-   [solution 01](../01-api-products/) is how you sell usage tiers.
-6. Click **Create API Product**.
+5. Under **Quota**, make sure **Enable request quota** is on. It is by default,
+   set to 1000 per 1 hour, so don't click the switch: that turns the quota off,
+   and every product needs one. The default is high enough not to get in your way while testing; raise
+   **Request limit** or change **Unit** if it isn't. This solution doesn't meter
+   callers; [solution 01](../01-api-products/) is how you sell usage tiers.
+6. Leave **Quota scope** on **App level**, so every app gets its own allowance.
+7. Click **Create API Product**.
 
 **5. Deploy the product**
 On the product's page, click **Deploy**, pick `test`, then **Deploy** again. This
@@ -180,8 +193,11 @@ the **Developer**, add the product, pick an authentication method and let
 credentials auto-generate, then **Create App**.
 
 **8. Get the app's credentials**
-On the app's page, open **Credentials**. The key is the **client id**; copy it and
-the app's secret. These are what the app sends to `/oauth/token`.
+On the app's **Overview** tab, find the **Authentication** card. It shows
+`helix-auth` with a key and a secret, both hidden, each with a show and a copy
+button. Copy **both**: the key is the **client id**, and with the secret it is
+what the app sends to `/oauth/token`. **Generate New Credentials**, in the same
+card, issues a new pair.
 
 ## Install it directly
 

@@ -41,7 +41,8 @@ to count on the consumer name. Here that would count the wrong thing.
 A developer with three apps gets **three separate budgets**. This is usually
 what you want. If their test app misbehaves, it should not use up their
 production app's budget. If you would rather pool all of a developer's apps
-into one budget, set `quota_key_scope: developer` on the product. Two keys on
+into one budget, set the product's **Quota scope** to **Developer level**
+(`quota_key_scope: developer` through the API). Two keys on
 the *same* app always share one budget. See [Tests](tests.md).
 
 ## How a request flows

@@ -93,10 +93,18 @@ Two plugins go on each route: one checks the caller's key, the other points the
 route at the right path on your backend. Add them **before** you deploy: a live
 revision can't be changed.
 
-Open each route under **Configuration → Routes** and add the plugins there.
-(Adding a plugin under **Configuration → Plugins** with **Add plugin** would
-apply it to every route.) Fill in the settings in the **Properties** form, or
-switch to the **JSON view** and paste them.
+On the API's page, open **Configuration → Plugins** and click **Configure
+plugin**. A short wizard opens:
+
+1. **Plugin** — pick the plugin from the catalog.
+2. **Scope** — **Entire Revision** applies it to every route; **Specific
+   endpoint** applies it to one route.
+3. **Configure** — the JSON editor and the Properties list sit side by side.
+   Paste the JSON below, or fill in the fields. Then **Next**.
+4. **Review** — shows the configuration before and after. Click **Apply**.
+
+Every plugin below goes on **Specific endpoint**, so run the wizard once per
+plugin per route: four times in all, picking the route named below each time.
 
 1. **`helix-auth` — checks the caller's key.** It reads the key from the
    `X-Device-Key` header and looks up which app it belongs to. No key, or a key
@@ -115,7 +123,8 @@ switch to the **JSON view** and paste them.
    {"mode":"validate","validate_auth_type":"key-auth","apikey":{"source":"header","key":"X-Device-Key"}}
    ```
 
-   Fill in **apikey → source** even if the form shows it as optional. Without it
+   Fill in **apikey → source** even if the Properties list shows it as
+   optional. Without it
    the deploy is refused.
 
    There is **no key to type in here**. The keys live on the apps you create in
@@ -145,7 +154,8 @@ switch to the **JSON view** and paste them.
    These paths suit the example backend, `jsonplaceholder.typicode.com`. With
    your own backend, use its paths instead.
 
-Each plugin then appears on its route. What every field means, and the optional
+Repeat until both routes carry both plugins. What every field means, and the
+optional
 extra (`request-id`) the full spec adds:
 [Configuration reference](#configuration-reference).
 
@@ -162,9 +172,12 @@ extra (`request-id`) the full spec adds:
 3. Under **APIs**, click **Add API**, select your API, then **Continue**.
 4. Under **Authentication Methods**, leave it blank. It defaults to `helix-auth`,
    which is what this solution uses.
-5. Under **Quota**, turn on **Enable request quota** and set a generous limit.
-   Every product needs one, but this solution does not enforce it.
-6. Click **Create API Product**.
+5. Under **Quota**, make sure **Enable request quota** is on. It is by default,
+   set to 1000 per 1 hour, so don't click the switch: that turns the quota off.
+   Every product needs one, but this solution does not enforce it, so the
+   default is fine; raise **Request limit** if you want a more generous one.
+6. Leave **Quota scope** on **App level**, so every app gets its own allowance.
+7. Click **Create API Product**.
 
 **5. Deploy the product**
 On the product's page, click **Deploy**, pick `test`, then **Deploy** again. This
@@ -182,9 +195,11 @@ credentials auto-generate, then **Create App**. Repeat for every device or
 partner job: **one app each**, so each can be switched off on its own.
 
 **8. Get each app's key**
-On each app's page, open **Credentials** and copy the key. That's the value the
-caller sends in the `X-Device-Key` header. It is the credential **key**, not the
-app's id and not its secret.
+On each app's **Overview** tab, find the **Authentication** card. It shows
+`helix-auth` with a key and a secret, both hidden, each with a show and a copy
+button. Copy the **key**: that's the value the caller sends in the
+`X-Device-Key` header. It is the credential **key**, not the app's id and not
+its secret. **Generate New Credentials**, in the same card, issues a new pair.
 
 ## Install it directly
 

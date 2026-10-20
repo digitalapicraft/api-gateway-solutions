@@ -18,7 +18,8 @@ UNIT_KEY=<app credential key> \
 ```
 
 `GATEWAY` is the host **without** a scheme (for example `gw.example.com`), and
-`UNIT_KEY` is the app's key from its **Credentials** tab. You need
+`UNIT_KEY` is the app's key (not the secret) from the **Authentication** card
+on its **Overview** tab. You need
 [`grpcurl`](https://github.com/fullstorydev/grpcurl) installed. No `.proto` file is
 needed, because this package routes reflection; set `PROTOSET` only if you chose
 not to.

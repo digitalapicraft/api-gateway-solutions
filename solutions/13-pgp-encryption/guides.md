@@ -104,20 +104,30 @@ That comes in step 3.
 These plugins decrypt what your partner sends and encrypt what you send back. Add
 them **before** you deploy: a live revision can't be changed.
 
-Each one goes on one route, not on the whole API. On the API's page, open
-**Configuration → Routes**, open the route, and add the plugin there. Fill in the
-settings in the **Properties** form, or switch to the **JSON view** and paste
-them.
+Each one goes on one route, not on the whole API.
+
+On the API's page, open **Configuration → Plugins** and click **Configure
+plugin**. A short wizard opens:
+
+1. **Plugin** — pick the plugin from the catalog.
+2. **Scope** — choose **Specific endpoint** and pick the route. (**Entire
+   Revision** would apply it to every route.)
+3. **Configure** — the JSON editor and the Properties list sit side by side.
+   Paste the JSON below, or fill in the fields. Then **Next**.
+4. **Review** — shows the configuration before and after. Click **Apply**.
+
+Run the wizard once for each plugin on each route: four times in all.
 
 **About the keys.** Replace `<PGP_PRIVATE_KEY>` and `<PGP_PUBLIC_KEY>` with the
 whole armored key block, from `-----BEGIN PGP …-----` to `-----END PGP …-----`.
 The gateway uses the value exactly as written: it does not fill in `<ENV:...>` or
 `${...}`, so a placeholder left in place fails when a request arrives. In the
-JSON view, each line break inside the key is written as `\n`. The two keys are
+JSON editor, each line break inside the key is written as `\n`. The two keys are
 not a pair: the private key is yours, the public key is your partner's.
 [Which key goes where](architecture.md#two-parties-four-key-halves).
 
-On the **`POST /statements/inbound`** route:
+On the **`POST /statements/inbound`** route (Scope: **Specific endpoint**, that
+route):
 
 1. **`pgp-crypto` — decrypts the file your partner sends.** The backend receives
    the plain file and never sees the encrypted one. If the body can't be
@@ -138,7 +148,8 @@ On the **`POST /statements/inbound`** route:
    {"uri":"/post"}
    ```
 
-On the **`GET /statements/:statementId`** route:
+On the **`GET /statements/:statementId`** route (Scope: **Specific endpoint**,
+that route):
 
 1. **`pgp-crypto` — encrypts the statement to your partner's key.** It encrypts
    the whole response body, never one field of it. If the statement can't be
@@ -159,8 +170,7 @@ On the **`GET /statements/:statementId`** route:
    {"uri":"/json"}
    ```
 
-Each plugin then appears on its route under **Configuration → Routes**. What
-every field means, and the optional extra (`request-id`) the full spec adds:
+Repeat for each plugin and route. What every field means, and the optional extra (`request-id`) the full spec adds:
 [Configuration reference](#configuration-reference).
 
 **3. Give it an upstream, then deploy it**

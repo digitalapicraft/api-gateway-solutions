@@ -97,9 +97,18 @@ That comes in step 3.
 Two plugins do the translation, both on the `POST /locations` route only. Add
 them **before** you deploy: a live revision can't be changed.
 
-On the API's page, open **Configuration → Routes**, open `POST /locations`, and
-add each plugin there so it applies to that route only. Fill in the settings in
-the **Properties** form, or switch to the **JSON view** and paste them.
+On the API's page, open **Configuration → Plugins** and click **Configure
+plugin**. A short wizard opens:
+
+1. **Plugin** — pick the plugin from the catalog.
+2. **Scope** — **Entire Revision** applies it to every route; **Specific
+   endpoint** applies it to one route.
+3. **Configure** — the JSON editor and the Properties list sit side by side.
+   Paste the JSON below, or fill in the fields. Then **Next**.
+4. **Review** — shows the configuration before and after. Click **Apply**.
+
+Do this once for each plugin below. Both go on **Specific endpoint**, with
+`POST /locations` picked as the route.
 
 1. **`proxy-rewrite` — sends the call to your SOAP handler.** Partners call
    `/locations`; your handler answers on its own path. Replace
@@ -134,7 +143,7 @@ the **Properties** form, or switch to the **JSON view** and paste them.
    {"transform_request":true,"transform_response":true}
    ```
 
-The route then lists both plugins. What every field means, and the two optional
+Repeat for the second plugin. What every field means, and the two optional
 extras (`request-id`, `cors`) the full spec adds across the API:
 [Configuration reference](#configuration-reference).
 

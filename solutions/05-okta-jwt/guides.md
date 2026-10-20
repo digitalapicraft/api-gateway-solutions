@@ -105,11 +105,20 @@ One plugin, `openid-connect`, does the job: it checks that each call carries an
 access token your Okta issued. Add it **before** you deploy: a live revision
 can't be changed.
 
-On the API's page, open **Configuration → Plugins** and click **Add plugin**.
-Adding a plugin here applies it to every route, which is what you want: there is
-no route here that must stay open. If `openid-connect` isn't in the list of
-plugins you can add, your org doesn't include it and this solution can't run
-there. Switch to the **JSON view** and paste the settings below.
+On the API's page, open **Configuration → Plugins** and click **Configure
+plugin**. A short wizard opens:
+
+1. **Plugin** — pick the plugin from the catalog.
+2. **Scope** — **Entire Revision** applies it to every route; **Specific
+   endpoint** applies it to one route.
+3. **Configure** — the JSON editor and the Properties list sit side by side.
+   Paste the JSON below, or fill in the fields. Then **Next**.
+4. **Review** — shows the configuration before and after. Click **Apply**.
+
+Pick `openid-connect` and choose **Entire Revision**, which is what you want:
+there is no route here that must stay open. If `openid-connect` isn't in the
+catalog, your org doesn't include it and this solution can't run there. At
+**Configure**, paste the settings below into the JSON editor.
 
 **`openid-connect` — accepts only your Okta's tokens.** It reads Okta's public
 signing keys, checks each token's signature and issuer, and rejects anything
@@ -153,9 +162,10 @@ rather than a browser sign-in:
 | **unauth_action** | `deny` | Refuse a call with no token instead of sending it to Okta's login page. `bearer_only` already does this; it is set too so the intent is plain to anyone reading. |
 | **use_jwks** | `true` | Checks the token's signature here, against Okta's published keys. Without it, every token is refused, even a genuine one. |
 
-Use the **JSON view** rather than the **Properties** form for this plugin:
-`use_jwks` is not in the plugin's published list of fields, so the form may not
-offer it, but the gateway accepts and keeps it.
+Paste the JSON into the JSON editor rather than filling in the **Properties**
+list for this plugin: `use_jwks` is not in the plugin's published list of
+fields, so the Properties list may not offer it, but the gateway accepts and
+keeps it.
 
 The plugin then appears under **Configuration → Plugins**. What every field
 means, and the two optional extras (`request-id`, `cors`) the full spec adds:

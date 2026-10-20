@@ -98,13 +98,24 @@ Three plugins on each route do the work: one masks what the caller sees, one
 masks what a logger would write, and one sends the call to the right backend
 path. Add them **before** you deploy: a live revision can't be changed.
 
-These go on each route rather than on the whole API: open the route under
-**Configuration → Routes** and add the plugin there. (Adding a plugin under
-**Configuration → Plugins → Add plugin** would apply it to every route.) The
-masking settings are lists of rules, so switch to the **JSON view** and paste
-them; the simpler path settings also fit the **Properties** form.
+These go on each route rather than on the whole API.
 
-On **both** routes, `/support/customers` and `/support/customers/:customerId`:
+On the API's page, open **Configuration → Plugins** and click **Configure
+plugin**. A short wizard opens:
+
+1. **Plugin** — pick the plugin from the catalog.
+2. **Scope** — choose **Specific endpoint** and pick the route. (**Entire
+   Revision** would apply it to every route.)
+3. **Configure** — the JSON editor and the Properties list sit side by side.
+   Paste the JSON below, or fill in the fields. Then **Next**. The
+   masking settings are lists of rules, so paste them as JSON; the simpler path
+   settings also fit the Properties list.
+4. **Review** — shows the configuration before and after. Click **Apply**.
+
+Run the wizard once for each plugin on each route: six times in all.
+
+On **both** routes, `/support/customers` and `/support/customers/:customerId`
+(Scope: **Specific endpoint**; run the wizard once with each route):
 
 1. **`response-rewrite` — masks what the caller sees.** Four find-and-replace
    rules over the reply: the part of each email address before the `@`, the
@@ -144,7 +155,7 @@ On **both** routes, `/support/customers` and `/support/customers/:customerId`:
 
 Then one `proxy-rewrite` per route — it sends the call to the backend's path:
 
-3. **On `/support/customers`:** to `/users` on the test backend.
+3. **On `/support/customers`** (Scope: **Specific endpoint**, that route): to `/users` on the test backend.
 
    | Field | Value |
    |---|---|
@@ -154,15 +165,16 @@ Then one `proxy-rewrite` per route — it sends the call to the backend's path:
    {"uri":"/users"}
    ```
 
-4. **On `/support/customers/:customerId`:** to `/users/` followed by the same
+4. **On `/support/customers/:customerId`** (Scope: **Specific endpoint**, that
+   route): to `/users/` followed by the same
    customer id, so each customer reaches their own record.
 
    ```json
    {"regex_uri":["^/support/customers/(.*)$","/users/$1"]}
    ```
 
-Each plugin then appears on its route. The optional extra (`request-id`) the
-full spec adds API-wide: [Configuration reference](#configuration-reference).
+Repeat for each plugin and route. The optional extra (`request-id`) the full
+spec adds API-wide: [Configuration reference](#configuration-reference).
 
 **3. Give it an upstream, then deploy it**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick environment
