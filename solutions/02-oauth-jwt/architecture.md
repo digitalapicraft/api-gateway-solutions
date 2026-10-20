@@ -76,16 +76,15 @@ never shows up in your application logs.
 
 | Status | What it means | Where to look |
 |---|---|---|
-| **401** on a protected route | The gateway could not confirm who is calling: no `Authorization` header, no `Bearer ` prefix, an expired token, or a token this gateway didn't sign | The client's token. All four look the same to the caller, on purpose. |
+| **401** on a protected route | The gateway could not confirm who is calling: no `Authorization` header, no `Bearer ` prefix, an expired token, or a token this gateway didn't sign | The client's token. The message in the body says which: see [See it work](guides.md#see-it-work). |
 | **401** on `/oauth/token` | Unknown client id, or the secret doesn't match. No token is issued. | Is the app sending its client id where the id goes, and its secret where the secret goes? |
 | **401** on every call, even with a token issued seconds ago | The signing secret differs between the token route and the protected route | The `signing_secret` values in the spec |
 | **403** with a valid token | The gateway knows who is calling, but the app is not subscribed to a product that covers this API | The app's products |
 
-All four caller-side 401s are deliberately identical. A detailed error would tell
-an attacker which part of their guess was right. The cost is that integrators
-can't tell the causes apart on their own, so **list the four causes in your
-developer docs** and give them the `X-Request-Id` header value to quote in support
-tickets.
+Each rejection carries a short message saying what went wrong, so partners can
+fix most problems themselves. **Put those messages in your developer docs**, and
+ask partners for the `X-Request-Id` header value (when the `request-id` plugin is
+on) when they raise a support ticket.
 
 ## Execution order
 

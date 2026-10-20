@@ -272,6 +272,11 @@ content-type: application/json
 {"access_token":"eyJhbGciOiJIUzI1NiIs...","token_type":"Bearer","expires_in":900}
 ```
 
+Send the client id and secret in the `Authorization: Basic` header, as shown
+above. If you send them in a form body instead, you get HTTP 401 with
+`invalid_client`. The token address only answers `POST`: a `GET` to
+`/oauth/token` returns HTTP 404 (not found).
+
 Then call a protected route with it, and without it:
 
 ```bash
@@ -286,22 +291,22 @@ curl -s -o /dev/null -w "%{http_code}\n" "https://<YOUR_GATEWAY_HOST>/posts"
 # 401  <- no token; your backend never saw the call
 ```
 
-Every rejection on a protected route is a plain `401`:
+Every rejection returns HTTP 401 (not signed in), with a short message in the
+body that says what went wrong:
 
-```http
-HTTP/1.1 401 Unauthorized
-```
+| What went wrong | What the caller gets back |
+|---|---|
+| No `Authorization` header, or it doesn't start with `Bearer ` | `{"message":"Missing or invalid authorization"}` |
+| The token has expired, was changed after it was issued, or wasn't signed by this gateway | `{"message":"Invalid or expired token"}` |
+| The token is signed correctly, but for an app the gateway doesn't know | `{"message":"Unknown client"}` |
+| Wrong client id or secret when asking `/oauth/token` for a token | `{"error":"invalid_client"}` |
 
-**All four failure causes look the same to the caller** — no token, no `Bearer `
-prefix, an expired token, a token this gateway didn't sign. That is correct for
-security and awkward for integrators, so:
-
-- **Document the causes** in your developer docs, since the response won't tell
-  them apart: "A 401 means one of: no `Authorization` header, no `Bearer ` prefix,
-  an expired token, or a token this gateway didn't sign."
+- **Put this table in your developer docs**, so partners can fix most problems
+  on their own.
 - **Use the request id for support.** `X-Request-Id` is added to every call,
-  including the token exchange, so when a partner reports "it just returns 401" you
-  have something to search for.
+  including the token request (when the `request-id` plugin is on, as it is in
+  `example/api-spec.yaml`). When a partner reports "it just returns 401", ask
+  for that id: it's something you can search for.
 
 **Tell integrators to keep and reuse the token** until shortly before it expires —
 around 80% of its lifetime. A client that asks for a new token on every call turns
@@ -439,5 +444,12 @@ Every field of every plugin, and the wider product docs:
   suspect the signing secret before you suspect the client.
 - **Confirm `helix-auth`'s fields in your own org** with `get_plugin_config`
   before deploying. Builds differ, and field names are not worth guessing.
+- **Keep the signing secret as safe as an admin password.** Anyone who has it can
+  create a valid token for any app. A token holds only the app's key and two
+  times (when it was issued and when it expires), so nothing else gives a
+  made-up token away.
+- **The portal shows the signing secret in plain text** on the plugin's Review
+  step and in the routes table. Don't share your screen while those pages are
+  open.
 - **`request-id` covers the token route on purpose.** Sign-in failures are exactly
   what you'll be asked to investigate, and the token exchange is half the flow.
