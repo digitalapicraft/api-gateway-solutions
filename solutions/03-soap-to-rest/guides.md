@@ -457,8 +457,8 @@ Every field of every plugin, and the wider product docs:
 - **Element names become your public contract.** Partner-facing JSON now contains
   the internal names of an old system. Renaming them later breaks partners, so
   decide now whether you're happy to publish them.
-- **Use the trace inspector to see each step.** On the API's page, open
-  **Observability → Start trace**. It shows the headers each plugin changes and
+- **Use the trace inspector to see each step.** On the API's page, open the
+  **Observability** tab and click **Start trace session**. It shows the headers each plugin changes and
   the request body at every stage, which is the fastest way to see what your
   SOAP service actually received.
 - **Confirm `xml-to-json` exists in your org** before designing around it. Builds

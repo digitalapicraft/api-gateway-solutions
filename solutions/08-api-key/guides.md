@@ -431,7 +431,7 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
 - **The agent puts a key value in the spec.** The route names the header only; the control plane issues the key on the app.
 - **`create_api` fails saying the API exists.** A previous run left one behind. Use a free name.
 - **You ask the agent to run `validate_route`.** It always fails on this platform, whatever the route says. Ask for `dry_run_deploy` instead.
-- **Use the trace inspector to see each step.** On the API's page, open
-  **Observability → Start trace**. It shows the headers each plugin changes and
+- **Use the trace inspector to see each step.** On the API's page, open the
+  **Observability** tab and click **Start trace session**. It shows the headers each plugin changes and
   the request body at every stage, which is the fastest way to see what each
   plugin did to a call.

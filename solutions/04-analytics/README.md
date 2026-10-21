@@ -87,8 +87,9 @@ The `(unattributed)` row is traffic from APIs that don't identify their callers 
 see [Architecture](architecture.md#two-things-about-attribution) for why, and how
 to fix it.
 
-**Reading it takes one step:** paste a question to the Helix Agent, or run the
-script with your org id and token. There is nothing to configure first.
+**Reading it takes one step:** paste a question to the Helix Agent, open
+**Analytics → Widgets** in the UI, or run the script with your org id
+and token. There is nothing to configure first.
 [Step by step →](guides.md)
 
 ## Where to go next
@@ -97,7 +98,7 @@ script with your org id and token. There is nothing to configure first.
   this matters, in plain terms.
 - **Want to understand how it works?** [Architecture](architecture.md) covers where
   the data comes from, the read API, and its limits.
-- **Ready to try it?** [Guides](guides.md) walks you through all three ways.
+- **Ready to try it?** [Guides](guides.md) walks you through all four ways.
 - **Want every query, ready to copy?** The [query catalogue](charts.md) has the
   exact request for each everyday question.
 - **Want the full product documentation?** Every plugin, screen and API call is

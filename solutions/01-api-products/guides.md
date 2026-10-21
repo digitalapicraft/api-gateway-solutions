@@ -424,7 +424,7 @@ and the wider product docs at [docs.digitalapi.ai/api-gateway](https://docs.digi
   differently between the control plane and the gateway, and deploy will fail.
 - **Confirm `api-product-enforcer` exists in your org** with `get_plugin_config`
   before you design around it.
-- **Use the trace inspector to see each step.** On the API's page, open
-  **Observability → Start trace**. It shows the headers each plugin changes and
+- **Use the trace inspector to see each step.** On the API's page, open the
+  **Observability** tab and click **Start trace session**. It shows the headers each plugin changes and
   the request body at every stage, which is the fastest way to see what each
   plugin did to a call.

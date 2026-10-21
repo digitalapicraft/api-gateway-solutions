@@ -193,7 +193,7 @@ cases:
       expect 500, with the body sent to the service unconverted. 2) set
       _meta.priority back to 900 and call again — expect 200 with JSON.
     notes: >-
-      Use the trace inspector (Observability → Start trace) to see the body and
+      Use a trace (the API's Observability tab, Start trace session) to see the body and
       headers at each step.
 
   - id: slow-handler-timeout

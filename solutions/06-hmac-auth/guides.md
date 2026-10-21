@@ -518,7 +518,7 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
 - **The routes exist with **no plugins**, though every step reported success.** The agent wrapped the plugins in `x-helix-gateway` inside the live route, which a live route silently discards. Ask for a plain top-level `plugins` map and read the revision back; if it still won't, import the spec.
 - **You need the secret again.** It's returned once and stored encrypted. Rotate instead.
 - **The session ends with `stream closed with reason: error` part-way through.** The configuration may already have been saved. Read the revision back to see what landed, then carry on from there.
-- **Use the trace inspector to see each step.** On the API's page, open
-  **Observability → Start trace**. It shows the headers each plugin changes and
+- **Use the trace inspector to see each step.** On the API's page, open the
+  **Observability** tab and click **Start trace session**. It shows the headers each plugin changes and
   the request body at every stage, which is the fastest way to see what each
   plugin did to a call.

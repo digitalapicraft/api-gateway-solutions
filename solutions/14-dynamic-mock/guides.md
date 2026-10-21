@@ -414,7 +414,7 @@ If you built it with the agent:
 | The route deploys with plugins you never asked for | The plugin-name level was dropped. Read the revision back and ask for a `plugins` object keyed by plugin name. |
 | `stream closed with reason: error`, nothing written | The structure was too deep for one write. Split the step, or use spec import. |
 
-- **Use the trace inspector to see each step.** On the API's page, open
-  **Observability → Start trace**. It shows the headers each plugin changes and
+- **Use the trace inspector to see each step.** On the API's page, open the
+  **Observability** tab and click **Start trace session**. It shows the headers each plugin changes and
   the request body at every stage, which is the fastest way to see what each
   plugin did to a call.

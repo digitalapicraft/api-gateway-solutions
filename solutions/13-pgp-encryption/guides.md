@@ -441,7 +441,7 @@ If you built it with the agent:
 | The agent sets `field` on the encrypt block | Reply: remove it — it returns only that field's ciphertext and throws the document away. |
 | The write succeeds and the routes have no plugins | Nested under `x-helix-gateway`. Read the revision back and rewrite with a top-level `plugins` key. |
 
-- **Use the trace inspector to see each step.** On the API's page, open
-  **Observability → Start trace**. It shows the headers each plugin changes and
+- **Use the trace inspector to see each step.** On the API's page, open the
+  **Observability** tab and click **Start trace session**. It shows the headers each plugin changes and
   the request body at every stage, which is the fastest way to see what each
   plugin did to a call.

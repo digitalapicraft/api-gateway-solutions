@@ -447,7 +447,7 @@ Every field of every plugin, and the wider product docs:
   reached **from the gateway**. Test the URI from the gateway's network, not your
   laptop.
 - **Confirm `service-callout` exists in your org** before you design around it.
-- **Use the trace inspector to see each step.** On the API's page, open
-  **Observability → Start trace**. It shows the headers each plugin changes and
+- **Use the trace inspector to see each step.** On the API's page, open the
+  **Observability** tab and click **Start trace session**. It shows the headers each plugin changes and
   the request body at every stage, which is the fastest way to see what each
   plugin did to a call.

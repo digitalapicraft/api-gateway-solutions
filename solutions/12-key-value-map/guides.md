@@ -423,7 +423,7 @@ If you built it with the agent:
 
 Everything in [solution 13's troubleshooting](../13-pgp-encryption/guides.md#troubleshooting)
 still applies to the encryption itself — the wire format especially.
-- **Use the trace inspector to see each step.** On the API's page, open
-  **Observability → Start trace**. It shows the headers each plugin changes and
+- **Use the trace inspector to see each step.** On the API's page, open the
+  **Observability** tab and click **Start trace session**. It shows the headers each plugin changes and
   the request body at every stage, which is the fastest way to see what each
   plugin did to a call.
