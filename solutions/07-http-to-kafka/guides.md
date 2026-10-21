@@ -58,9 +58,12 @@ Pick one of the two ways below. Both give you the same thing: an API called
 *Option A — from scratch*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
 2. Choose **Create from scratch**. Set **Display name** to `Event Ingest API`,
-   then **Save**.
+   then **Create**.
 3. On the API's page, open **Configuration → Routes** and add one route:
    - `POST /events`, where callers send their events
+
+   The route form opens already filled in with the name *New* and the path
+   `/new-route`. Clear both fields first, then type your own.
 
 *Option B — from an OpenAPI spec*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
@@ -185,17 +188,37 @@ order, whatever order you add them in.
    }
    ```
 
-Repeat for each plugin. What every field means, and the optional
-extra (`request-id`) the full spec adds API-wide:
-[Configuration reference](#configuration-reference).
+Repeat for each plugin.
+
+4. **`request-id` — the correlation id.** Scope: **Entire Revision**. It puts an
+   `X-Request-Id` header on every response, and `kafka-logger` writes the same id
+   into each message, so a caller's 202 can be matched to the event on the topic.
+   Don't skip it: `verify.sh` checks for this header.
+
+   ```json
+   {"algorithm":"uuid","header_name":"X-Request-Id"}
+   ```
+
+What every field means: [Configuration reference](#configuration-reference).
 
 **3. Give it an upstream, then deploy it**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick environment
-   `test`, point it at any host (for example `jsonplaceholder.typicode.com`), then
-   **Create Upstream**. The `/events` route never contacts it, but a revision
-   won't deploy without one.
-2. Back on the API's page, click **Deploy** on the revision. The dialog asks you
+   `test`, and add a node at `jsonplaceholder.typicode.com`, port `443`, scheme
+   HTTPS (any host will do). If you switch the scheme to HTTP, the port stays at
+   `443`: change it to `80` by hand. The `/events` route never contacts it, but
+   a revision won't deploy without one.
+2. **Pass Host** is set to **Rewrite**, which makes **Upstream Host** required.
+   It fills in from the node's host; check it reads
+   `jsonplaceholder.typicode.com`.
+3. Click **Next** through the remaining tabs, then **Add Upstream**.
+4. Back on the API's page, click **Deploy** on the revision. The dialog asks you
    to map an upstream for `test`. Pick the one you just created, then **Deploy**.
+
+**Changing it later.** A change to the upstream (host, port, scheme) applies to
+the live API straight away, with no new deploy. A change to routes or plugins
+does need one, because a live revision can't be edited: use **Clone Revision**,
+make your change on the copy, then **Force Deploy** it. The same steps roll you
+back: clone the older revision and force-deploy that.
 
 That's it. No products, developers or apps are needed, because the route ships
 unauthenticated. Read [Where authentication would go](architecture.md#where-authentication-would-go)
@@ -412,3 +435,7 @@ Every field of every plugin, and the wider product docs:
   its default, `true`.
 - **Confirm the three plugins exist in your org** before you design around them,
   with `GET /api/orgs/{orgId}/plugin-schemas?page=1&size=300`.
+- **Use the trace inspector to see each step.** On the API's page, open
+  **Observability → Start trace**. It shows the headers each plugin changes and
+  the request body at every stage, which is the fastest way to see what each
+  plugin did to a call.

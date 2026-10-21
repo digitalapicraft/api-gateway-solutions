@@ -53,10 +53,13 @@ Pick one of the two ways below. Both give you the same thing: an API called
 *Option A — from scratch*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
 2. Choose **Create from scratch**. Set **Display name** to `Catalog API`, then
-   **Save**.
+   **Create**.
 3. On the API's page, open **Configuration → Routes** and add two routes:
    - `GET /catalog/items`, the list of catalog items
    - `POST /catalog/orders`, placing an order
+
+   The route form opens already filled in with the name *New* and the path
+   `/new-route`. Clear both fields first, then type your own.
 
 *Option B — from an OpenAPI spec*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
@@ -180,10 +183,20 @@ backend's path instead of `/xml` and `/post`, and make `content_types` match the
 
 **3. Give it an upstream, then deploy it**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick environment
-   `test`, point it at `httpbin.org` (or your own XML backend), then
-   **Create Upstream**.
-2. Back on the API's page, click **Deploy** on the revision. The dialog asks you
+   `test`, and add a node at `httpbin.org`, port `443`, scheme HTTPS (or your
+   own XML backend). If you switch the scheme to HTTP, the port stays at `443`:
+   change it to `80` by hand.
+2. **Pass Host** is set to **Rewrite**, which makes **Upstream Host** required.
+   It fills in from the node's host; check it reads `httpbin.org`.
+3. Click **Next** through the remaining tabs, then **Add Upstream**.
+4. Back on the API's page, click **Deploy** on the revision. The dialog asks you
    to map an upstream for `test`. Pick the one you just created, then **Deploy**.
+
+**Changing it later.** A change to the upstream (host, port, scheme) applies to
+the live API straight away, with no new deploy. A change to routes or plugins
+does need one, because a live revision can't be edited: use **Clone Revision**,
+make your change on the copy, then **Force Deploy** it. The same steps roll you
+back: clone the older revision and force-deploy that.
 
 No products, developers or apps are needed: the package ships unauthenticated.
 
@@ -333,9 +346,14 @@ proxy-rewrite:
 | `xml-to-json` | `array_item_name` | `item` | The element name for children of a top-level JSON array. A nested array becomes repeated siblings named after its key. |
 | `xml-to-json` | `root_attributes.xmlns` | `urn:example:catalog` | The namespace on the generated root. Without it, a namespace-aware backend rejects an otherwise-correct document, usually with a message that doesn't mention namespaces. |
 | `xml-to-json` | `max_body_size` | `1048576` | Bodies larger than this are forwarded **unchanged**, not rejected. |
-| `proxy-rewrite` | `uri` | `/xml`, `/post` | Path only. **Never set `Content-Type` here** on a route that converts requests. |
+| `proxy-rewrite` | `uri` | `/xml`, `/post` | Path only. Your test backend accepts what `xml-to-json` sends, so nothing else is needed. If your own backend wants a different `Content-Type` (for example `text/xml`), set it here with `"_meta":{"priority":900}`, so this plugin runs after the conversion. At its usual priority it runs first and the request is never converted. [Solution 03](../03-soap-to-rest/guides.md#configuration-reference) does exactly this. |
 | `request-id` | `algorithm` / `header_name` | `uuid` / `X-Request-Id` | API-wide. Conversion failures are reported by the backend, so this id is what ties its complaint to a request. |
 | `cors` | `allow_origins` / `allow_methods` / `allow_headers` | `*` / `GET,POST,OPTIONS` / `accept,content-type` | API-wide, with `allow_credential: false`. `accept` must be allowed or a browser can't ask for JSON. Tighten `allow_origins` before using your own backend. |
+
+Fields this package leaves at their defaults: `root_name` (the root element's
+name), `enable_decl` (adds an `<?xml ...?>` line), and `ctx_namespace` (where the
+plugin shares values with other plugins on the route). Confirm them with
+`get_plugin_config` in your own org.
 
 Two formatting options worth knowing:
 
@@ -362,20 +380,31 @@ Every field of every plugin, and the wider product docs:
 - **A content type outside `request_content_types` passes through silently.** So
   does a body over `max_body_size`. Neither produces an error.
 - **`pretty: true` returns 503 on this build.** Leave it off.
-- **Never set `Content-Type` in `proxy-rewrite` on a route that converts
-  requests.** It runs first and breaks the match.
+- **Setting `Content-Type` in `proxy-rewrite` breaks the conversion, unless it
+  runs second.** At its usual priority `proxy-rewrite` runs before `xml-to-json`,
+  so the body is relabelled and never converted. Give it `"_meta":{"priority":900}`
+  and it runs after: see [solution 03](../03-soap-to-rest/guides.md#configuration-reference).
 - **Check what your backend actually sends.** `content_types` defaults to
   `application/xml` and `text/xml`. A backend replying `text/html` or
   `application/soap+xml` matches neither.
 - **A single occurrence of a repeatable element is an object, not an array.**
   Write clients that accept both, or normalise in your own layer. The plugin has
   no "always array" option.
-- **JSON key order isn't kept on the way to XML.** A problem with a strict
-  `xs:sequence` schema, invisible otherwise.
+- **Fields go to the backend in alphabetical order.** When a JSON object with
+  several fields becomes XML, its fields are sorted A–Z. A problem for a backend
+  with a strict `xs:sequence` schema, invisible otherwise.
+- **Don't rely on field order in the JSON response.** It can change from one call
+  to the next.
+- **Prefixes and namespace declarations come through.** Prefixed elements keep
+  their prefix in the JSON key, and `xmlns:*` attributes appear as fields. They
+  become part of what partners see.
+- **An empty collection converts to `null`, not `{}`.**
+- **The `Accept` check is a simple match.** It ignores preference weights, so
+  `application/xml;q=0.9, application/json;q=0.1` still gets JSON.
 - **Conversion failures are reported by the *backend*, not the gateway.** That is
   why `request-id` is on every route.
-- **`transform_request` also changes the outgoing `Content-Type`.** The backend
-  receives `application/xml`, not the client's type.
+- **`transform_request` also changes the outgoing headers.** The backend receives
+  `Content-Type` and `Accept` both set to `application/xml`, not the client's.
 - **Confirm `xml-to-json` exists in your org** before you design around it.
 - **Everything returns 200 and the backend still complains.** Both conversion
   switches fail open, so a 200 from the gateway doesn't prove the conversion
@@ -391,3 +420,7 @@ Every field of every plugin, and the wider product docs:
   `uri`.
 - **Deploy fails with `Only INACTIVE revisions can be updated`.** Clone the
   revision or undeploy it, then apply the change.
+- **Use the trace inspector to see each step.** On the API's page, open
+  **Observability → Start trace**. It shows the headers each plugin changes and
+  the request body at every stage, which is the fastest way to see what each
+  plugin did to a call.

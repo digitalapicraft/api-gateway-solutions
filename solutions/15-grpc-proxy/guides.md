@@ -58,7 +58,7 @@ Pick one of the two ways below. Both give you the same thing: an API called
 *Option A — from scratch*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
 2. Choose **Create from scratch**. Set **Display name** to
-   `Timing Unit Stream API`, then **Save**.
+   `Timing Unit Stream API`, then **Create**.
 3. On the API's page, open **Configuration → Routes** and add five routes, all
    with method `POST`. Each path is a gRPC method path, written
    `/<package>.<Service>/<Method>`, because every gRPC call is a `POST` to one:
@@ -69,6 +69,9 @@ Pick one of the two ways below. Both give you the same thing: an API called
      `/grpc.reflection.v1.ServerReflection/ServerReflectionInfo`, which let a
      client discover the service's methods. Add **both**: a client tries `v1`
      first and only falls back to `v1alpha` if `v1` answers cleanly.
+
+   The route form opens already filled in with the name *New* and the path
+   `/new-route`. Clear both fields first, then type your own.
 
 *Option B — from an OpenAPI spec*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
@@ -143,16 +146,26 @@ Repeat for each route. What every field means, and the optional extra (`request-
 
 **3. Create the gRPC upstream, then deploy it**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it (for example
-   `timing-grpc`), pick environment `test`, point it at your gRPC backend's host
-   and port, then **Create Upstream**.
+   `timing-grpc`), pick environment `test`, and add a node with your gRPC
+   backend's host and port.
 
    The upstream's scheme must be `grpc` (or `grpcs` for a TLS backend). This
    guide has not confirmed a scheme choice on that screen. If you don't see one,
    create the upstream with the API call in
    [Install it directly](#install-it-directly), step 2, then carry on here.
-2. Back on the API's page, click **Deploy** on the revision. The dialog asks you
+2. **Pass Host** is set to **Rewrite**, which makes **Upstream Host** required.
+   It fills in from the node's host; check it matches your gRPC backend.
+3. Click **Next** through the remaining tabs, then **Add Upstream**.
+4. Back on the API's page, click **Deploy** on the revision. The dialog asks you
    to map an upstream for `test`. Pick the gRPC upstream you just created, then
    **Deploy**.
+
+**Changing it later.** A change to the upstream's host or port applies to the
+live API straight away, with no new deploy. A change to its **scheme** (`grpc` or
+`grpcs`) does not: undeploy the revision and deploy it again. A change to routes or plugins
+does need one, because a live revision can't be edited: use **Clone Revision**,
+make your change on the copy, then **Force Deploy** it. The same steps roll you
+back: clone the older revision and force-deploy that.
 
 **4. Create a product for it**
 1. Go to **API Distribution → API Products**, click **Add API Product**.
@@ -383,3 +396,8 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
 | A revoked app is still connected | Expected. The key is checked once, when the stream opens. The open stream continues until it ends. |
 | A quota allows far more messages than expected | Expected. It counts streams, not messages. |
 | Deploy fails: `Only INACTIVE revisions can be updated` | Clone the revision or undeploy, then apply. |
+
+- **Use the trace inspector to see each step.** On the API's page, open
+  **Observability → Start trace**. It shows the headers each plugin changes and
+  the request body at every stage, which is the fastest way to see what each
+  plugin did to a call.

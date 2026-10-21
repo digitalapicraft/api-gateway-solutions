@@ -52,10 +52,13 @@ Pick one of the two ways below. Both give you the same thing: an API called
 *Option A — from scratch*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
 2. Choose **Create from scratch**. Set **Display name** to `Partner Documents API`,
-   then **Save**.
+   then **Create**.
 3. On the API's page, open **Configuration → Routes** and add two routes:
    - `POST` `/partners/keys`, where an operator registers a partner's public key
    - `GET` `/partners/documents`, where a partner fetches a document
+
+   The route form opens already filled in with the name *New* and the path
+   `/new-route`. Clear both fields first, then type your own.
 
 *Option B — from an OpenAPI spec*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
@@ -177,10 +180,20 @@ Repeat for each plugin and route. What every field means, and the optional extra
 
 **3. Give it an upstream, then deploy it**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick environment
-   `test`, point it at `httpbin.org`, then **Create Upstream**. If an `httpbin`
-   upstream already exists in your org, reuse it.
-2. Back on the API's page, click **Deploy** on the revision. The dialog asks you
+   `test`, and add a node at `httpbin.org`, port `443`, scheme HTTPS. If you
+   switch the scheme to HTTP, the port stays at `443`: change it to `80` by
+   hand. If an `httpbin` upstream already exists in your org, reuse it.
+2. **Pass Host** is set to **Rewrite**, which makes **Upstream Host** required.
+   It fills in from the node's host; check it reads `httpbin.org`.
+3. Click **Next** through the remaining tabs, then **Add Upstream**.
+4. Back on the API's page, click **Deploy** on the revision. The dialog asks you
    to map an upstream for `test`. Pick the one you just created, then **Deploy**.
+
+**Changing it later.** A change to the upstream (host, port, scheme) applies to
+the live API straight away, with no new deploy. A change to routes or plugins
+does need one, because a live revision can't be edited: use **Clone Revision**,
+make your change on the copy, then **Force Deploy** it. The same steps roll you
+back: clone the older revision and force-deploy that.
 
 **4. Register a partner's key**
 
@@ -410,3 +423,7 @@ If you built it with the agent:
 
 Everything in [solution 13's troubleshooting](../13-pgp-encryption/guides.md#troubleshooting)
 still applies to the encryption itself — the wire format especially.
+- **Use the trace inspector to see each step.** On the API's page, open
+  **Observability → Start trace**. It shows the headers each plugin changes and
+  the request body at every stage, which is the fastest way to see what each
+  plugin did to a call.

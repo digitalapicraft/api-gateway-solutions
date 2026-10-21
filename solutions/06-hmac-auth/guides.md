@@ -59,11 +59,14 @@ Pick one of the two ways below. Both give you the same thing: an API called
 *Option A — from scratch*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
 2. Choose **Create from scratch**. Set **Display name** to `Partner Albums API`,
-   then **Save**.
+   then **Create**.
 3. On the API's page, open **Configuration → Routes** and add two routes:
    - `POST /albums`, which sends in an event with a JSON body
    - `GET /albums/:albumId`, which reads one event back. The gateway writes a
      path parameter as `:albumId`, not `{albumId}`.
+
+   The route form opens already filled in with the name *New* and the path
+   `/new-route`. Clear both fields first, then type your own.
 
 *Option B — from an OpenAPI spec*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
@@ -163,10 +166,21 @@ extra (`request-id`) the full spec adds:
 
 **3. Give it an upstream, then deploy it**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick environment
-   `test`, point it at `jsonplaceholder.typicode.com` (or your own host), then
-   **Create Upstream**.
-2. Back on the API's page, click **Deploy** on the revision. The dialog asks you
+   `test`, and add a node at `jsonplaceholder.typicode.com`, port `443`, scheme
+   HTTPS (or your own host). If you switch the scheme to HTTP, the port stays at
+   `443`: change it to `80` by hand.
+2. **Pass Host** is set to **Rewrite**, which makes **Upstream Host** required.
+   It fills in from the node's host; check it reads
+   `jsonplaceholder.typicode.com`.
+3. Click **Next** through the remaining tabs, then **Add Upstream**.
+4. Back on the API's page, click **Deploy** on the revision. The dialog asks you
    to map an upstream for `test`. Pick the one you just created, then **Deploy**.
+
+**Changing it later.** A change to the upstream (host, port, scheme) applies to
+the live API straight away, with no new deploy. A change to routes or plugins
+does need one, because a live revision can't be edited: use **Clone Revision**,
+make your change on the copy, then **Force Deploy** it. The same steps roll you
+back: clone the older revision and force-deploy that.
 
 **4. Create the product**
 1. Go to **API Distribution → API Products**, click **Add API Product**.
@@ -504,3 +518,7 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
 - **The routes exist with **no plugins**, though every step reported success.** The agent wrapped the plugins in `x-helix-gateway` inside the live route, which a live route silently discards. Ask for a plain top-level `plugins` map and read the revision back; if it still won't, import the spec.
 - **You need the secret again.** It's returned once and stored encrypted. Rotate instead.
 - **The session ends with `stream closed with reason: error` part-way through.** The configuration may already have been saved. Read the revision back to see what landed, then carry on from there.
+- **Use the trace inspector to see each step.** On the API's page, open
+  **Observability → Start trace**. It shows the headers each plugin changes and
+  the request body at every stage, which is the fastest way to see what each
+  plugin did to a call.

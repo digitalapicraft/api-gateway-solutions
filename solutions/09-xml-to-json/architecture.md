@@ -157,7 +157,9 @@ Native, and deliberately the *simpler* of the two native options.
   can go out of date.
 - **`json-to-xml`** — despite the name, it solves the opposite problem. It turns a
   JSON *backend response* into XML for clients that want XML. It is not how you
-  send XML to your backend; `transform_request` is.
+  send XML to your backend; `transform_request` is. Adding it next to
+  `xml-to-json` doesn't fail loudly: on this build calls still return 200 with
+  JSON, and clients that ask for XML get JSON too.
 
 This package uses the structural converter because the value is in removing four
 client-side parsers, not in designing a new API. When you need a stable public

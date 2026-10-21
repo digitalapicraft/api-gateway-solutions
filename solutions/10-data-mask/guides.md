@@ -53,12 +53,15 @@ Pick one of the two ways below. Both give you the same thing: an API called
 *Option A — from scratch*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
 2. Choose **Create from scratch**. Set **Display name** to `Support Console API`,
-   then **Save**.
+   then **Create**.
 3. On the API's page, open **Configuration → Routes** and add two routes, both
    with method `GET`:
    - `/support/customers`, the list of customers
    - `/support/customers/:customerId`, one customer. The gateway writes a path
      parameter as `:customerId`, not `{customerId}`.
+
+   The route form opens already filled in with the name *New* and the path
+   `/new-route`. Clear both fields first, then type your own.
 
 *Option B — from an OpenAPI spec*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
@@ -178,10 +181,21 @@ spec adds API-wide: [Configuration reference](#configuration-reference).
 
 **3. Give it an upstream, then deploy it**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick environment
-   `test`, point it at `jsonplaceholder.typicode.com` (or your own backend), then
-   **Create Upstream**.
-2. Back on the API's page, click **Deploy** on the revision. The dialog asks you
+   `test`, and add a node at `jsonplaceholder.typicode.com`, port `443`, scheme
+   HTTPS (or your own backend). If you switch the scheme to HTTP, the port stays
+   at `443`: change it to `80` by hand.
+2. **Pass Host** is set to **Rewrite**, which makes **Upstream Host** required.
+   It fills in from the node's host; check it reads
+   `jsonplaceholder.typicode.com`.
+3. Click **Next** through the remaining tabs, then **Add Upstream**.
+4. Back on the API's page, click **Deploy** on the revision. The dialog asks you
    to map an upstream for `test`. Pick the one you just created, then **Deploy**.
+
+**Changing it later.** A change to the upstream (host, port, scheme) applies to
+the live API straight away, with no new deploy. A change to routes or plugins
+does need one, because a live revision can't be edited: use **Clone Revision**,
+make your change on the copy, then **Force Deploy** it. The same steps roll you
+back: clone the older revision and force-deploy that.
 
 No products, developers or apps are needed: the package ships unauthenticated.
 
@@ -405,3 +419,7 @@ Every field of every plugin, and the wider product docs:
   Try once more; if it repeats, import [`example/api-spec.yaml`](example/api-spec.yaml).
 - **Deploy fails with `Only INACTIVE revisions can be updated`.** Clone the
   revision or undeploy it, then apply the change.
+- **Use the trace inspector to see each step.** On the API's page, open
+  **Observability → Start trace**. It shows the headers each plugin changes and
+  the request body at every stage, which is the fastest way to see what each
+  plugin did to a call.

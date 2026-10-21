@@ -64,10 +64,13 @@ Pick one of the two ways below. Both give you the same thing: an API called
 *Option A — from scratch*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
 2. Choose **Create from scratch**. Set **Display name** to `Partner Albums API`,
-   then **Save**.
+   then **Create**.
 3. On the API's page, open **Configuration → Routes** and add two routes:
    - `GET` `/albums`, the list of albums
    - `POST` `/albums`, create an album
+
+   The route form opens already filled in with the name *New* and the path
+   `/new-route`. Clear both fields first, then type your own.
 
 *Option B — from an OpenAPI spec*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
@@ -173,11 +176,22 @@ means, and the two optional extras (`request-id`, `cors`) the full spec adds:
 
 **3. Give it an upstream, then deploy it**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick your
-   environment, point it at `jsonplaceholder.typicode.com` (or your own host), then
-   **Create Upstream**.
-2. Back on the API's page, click **Deploy** on the revision. The dialog asks you to
+   environment, and add a node at `jsonplaceholder.typicode.com`, port `443`,
+   scheme HTTPS (or your own host). If you switch the scheme to HTTP, the port
+   stays at `443`: change it to `80` by hand.
+2. **Pass Host** is set to **Rewrite**, which makes **Upstream Host** required.
+   It fills in from the node's host; check it reads
+   `jsonplaceholder.typicode.com`.
+3. Click **Next** through the remaining tabs, then **Add Upstream**.
+4. Back on the API's page, click **Deploy** on the revision. The dialog asks you to
    map an upstream for the environment. Pick the one you just created, then
    **Deploy**.
+
+**Changing it later.** A change to the upstream (host, port, scheme) applies to
+the live API straight away, with no new deploy. A change to routes or plugins
+does need one, because a live revision can't be edited: use **Clone Revision**,
+make your change on the copy, then **Force Deploy** it. The same steps roll you
+back: clone the older revision and force-deploy that.
 
 **4. Get a token from Okta and call the API**
 
@@ -269,7 +283,8 @@ What a caller sees in each situation. Every row was run against a deployed route
 
 Most failures are the same plain `401`. That is correct: telling them apart would
 tell an attacker which part they got right. It also makes them hard for an honest
-caller to diagnose, so ask them for the `X-Request-Id` from the response.
+caller to diagnose, so ask them for the `X-Request-Id` from the response. The
+`request-id` plugin adds it; the full spec has it on.
 
 The upstream receives `X-Access-Token`. It does **not** receive `X-ID-Token` or
 `X-Userinfo`: those are for browser sign-in, and `set_userinfo_header` in
@@ -478,3 +493,7 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
 - **The agent invents an `audience` field with an expected value.** There isn't one. `claim_validator.audience` has `required`, `claim` and `match_with_client_id`.
 - **The routes exist with **no plugins**, though every step reported success.** The agent wrapped the plugins in `x-helix-gateway` inside the live route, which a live route silently discards. Ask for a plain top-level `plugins` map and read the revision back; if it still won't, import the spec.
 - **Deploy fails: `Only INACTIVE revisions can be updated`.** The revision is already live. Clone it or undeploy, then apply.
+- **Use the trace inspector to see each step.** On the API's page, open
+  **Observability → Start trace**. It shows the headers each plugin changes and
+  the request body at every stage, which is the fastest way to see what each
+  plugin did to a call.
