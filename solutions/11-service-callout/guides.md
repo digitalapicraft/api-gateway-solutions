@@ -448,6 +448,15 @@ Every field of every plugin, and the wider product docs:
   laptop.
 - **Confirm `service-callout` exists in your org** before you design around it.
 - **Use the trace inspector to see each step.** On the API's page, open the
-  **Observability** tab and click **Start trace session**. It shows the headers each plugin changes and
-  the request body at every stage, which is the fastest way to see what each
-  plugin did to a call.
+  **Observability** tab and click **Start trace session**. It shows the headers
+  each plugin changes and the request body at every stage, which is the fastest
+  way to see what each plugin did to a call. A session stops after 10 requests,
+  so use **Advanced: filter which requests to capture** to record only the ones
+  you care about (skipped requests don't count). The list doesn't refresh by
+  itself: click **Refresh**. The **Inspector** shows API keys and cookies in
+  plain text, so don't share your screen or paste a trace into a ticket without
+  removing them.
+- **See what changed, and when, in Audit Logs.** **Observability → Audit Logs**
+  lists every clone, plugin change and deploy. Its times are in your local time,
+  while analytics uses UTC. Anything done with your token, including scripts and
+  the Helix Agent, appears under your name.

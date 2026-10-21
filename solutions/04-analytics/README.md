@@ -41,7 +41,7 @@ builds a report on numbers that don't exist.
 ## What this solution gives you
 
 - **Three ways to read the same data:** ask the Helix Agent in plain English and
-  it draws a chart; run [`scripts/query-analytics.sh`](scripts/query-analytics.sh)
+  it answers with a table; run [`scripts/query-analytics.sh`](scripts/query-analytics.sh)
   for a printed summary; or send the metrics API calls yourself.
 - **Ready-made questions** for the everyday cases: traffic by API, product or app;
   slowest and fastest APIs; errors by status code; who is being rate-limited;

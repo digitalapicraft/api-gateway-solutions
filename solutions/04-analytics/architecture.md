@@ -39,9 +39,13 @@ For each call, the gateway records one row: the API and route, the app, develope
 and product (when the API identifies its callers), the status code, the response
 time, the request and response sizes, and more.
 
-Recording happens in the gateway's **log phase**, after the response has been
-sent, so it never slows a request down or changes what the caller gets. There is no
-"turn on analytics" step, and no analytics block to add to a spec.
+Recording is done by a built-in plugin, `helix-analytics`. The platform adds it
+to every API automatically: you don't add it, and there is no analytics block to
+put in a spec. A trace shows it running in the **Log** step on every call.
+
+The Log step runs after the response has been sent, so recording never slows a
+request down or changes what the caller gets. There is no "turn on analytics"
+step.
 
 ## The read API
 
@@ -56,10 +60,13 @@ POST /api/orgs/{orgId}/analytics/metrics/{metric}
 |---|---|---|
 | **metric** (in the path) | What to measure | `requests-count`, `requests-per-second`, `response-time`, `upstream-response-time`, `request-size`, `response-size`, `total-transfer-size` |
 | **aggregation** | How to combine values — time and size metrics only; counts and rates take none | `AVG`, `MIN`, `MAX`, `SUM` |
-| **dimensions** | What to group by | `env_name`, `app_id`, `app_name`, `product_name`, `api_name`, `route_id`, `route_name`, `api_path`, `request_method`, `response_status_code`, `upstream_path`, `developer` |
-| **filters** | What to include — `{column, operator, value[]}`, all combined with AND | operators `EQ`, `NEQ`, `GT`, `GTE`, `LT`, `LTE`, `IN`, `LIKE`, `NOT_LIKE` |
+| **dimensions** | What to group by | `env_name`, `env_id`, `api_name`, `api_id`, `app_name`, `app_id`, `product_name`, `product_id`, `developer`, `route_id`, `route_name`, `api_path`, `request_method`, `response_status_code`, `client_ip` (see below), and fields for AI traffic: the model, the provider, token counts, cost and currency. `upstream_path` is listed but not filled in yet. |
+| **filters** | What to include — `{column, operator, value[]}`, all combined with AND | operators `EQ`, `NEQ`, `GT`, `GTE`, `LT`, `LTE`, `IN`, `LIKE`, `NOT_LIKE` (`LIKE` needs `%` wildcards, as in `%post%`) |
 | **pageRequest.sort** | Sort on `value` for a top-N list (busiest, slowest) | `ASC`, `DESC` |
 | **timeUnit** | Turn a total into a series over time | `SECONDS`, `MINUTES`, `HOURS`, `DAYS` |
+
+API and app names are stored as short internal names: "Posts API" in the portal
+is `posts-api` here. Filter on the short name.
 
 The exact request for each everyday question is in the
 [query catalogue](charts.md); [`scripts/query-analytics.sh`](scripts/query-analytics.sh)
@@ -83,6 +90,14 @@ any of the dimensions above.
 - **No unlimited history.** Data is kept for a limited time, which limits how far
   back a query can reach. Confirm yours before relying on a long-range report: a
   query past it returns empty rather than an error.
+- **No wrong-path calls.** A call that matches no route (`404 Route Not Found`)
+  is never recorded. A 404 sent by your backend is recorded.
+- **No query strings.** A call to `/posts?try=1` is recorded as `/posts`.
+- **No useful client IP.** `client_ip` holds the same internal address on every
+  row, so it can't tell you where calls came from.
+- **No backend status when a plugin changed it.** Analytics records the status
+  code the caller received. If a gateway plugin changed it, the backend's original
+  code is not stored.
 - **No per-hop tracing inside your backend.** Analytics measures at the edge;
   `upstream-response-time` separates your backend's share of the time, but not the
   steps within it.
@@ -103,8 +118,8 @@ built decide how useful its rows are:
 
 ## No custom code needed
 
-There is nothing to build. You don't run a telemetry pipeline, add a logger, or
-write code. Custom tooling *would* be justified only for things the metrics API
+There is nothing to build. You don't run a telemetry pipeline, add a plugin or a
+logger, or write code. Custom tooling *would* be justified only for things the metrics API
 deliberately doesn't do — percentiles, tracing inside your backend, or keeping data
 longer than the platform does (export it) — and those are out of scope here.
 
@@ -122,6 +137,7 @@ those.
 ## Prerequisites
 
 - APIs that already receive traffic — the queries read whatever exists.
-- A control-plane bearer token, the same one the portal uses. Every call here only
-  reads.
+- A control-plane bearer token, the same one the portal uses (it lasts about
+  1 hour), and your control-plane API address — the one the portal calls, not the
+  portal page. Every call here only reads.
 - For per-app, per-developer or per-product rows: APIs that identify their callers.

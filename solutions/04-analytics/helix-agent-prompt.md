@@ -5,8 +5,16 @@
 ---
 
 Paste any one of these to the Helix Agent, replacing the `{{...}}` values. It
-pulls the numbers and draws a chart in the chat. Every question only reads, so
-nothing in your APIs changes.
+pulls the numbers and answers with a table in the chat. Every question only
+reads, so nothing in your APIs changes.
+
+- Use the short name for an API or app, such as `posts-api` rather than
+  "Posts API". The name shown in the portal matches nothing.
+- If the agent stops after "Reading analytics fields" without an answer, type
+  `continue`.
+- If the agent gives one overall average across several APIs, don't rely on it.
+  It is the average of the per-API averages, not of all calls, and can be well
+  off. Use the per-API rows.
 
 ## Prompt
 
