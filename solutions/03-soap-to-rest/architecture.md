@@ -31,8 +31,8 @@ sequenceDiagram
     participant S as SOAP system
 
     P->>GW: POST /locations, JSON body
-    Note over GW: proxy-rewrite — /locations to the SOAP handler path<br/>do NOT set Content-Type here, it defeats the transform
-    Note over GW: xml-to-json, REQUEST direction<br/>JSON body becomes XML
+    Note over GW: xml-to-json, REQUEST direction<br/>JSON body becomes XML, labelled application/xml
+    Note over GW: proxy-rewrite (priority 900) — /locations to the SOAP handler path<br/>and the label changed to text/xml
     GW->>S: POST the SOAP handler path, text/xml
     S-->>GW: XML response
     Note over GW: xml-to-json, RESPONSE direction<br/>XML becomes JSON
@@ -58,16 +58,18 @@ were confirmed against a live gateway.
 2. **The response conversion depends on the `Accept` header.** It only runs when
    the client sends `Accept: application/json`. Without it, the XML comes back
    unchanged, as `text/xml`. Your integrators must send the header — tell them.
-3. **`proxy-rewrite` must not set `Content-Type`.** It runs before `xml-to-json`.
-   If it changes the content type to `text/xml` first, the request body no longer
-   looks like JSON to the converter (which looks for `application/json` by
-   default), and the request is silently never converted. Change the path in
-   `proxy-rewrite`; let the converter own the content type.
+3. **The content type must be set after the conversion, not before.**
+   `xml-to-json` labels the converted body `application/xml`, and a SOAP 1.1
+   service turns that down with HTTP 415. So `proxy-rewrite` sets `text/xml`. But
+   at its usual priority it runs *before* the converter, and relabelling the JSON
+   first means the request is silently never converted. Giving `proxy-rewrite`
+   `_meta.priority: 900` moves it after the converter (997), so the body is
+   already XML when the label changes.
 
 **Don't add `json-to-xml`.** Despite the name, it is not the request-side partner
 of `xml-to-json`. It is a separate plugin for the opposite job: turning a JSON
 *backend response* into XML for clients that want XML. Adding it here doesn't
-help, and can convert a body twice.
+help: on this build, callers that ask for XML then get JSON too.
 
 ## Execution order
 
@@ -75,18 +77,17 @@ Plugins run by **priority**, not in the order they appear in the file.
 
 | Order | Plugin | Phase | Does | Needs |
 |---|---|---|---|---|
-| 1 | `proxy-rewrite` (priority 1008) | rewrite | Changes `/locations` to your SOAP handler path. **Path only.** | nothing |
-| 2 | `xml-to-json` (priority 997), request direction | request body | JSON → XML | the body still labelled `application/json` when it runs |
+| 1 | `xml-to-json` (priority 997), request direction | request body | JSON → XML, and sets `Content-Type` and `Accept` to `application/xml` | the body still labelled `application/json` when it runs |
+| 2 | `proxy-rewrite` (priority 900, set in the spec) | rewrite | Changes `/locations` to your SOAP handler path, and the content type to `text/xml` | the converter to have run first |
 | 3 | *(the call to your SOAP system)* | — | — | — |
 | 4 | `xml-to-json`, response direction | response body | XML → JSON | the backend returning XML, and the client having sent `Accept: application/json` |
 | — | `request-id` | rewrite / log | Adds an `X-Request-Id` header | nothing |
 | — | analytics (platform-wide) | log | A record of the request | nothing — but without sign-in, calls can't be tied to an app |
 
-**Steps 1 and 2 are where it goes wrong.** Because `proxy-rewrite` runs first,
-anything it does to the content type is what the converter sees. Setting
-`Content-Type` there looks helpful — the SOAP handler does want `text/xml` — and it
-switches off the request conversion. The converter sets the right content type
-itself.
+**Steps 1 and 2 are where it goes wrong.** `proxy-rewrite`'s own priority is
+1008, which puts it *before* the converter. If it sets the content type there, the
+converter no longer sees JSON and doesn't convert the request. That's why the
+spec lowers it to 900. A higher priority number runs first.
 
 ## Why the JSON shape is derived, not designed
 
@@ -180,12 +181,12 @@ Do not use it when:
 
 | What happens | Result | Reached the SOAP handler? |
 |---|---|---|
-| Handler unreachable | **502** (bad gateway) | Attempted |
+| Handler unreachable | **502** (bad gateway), as an HTML page even for JSON callers | Attempted |
 | Handler slower than the gateway timeout | **504** (gateway timeout) | Yes, but the answer came too late |
-| Handler rejects the content type | **415** | Yes — check whether it needs `SOAPAction`, **not** a `Content-Type` setting on `proxy-rewrite` |
+| Handler rejects the content type | **415** (unsupported content type) | Yes — it got `application/xml`. Set `text/xml` in `proxy-rewrite` at priority 900 |
 | Missing `SOAPAction` (where required) | **500**, often with an unhelpful envelope | Yes |
 | Request field names don't match what the handler reads | 200 with an empty result, or 500 | Yes |
-| A second conversion plugin added | often a 500 — the body was converted twice | Yes |
+| `json-to-xml` added next to `xml-to-json` | 200 with JSON, and callers asking for XML get JSON too | Yes |
 | Response not converted | **200 with an XML body and a JSON content type** | Yes |
 
 The last row is the dangerous one, because it looks like success: status 200, a

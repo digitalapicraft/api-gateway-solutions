@@ -59,9 +59,12 @@ Pick one of the two ways below. Both give you the same thing: an API called
 *Option A — from scratch*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
 2. Choose **Create from scratch**. Set **Display name** to
-   `Partner Locations API`, then **Save**.
+   `Partner Locations API`, then **Create**.
 3. On the API's page, open **Configuration → Routes** and add one route:
    - `POST` `/locations`, the JSON lookup partners call
+
+   The route form opens already filled in with the name *New* and the path
+   `/new-route`. Clear both fields first, then type your own.
 
 *Option B — from an OpenAPI spec*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
@@ -80,14 +83,22 @@ Pick one of the two ways below. Both give you the same thing: an API called
 >       plugins:
 >         proxy-rewrite:
 >           uri: <SOAP_HANDLER_PATH>
+>           headers:
+>             set:
+>               Content-Type: "text/xml; charset=utf-8"
+>           _meta:
+>             priority: 900
 >         xml-to-json:
 >           transform_request: true
 >           transform_response: true
+>           root_attributes:
+>             "xmlns:soap": "http://schemas.xmlsoap.org/soap/envelope/"
+>             "xmlns:m": "<SERVICE_NS>"
 > ```
 >
 > [`example/api-spec.yaml`](example/api-spec.yaml) is this API with all its
-> plugins already in place. Replace its `<SOAP_HANDLER_PATH>` with your
-> handler's path, import it, and you can skip step 2.
+> plugins already in place. Replace its `<SOAP_HANDLER_PATH>` and `<SERVICE_NS>`,
+> import it, and you can skip step 2.
 
 Either way, the API is not live yet: it has no upstream and isn't deployed.
 That comes in step 3.
@@ -110,38 +121,41 @@ plugin**. A short wizard opens:
 Do this once for each plugin below. Both go on **Specific endpoint**, with
 `POST /locations` picked as the route.
 
-1. **`proxy-rewrite` — sends the call to your SOAP handler.** Partners call
-   `/locations`; your handler answers on its own path. Replace
-   `<SOAP_HANDLER_PATH>` with that path, for example `/Service.asmx`.
-
-   | Field | Value |
-   |---|---|
-   | **uri** | `<SOAP_HANDLER_PATH>` |
-
-   ```json
-   {"uri":"<SOAP_HANDLER_PATH>"}
-   ```
-
-   **Set the path only. Do not set a `Content-Type` header here**, even though
-   your handler wants XML. This plugin runs before the conversion, so it would
-   relabel the JSON body before `xml-to-json` looks at it, and the body would
-   never be converted. If your handler needs a `SOAPAction` header, that one is
-   safe to add here — see [Troubleshooting](#troubleshooting).
-
-2. **`xml-to-json` — converts in both directions.** It turns the partner's JSON
-   body into XML on the way in, and the handler's XML reply into JSON on the way
-   out. Converting the request is **off by default**, so `transform_request` must
-   be set. The reply is converted only when the caller sends
+1. **`xml-to-json` — converts in both directions.** It turns the partner's JSON
+   into XML on the way in, and the service's XML reply into JSON on the way out.
+   Converting the request is **off by default**, so `transform_request` must be
+   set. The reply is converted only when the caller sends
    `Accept: application/json`.
 
-   | Field | Value |
-   |---|---|
-   | **transform_request** | `true` |
-   | **transform_response** | `true` |
+   `root_attributes` adds the namespace declarations a SOAP envelope needs, so
+   partners don't have to send them. Replace `<SERVICE_NS>` with your service's
+   namespace (you'll find it in its WSDL).
 
    ```json
-   {"transform_request":true,"transform_response":true}
+   {"transform_request":true,"transform_response":true,
+    "root_attributes":{"xmlns:soap":"http://schemas.xmlsoap.org/soap/envelope/","xmlns:m":"<SERVICE_NS>"}}
    ```
+
+2. **`proxy-rewrite` — sends the call to your SOAP service, labelled as SOAP.**
+   Partners call `/locations`; your service answers on its own path. Replace
+   `<SOAP_HANDLER_PATH>` with that path, for example `/Service.asmx`.
+
+   ```json
+   {"uri":"<SOAP_HANDLER_PATH>",
+    "headers":{"set":{"Content-Type":"text/xml; charset=utf-8"}},
+    "_meta":{"priority":900}}
+   ```
+
+   **Keep the `"priority":900`.** `xml-to-json` labels the converted body
+   `application/xml`, and a SOAP 1.1 service (`.asmx` and similar) turns that
+   down with HTTP 415 (unsupported content type). This plugin fixes the label
+   to `text/xml`. It has to run *after* the conversion to do that: plugins with
+   a higher priority number run first, and `xml-to-json`'s is 997. Without the
+   900, this plugin runs first, relabels the JSON before it's converted, and the
+   body reaches your service unconverted.
+
+   A SOAP 1.2 service wants `application/soap+xml` instead of `text/xml`. If
+   your service needs a `SOAPAction` header, add it next to `Content-Type`.
 
 Repeat for the second plugin. What every field means, and the two optional
 extras (`request-id`, `cors`) the full spec adds across the API:
@@ -149,9 +163,19 @@ extras (`request-id`, `cors`) the full spec adds across the API:
 
 **3. Point an upstream at your SOAP service, then deploy**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick environment
-   `test`, point it at your SOAP service's host, then **Create Upstream**.
-2. Back on the API's page, click **Deploy** on the revision. The dialog asks you to
+   `test`, and add a node with your SOAP service's host, port and scheme. If you
+   switch the scheme to HTTP, the port stays at `443`: change it to `80` by hand.
+2. **Pass Host** is set to **Rewrite**, which makes **Upstream Host** required.
+   It fills in from the node's host; check it matches your SOAP service.
+3. Click **Next** through the remaining tabs, then **Add Upstream**.
+4. Back on the API's page, click **Deploy** on the revision. The dialog asks you to
    map an upstream for `test`. Pick the one you just created, then **Deploy**.
+
+**Changing it later.** A change to the upstream (host, port, scheme) applies to
+the live API straight away, with no new deploy. A change to routes or plugins
+does need one, because a live revision can't be edited: use **Clone Revision**,
+make your change on the copy, then **Force Deploy** it. The same steps roll you
+back: clone the older revision and force-deploy that.
 
 That's the whole build: there are no products or apps, because this package has no
 sign-in. When you add [solution 02](../02-oauth-jwt/), its guide covers the
@@ -201,19 +225,23 @@ The same calls without narration: [API reference](api-reference.md).
 
 ## See it work
 
-Send plain JSON — no envelope, no WSDL:
+Send the SOAP envelope written as JSON. Each XML element becomes a JSON key,
+prefixes included; the gateway adds the namespace declarations for you:
 
 ```http
 POST /locations
 content-type: application/json
 accept: application/json
 
-{"region":"EMEA","activeOnly":true}
+{"soap:Envelope":{"soap:Body":{"m:Operation":{"m:param":"value"}}}}
 ```
 
-`accept: application/json` is not optional. The response conversion depends on
-it — without that header the XML comes straight back as `text/xml`, and no gateway
-setting changes that.
+Use your service's real operation and parameter names in place of
+`m:Operation` and `m:param`.
+
+`accept: application/json` is not optional. The response is converted only when
+the caller asks for JSON. Without that header the XML comes straight back as
+`text/xml`, and no gateway setting changes that.
 
 You get JSON back, shaped by how the XML was structured:
 
@@ -225,19 +253,28 @@ X-Request-Id: 7f3c...
 {"Locations":{"Site":[{"id":"1","name":"Frankfurt"},{"id":"2","name":"Dublin"}]}}
 ```
 
-**The JSON shape is derived from the XML, not designed.** This surprises people:
+`X-Request-Id` is there when the `request-id` plugin is on, as it is in
+`example/api-spec.yaml`.
 
-- **Element names come through as they are**, including `PascalCase` and any
-  vendor prefixes. You get `{"Locations":{"Site":[...]}}`, not the
+**The JSON shape comes from the XML, not from a design.** Tell partners this,
+and publish real example payloads, because these become part of your API:
+
+- **Element names come through as they are**, including `PascalCase` and
+  prefixes. You get `{"Locations":{"Site":[...]}}`, not the
   `{"locations":[...]}` a REST designer would have written.
+- **Prefixes and namespace declarations stay.** `soap:` and `m:` are kept in the
+  keys, and `xmlns:*` attributes come back as JSON fields.
 - **A single item may not be a list.** One `<Site>` can become an object where two
-  become a list. That breaks partner code that expects a list — on the unusual
-  case rather than the common one.
-- **Namespaces and attributes need handling.** Default settings often flatten or
-  drop them.
-
-Tell integrators this is a *translated* API, and publish real example payloads for
-both the single-result and multi-result cases.
+  become a list. Partner code that expects a list breaks on the single case.
+- **No results come back as `null`, not `{}`.** An empty collection converts to
+  `null`.
+- **Don't rely on the order of fields** in the JSON response. It can change from
+  one call to the next.
+- **Fields are sent to the service in alphabetical order.** When a JSON object
+  with several fields becomes XML, its fields are sorted A–Z. A service that
+  expects a fixed order (an `xs:sequence` in its WSDL) can reject the call.
+- **The `Accept` check is a simple match.** It ignores preference weights, so
+  `application/xml;q=0.9, application/json;q=0.1` still gets JSON.
 
 To run the checks as a script:
 
@@ -245,7 +282,7 @@ To run the checks as a script:
 GATEWAY=https://<YOUR_GATEWAY_HOST> ./example/verify.sh
 ```
 
-Set `REQ_BODY` to a real query body if your handler needs one. Exit code 0 means
+Set `REQ_BODY` to a real envelope for your service, written as JSON. Exit code 0 means
 the call returned JSON **and** the body contains no XML markup — proof the
 conversion actually ran. What each check proves, plus the manual tests `verify.sh`
 can't run for you: [Tests](tests.md).
@@ -270,13 +307,9 @@ the body. Then create a developer, a product and an app, and give me the app's
 client id and secret.
 ```
 
-**Your envelope is namespaced or attribute-heavy**
-```text
-The upstream XML uses namespaces and puts significant data in attributes, and the
-default transform is flattening them. Show me the namespace and attribute fields
-this plugin actually has, explain what each does to my payload, and let me choose
-before you change anything.
-```
+**Your envelope uses other namespaces.** Add each one to `xml-to-json`'s
+`root_attributes`, as the spec does for `soap:` and `m:`. Partners then use the
+prefixes in their JSON keys and never send the declarations themselves.
 
 **Single-element collections are breaking partner code**
 ```text
@@ -329,40 +362,60 @@ with no plugins, for adding them yourself. Two blocks on `POST /locations` carry
 the translation:
 
 ```yaml
-# 1. path only — NO Content-Type setting (it runs before the conversion and defeats it)
+# 1. the path, plus the SOAP 1.1 content type, set AFTER the conversion (priority 900)
 proxy-rewrite:
   uri: <SOAP_HANDLER_PATH>
+  headers:
+    set:
+      Content-Type: "text/xml; charset=utf-8"
+  _meta:
+    priority: 900
 
 # 2. request conversion is OFF by default — turn it on; response runs on Accept: application/json
 xml-to-json:
   transform_request: true
   transform_response: true
+  root_attributes:
+    "xmlns:soap": "http://schemas.xmlsoap.org/soap/envelope/"
+    "xmlns:m": "<SERVICE_NS>"
 ```
 
 | Plugin | Field | Value here | What it means |
 |---|---|---|---|
-| `proxy-rewrite` | `uri` | `<SOAP_HANDLER_PATH>` | The path the SOAP handler answers on. **Path only** — don't set `Content-Type` here. A `SOAPAction` header, if your handler needs one, is safe to add (under `headers.set`). |
+| `proxy-rewrite` | `uri` | `<SOAP_HANDLER_PATH>` | The path your SOAP service answers on. |
+| `proxy-rewrite` | `headers.set.Content-Type` | `text/xml; charset=utf-8` | The content type a SOAP 1.1 service expects. Use `application/soap+xml` for SOAP 1.2. Add `SOAPAction` here too if your service needs it. |
+| `proxy-rewrite` | `_meta.priority` | `900` | Runs this plugin after `xml-to-json` (997), so the body is already XML when the content type is set. Leave it out and the request is never converted. |
 | `xml-to-json` | `transform_request` | `true` | Convert the JSON request body to XML. **Defaults to `false`**, so it must be set. |
 | `xml-to-json` | `transform_response` | `true` | Convert the XML response to JSON. On by default, but only runs when the client sends `Accept: application/json`. |
+| `xml-to-json` | `root_attributes` | `xmlns:soap`, `xmlns:m` | Attributes added to the root XML element: here, the envelope's namespace declarations. Replace `<SERVICE_NS>` with your service's namespace. |
 | `request-id` (API-wide) | `algorithm` / `header_name` | `uuid` / `X-Request-Id` | A tracking id on every call, so you can match the JSON a partner saw with the XML the handler returned. |
 | `cors` (API-wide) | `allow_origins` / `allow_methods` / `allow_headers` / `allow_credential` | `*` / `POST,OPTIONS` / `content-type` / `false` | Browser access. Narrow `allow_origins` before going live. |
 
-Other `xml-to-json` fields the spec documents but leaves at their defaults —
-confirm them with `get_plugin_config` in your own org, because they vary by build:
+**What `xml-to-json` does to headers.** On the way to your service it sets both
+`Content-Type` and `Accept` to `application/xml`. That's why `proxy-rewrite`
+sets the content type again afterwards.
+
+Other `xml-to-json` fields the spec leaves at their defaults. Confirm them with
+`get_plugin_config` in your own org, because they vary by build:
 
 | Field | Default | Use it for |
 |---|---|---|
 | `content_types` | `application/xml`, `text/xml` | which backend response types get converted |
 | `request_content_types` | `application/json` | which request bodies get converted |
-| `property_naming` | — (`camelCase` or `PascalCase`) | renaming keys in the converted JSON |
+| `root_name` | — | the name of the root element |
+| `request_root_name` | `request` | the root element wrapped around a converted request |
+| `enable_decl` | — | whether to add an `<?xml ...?>` declaration line |
+| `pretty` | — | indented output. **Leave it off:** it returns HTTP 503 on this build |
+| `property_naming` | not set | renaming keys to `camelCase` or `PascalCase`. When it's not set, names are kept, except that hyphens still become underscores |
 | `array_item_name` | `item` | the element name used for list items |
 | `max_body_size` | `1048576` | the largest body it will convert, in bytes |
+| `ctx_namespace` | — | where the plugin shares its values with other plugins on the route |
 
 There is no analytics plugin in the spec, because analytics is on for every API by
 default — see [solution 04](../04-analytics/). The SOAP host is not in this file
 either: it is the upstream bound to the API when you deploy.
 
-Placeholders in this package: `<SOAP_HANDLER_PATH>`, `<SOAP_UPSTREAM_URL>` (the
+Placeholders in this package: `<SOAP_HANDLER_PATH>`, `<SERVICE_NS>`, `<SOAP_UPSTREAM_URL>` (the
 host you bind as the upstream), `<SOAP_HOST>`, `<ORG_ID>`, `<TEST_ENV_ID>`,
 `<API_ID>`, `<REVISION_ID>`, `<UPSTREAM_ID>`, `<YOUR_GATEWAY_HOST>`. Replace all
 of them before you deploy.
@@ -376,28 +429,38 @@ Every field of every plugin, and the wider product docs:
   `Accept: application/json`.** The defaults do neither the way you'd expect.
   `json-to-xml` is a *separate* plugin for the opposite job, not the request-side
   partner. See [Architecture](architecture.md#the-one-thing-everybody-gets-wrong).
-- **Your handler may need a `SOAPAction` header.** Many classic SOAP 1.1 and
-  `.asmx` services return a 500 with an unhelpful envelope without it. Add it in
-  `proxy-rewrite` under `headers.set`. Check what your handler expects rather than
-  assuming it needs nothing.
-- **The handler expects `text/xml` here (SOAP 1.1 style).** SOAP 1.2 handlers want
+- **HTTP 415 from the SOAP service.** It wants `text/xml` and got
+  `application/xml`. Set the content type in `proxy-rewrite` with
+  `"priority":900`: see [step 2](#build-it-in-the-ui). SOAP 1.2 services want
   `application/soap+xml`.
+- **Your service may need a `SOAPAction` header.** Many classic SOAP 1.1 and
+  `.asmx` services return a 500 with an unhelpful envelope without it. Add it in
+  `proxy-rewrite` under `headers.set`, next to `Content-Type`.
+- **HTTP 502 on every try, with the connection failing straight away over
+  HTTPS.** Check the TLS connection to your SOAP host: some older services don't
+  manage HTTPS from the gateway. Try the upstream over HTTP (port `80`).
+- **The 502 error page is HTML,** even for a caller that asked for JSON.
 - **A 500 from a handler that works when you call it directly is almost never the
-  handler.** Suspect, in order: the body converted twice, a missing `SOAPAction`,
-  or request field names that don't match the elements the handler reads.
-- **An empty `{}` usually means the field names didn't match**, not that there's no
-  data. Check what XML your JSON is producing before concluding the result is
-  empty.
+  handler.** Suspect, in order: `proxy-rewrite` running before the conversion (check
+  `"priority":900` is set), a missing `SOAPAction`, or request names that don't
+  match the elements the handler reads.
+- **An empty result (`null`) often means the names didn't match**, not that
+  there's no data. Check what XML your JSON is producing before you decide the
+  result is empty.
 - **Single items may not be lists.** Test both the one-result and many-result
   cases, and warn integrators.
-- **Namespaced or attribute-heavy envelopes need settings.** Defaults often
-  flatten namespaces or drop attributes. Confirm the fields your build has.
+- **Fields arrive in alphabetical order.** If your service expects a fixed order,
+  check its WSDL and test a call with several fields.
 - **Legacy handlers are often slow.** Some take seconds. Check the gateway timeout
   before deciding the backend is down — the symptom is a 504 that looks like an
   outage.
 - **Element names become your public contract.** Partner-facing JSON now contains
   the internal names of an old system. Renaming them later breaks partners, so
   decide now whether you're happy to publish them.
+- **Use the trace inspector to see each step.** On the API's page, open
+  **Observability → Start trace**. It shows the headers each plugin changes and
+  the request body at every stage, which is the fastest way to see what your
+  SOAP service actually received.
 - **Confirm `xml-to-json` exists in your org** before designing around it. Builds
   differ, and this plugin is the one the whole solution rests on.
 - **Nothing checks who is calling.** Anyone who can reach the gateway can call your

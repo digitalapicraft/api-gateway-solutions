@@ -4,8 +4,8 @@
 
 ---
 
-8 test cases in total: **2 automated**, run by `example/verify.sh` against a live
-deployment, and **6 manual**, for behaviour that needs a handler you can make
+9 test cases in total: **2 automated**, run by `example/verify.sh` against a live
+deployment, and **7 manual**, for behaviour that needs a handler you can make
 return a particular shape, or a failure you cause on purpose. The full
 machine-readable plan is [`tests/test-plan.yaml`](tests/test-plan.yaml); this page
 is the readable walkthrough of what it checks and why.
@@ -21,7 +21,8 @@ GATEWAY=https://<YOUR_GATEWAY_HOST> ./example/verify.sh
 ```
 
 Optional settings: `API_PATH` (default `/locations`); `REQ_BODY` (default `{}` —
-set it to a real query body if your handler needs one); and `CURL_OPTS` for extra
+set it to a real envelope for your service, written as JSON, for example
+`{"soap:Envelope":{"soap:Body":{"m:Operation":{"m:param":"value"}}}}`); and `CURL_OPTS` for extra
 `curl` arguments, such as a token header if you've put
 [solution 02](../02-oauth-jwt/) in front of the route. Every request the script
 sends carries `accept: application/json`, because the response conversion does
@@ -43,12 +44,12 @@ their parser's error points nowhere near your gateway.
 The script also:
 
 - checks the body parses as JSON, if `jq` is installed;
-- **warns, rather than fails,** when the JSON parses but is empty — usually the
-  handler returned an empty envelope because your request body's field names
-  didn't match what it reads;
+- **warns, rather than fails,** when the JSON parses but holds no values (an
+  empty collection comes back as `null`) — usually the handler returned an empty
+  envelope because your request body's names didn't match what it reads;
 - explains the likely cause when the status isn't 200 — for example, a 415 means
-  check for a `SOAPAction` header, **not** a `Content-Type` setting on
-  `proxy-rewrite`.
+  the service wanted `text/xml` and got `application/xml`: set it in
+  `proxy-rewrite` with `"priority":900`.
 
 Raw fixtures, if you want to run one case by hand instead of the whole script:
 [`tests/requests/`](tests/requests/) (the HTTP request) and
@@ -63,11 +64,12 @@ environment only.
 
 | Case | What it proves | How to run it |
 |---|---|---|
-| **Empty result** | "No results" comes back as valid, empty JSON rather than an error — so you can tell it apart from a broken conversion. | Send a query that matches nothing (for example a region code that doesn't exist). Expect `200` with empty JSON. If you get this for a query that *should* match, check your field names first. |
+| **Empty result** | "No results" comes back as valid JSON rather than an error — so you can tell it apart from a broken conversion. | Send a query that matches nothing. Expect `200`, with `null` where the collection would be (an empty collection converts to `null`, not `{}`). If you get this for a query that *should* match, check your field names first. |
 | **One item vs several** | What your setup does when a collection has exactly one member. XML can't tell an item from a list of one. | Query so the handler returns exactly one `<Site>`, then several. Record both JSON shapes, and publish **both** in your developer docs. The most valuable manual case — run it before you onboard anyone. |
-| **Namespaces and attributes** | How namespace prefixes and XML attributes survive the conversion, since defaults often flatten or drop them. | Call an operation whose response has prefixes and attributes. Check whether prefixes are kept, stripped or mangled, and whether attributes appear as fields or vanish. Adjust the settings if the defaults don't suit you. |
-| **Double conversion** | What the most common misconfiguration looks like, so you recognise it. | Add a `json-to-xml` plugin next to `xml-to-json` and call the route. Expect a `500` from a handler that works when called directly. |
-| **Backend down** *(optional)* | The gateway returns an error status, not a broken 200, when the SOAP handler is unreachable. | Point the upstream at an unreachable host, or stop the handler. Expect `502`. |
+| **Namespaces and attributes** | How namespace prefixes and XML attributes come through, because partners will see them. | Call an operation whose response has prefixes and attributes. On the tested build, prefixes are kept (`soap:`, `m:`) and `xmlns:*` attributes come back as JSON fields. Publish what you see. |
+| **Double conversion** | What the most common misconfiguration looks like, so you recognise it. | Add a `json-to-xml` plugin next to `xml-to-json` and call the route. On this build you get `200` with JSON, not an error — and callers that ask for XML wrongly get JSON too. That's the symptom to look for. |
+| **Backend down** *(optional)* | The gateway returns an error status, not a broken 200, when the SOAP handler is unreachable. | Point the upstream at an unreachable host, or stop the handler. Expect `502`. The error page is HTML, even for a caller that asked for JSON. |
+| **Content-Type fix** | The `text/xml` label only works when `proxy-rewrite` runs after the conversion. | Against a SOAP 1.1 service: remove `"priority":900` from `proxy-rewrite` and call — expect `500`, with the body sent unconverted. Put it back and call again — expect `200` with JSON. The trace inspector (**Observability → Start trace**) shows the body at each step. |
 | **Slow handler** | What happens when the handler is slower than the gateway timeout. | Call an operation known to take longer than the route's timeout. Expect `504` — which looks like an outage but isn't. Knowing your handler's real response times before go-live matters more than the test. |
 
 Full procedures, plus the exact assertions each one makes:
@@ -80,4 +82,4 @@ Full procedures, plus the exact assertions each one makes:
 | Positive | valid call converted, response really converted |
 | Negative | backend down |
 | Boundary | empty result, one item vs several, namespaces and attributes |
-| Failure | double conversion, backend down, slow handler |
+| Failure | double conversion, backend down, Content-Type fix, slow handler |

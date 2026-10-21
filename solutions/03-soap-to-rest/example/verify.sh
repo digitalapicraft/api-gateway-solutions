@@ -27,7 +27,8 @@
 #
 # Optional overrides:
 #   API_PATH     default /locations
-#   REQ_BODY     default {} — set to a real query body if your handler needs one
+#   REQ_BODY     default {} — set to a real envelope for your service, written as
+#                JSON, e.g. {"soap:Envelope":{"soap:Body":{"m:Operation":{...}}}}
 #   CURL_OPTS    extra curl args, e.g. -H "authorization: Bearer $TOKEN" if you
 #                have put solution 02 in front of this route
 
@@ -76,14 +77,14 @@ case "$status" in
   401|403) fail "POST ${API_PATH} → ${status}. This package ships no authentication,
      so something in front of the route is rejecting the call — if you composed it
      with solution 02, pass a token through CURL_OPTS." ;;
-  415) fail "POST ${API_PATH} → 415. The SOAP handler rejected the content type.
-     Do NOT 'fix' this by setting Content-Type in proxy-rewrite: it runs at
-     priority 1008, xml-to-json at 997, so it would hide the JSON body from the
-     request transform and the conversion would silently never fire. Check instead
-     whether your handler needs a SOAPAction header, which is safe to set there." ;;
+  415) fail "POST ${API_PATH} → 415. xml-to-json sends application/xml; a SOAP 1.1
+     service needs text/xml. Set it in proxy-rewrite with _meta.priority < 997, so
+     it runs after the conversion (SOAP 1.2 services want application/soap+xml)." ;;
   500) fail "POST ${API_PATH} → 500. The handler was reached but errored. Very often
-     a missing SOAPAction header, or a request body whose element names don't match
-     what the handler reads. Try REQ_BODY with the real query fields." ;;
+     a missing SOAPAction header, a request body whose element names don't match
+     what the handler reads, or proxy-rewrite running before xml-to-json (check
+     _meta.priority is 900) so the body was sent unconverted. Try REQ_BODY with a
+     real envelope." ;;
   502|503) fail "POST ${API_PATH} → ${status}. The SOAP upstream was unreachable —
      check the upstream binding and that the handler path exists." ;;
   504) fail "POST ${API_PATH} → 504. The SOAP backend didn't answer in time. Legacy
@@ -117,9 +118,10 @@ if command -v jq >/dev/null 2>&1; then
   jq -e . < "$BODY_FILE" >/dev/null 2>&1 \
     && pass "response body parses as JSON" \
     || fail "content-type says JSON but the body did not parse: $(head -c 200 "$BODY_FILE")"
-  # A converted-but-empty object usually means the element names in the request
+  # A converted-but-empty result usually means the element names in the request
   # body didn't match what the handler reads, so it returned an empty envelope.
-  if [[ "$(jq -r 'if type=="object" then (keys|length) elif type=="array" then length else 1 end' < "$BODY_FILE" 2>/dev/null)" == "0" ]]; then
+  # An empty collection converts to null, not {}, so count the real values left.
+  if [[ "$(jq -r '[.. | select(type != "object" and type != "array" and . != null)] | length' < "$BODY_FILE" 2>/dev/null)" == "0" ]]; then
     info "the JSON parsed but is empty. Usually the handler returned an empty envelope — check that REQ_BODY's field names match the elements it reads."
   fi
 else

@@ -74,14 +74,15 @@ partners call it — [Variations](guides.md#variations) shows how.
 
 ## Example
 
-A partner sends plain JSON — no envelope, no WSDL:
+A partner sends the SOAP envelope written as JSON. The gateway adds the
+namespace declarations and turns it into XML:
 
 ```http
 POST /locations
 content-type: application/json
 accept: application/json
 
-{"region":"EMEA","activeOnly":true}
+{"soap:Envelope":{"soap:Body":{"m:Operation":{"m:param":"value"}}}}
 ```
 
 and gets JSON back, converted from your system's XML:

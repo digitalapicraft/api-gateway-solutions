@@ -12,7 +12,7 @@
 
 meta:
   solution: 03-soap-to-rest
-  version: 1.0.0
+  version: 1.1.0
   executor: example/verify.sh
   note: >-
     The first two cases are automated. The XML-semantics cases (single vs multiple elements,
@@ -84,8 +84,9 @@ cases:
     response_notes: >-
       A legitimate no-results response. The point of this case is to distinguish 'no
       data' from 'the transform broke' — both can look like an empty body from a
-      client. Valid, parseable, empty JSON is the correct outcome, not an error. An
-      empty result is MORE often a request whose field names didn't match the
+      client. On this build an empty collection converts to null, not {}. Valid,
+      parseable JSON with null in place of the collection is the correct outcome,
+      not an error. An empty result is MORE often a request whose field names didn't match the
       elements the handler reads than a genuinely empty dataset. verify.sh warns
       rather than fails here for exactly that reason. Check what XML your JSON is
       producing before concluding there's no data. application/json
@@ -93,7 +94,8 @@ cases:
     type_of_execution: manual
     procedure: Send a query that legitimately matches nothing (e.g. a nonexistent region code).
     notes: >-
-      verify.sh warns rather than fails on an empty object, because an empty result
+      verify.sh warns rather than fails when the JSON carries no values (null or
+      empty), because an empty result
       is usually a request whose field names didn't match the elements the handler
       reads — not a broken transform.
 
@@ -126,27 +128,31 @@ cases:
       Call an operation whose response carries namespace prefixes and elements with
       attributes. Inspect the JSON: are prefixes preserved, stripped or mangled? Do
       attributes appear as fields, or vanish?
-    expected_outcome: Documented behaviour for your build, and configuration set deliberately if the defaults are wrong for you.
+    expected_outcome: >-
+      On the tested build, prefixes are kept (soap:, m:) and xmlns:* attributes come
+      back as JSON fields. Publish this, because it becomes part of what partners see.
     notes: >-
-      The spec leaves xml-to-json as a default block. This case is how you find out
-      whether the defaults suit your envelope.
+      The request side declares its namespaces through xml-to-json's
+      root_attributes. Field order is not kept: a JSON object with several fields
+      is sent as XML with its fields sorted alphabetically, which can break a
+      service whose WSDL uses xs:sequence. JSON field order in responses is not
+      stable between calls either.
 
   - id: double-transform-misconfiguration
     type: failure
     intent: >-
       Establish the symptom of the most common misconfiguration so it's
-      recognisable: adding json-to-xml alongside the bidirectional xml-to-json
-      converts the body twice and the handler receives JSON labelled as XML.
+      recognisable: adding json-to-xml alongside the bidirectional xml-to-json.
     type_of_execution: manual
-    expected_status: 500
+    expected_status: 200
     procedure: >-
       In a THROWAWAY test environment only, add a json-to-xml plugin next to
       xml-to-json and call the route.
     notes: >-
-      Exercise in a controlled environment only. The point is diagnostic
-      familiarity: a 500 from a handler that works under curl, with a config that
-      looks MORE thorough rather than less, should immediately suggest double
-      conversion.
+      Exercise in a controlled environment only. On the tested build this returns
+      200 with JSON, not a 500, and callers that ask for XML wrongly get JSON too.
+      So the symptom is XML clients receiving JSON, from a config that looks MORE
+      thorough rather than less. Treat it as a known behaviour of this build.
 
   - id: upstream-failure
     type: failure
@@ -159,18 +165,36 @@ cases:
       The SOAP handler was unreachable or errored. The important property is that
       the gateway surfaces a 5xx rather than a malformed 200 — a partner must never
       receive a success status carrying a failure. Assert the status class, not the
-      body; the exact payload is build-dependent. 504: The handler was reached but
+      body; the exact payload is build-dependent. The 502 error page is HTML, even
+      for a client that sent Accept: application/json. 504: The handler was reached but
       answered too slowly. Legacy handlers built for batch use often do — check the
       route timeout before concluding the upstream is down. 415: The handler
-      rejected the content type. Confirm proxy-rewrite sets text/xml; SOAP 1.2
-      handlers want application/soap+xml. 500: The handler errored. Suspect double
-      conversion (a json-to-xml added alongside the bidirectional xml-to-json), a
-      missing SOAPAction header, or request field names that don't match the
+      rejected the content type: xml-to-json sends application/xml, and a SOAP 1.1
+      service needs text/xml. Set it in proxy-rewrite with _meta.priority below 997;
+      SOAP 1.2 handlers want application/soap+xml. 500: The handler errored. Suspect
+      a missing SOAPAction header, or request field names that don't match the
       elements it reads.
     expected_status: 502
     type_of_execution: manual
     optional: true
     procedure: Point the upstream at an unreachable host, or stop the handler. Controlled environments only.
+
+  - id: content-type-priority
+    type: failure
+    intent: >-
+      Prove the Content-Type fix depends on proxy-rewrite running after
+      xml-to-json. At its own priority (1008) proxy-rewrite relabels the JSON body
+      before the conversion; at 900 it runs after it.
+    type_of_execution: manual
+    expected_status: 200
+    procedure: >-
+      In a THROWAWAY test environment, against a SOAP 1.1 service: 1) remove
+      _meta.priority from proxy-rewrite (default priority) and call the route —
+      expect 500, with the body sent to the service unconverted. 2) set
+      _meta.priority back to 900 and call again — expect 200 with JSON.
+    notes: >-
+      Use the trace inspector (Observability → Start trace) to see the body and
+      headers at each step.
 
   - id: slow-handler-timeout
     type: failure
@@ -188,4 +212,4 @@ coverage:
   positive: [valid-call-transformed, response-really-converted]
   negative: [upstream-failure]
   boundary: [empty-result-envelope, single-vs-multiple-elements, namespaced-and-attribute-payload]
-  failure:  [double-transform-misconfiguration, upstream-failure, slow-handler-timeout]
+  failure:  [double-transform-misconfiguration, upstream-failure, content-type-priority, slow-handler-timeout]

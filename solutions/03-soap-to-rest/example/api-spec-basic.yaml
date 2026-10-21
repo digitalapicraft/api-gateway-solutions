@@ -31,15 +31,18 @@ paths:
       requestBody:
         required: false
         description: >-
-          Query fields for the location lookup, as JSON. The field names must
-          match the elements the SOAP handler reads.
+          The SOAP envelope, written as JSON. Each XML element becomes a JSON
+          key, prefixes included. Replace the operation and parameter names with
+          the ones your service reads.
         content:
           application/json:
             schema:
               type: object
-              properties:
-                region:      { type: string, description: Region code to filter by }
-                activeOnly:  { type: boolean, description: Exclude decommissioned sites }
+            example:
+              soap:Envelope:
+                soap:Body:
+                  m:Operation:
+                    m:param: value
       responses:
         '200': { description: Locations, as returned by the upstream }
         '502': { description: The SOAP backend was unreachable or returned an error }
