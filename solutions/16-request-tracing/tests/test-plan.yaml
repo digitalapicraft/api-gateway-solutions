@@ -1,0 +1,152 @@
+# Test plan — Request tracing.
+#
+# Cases 1-7 are executed in order, in ONE trace session, by ../example/verify.sh,
+# which exits 0 only if all of them hold and always stops the session on exit.
+# The fixtures under requests/ and expected/ document each case independently so
+# you can run one by hand.
+#
+# Substitute your own values:
+#   {{GATEWAY}}        gateway base URL, e.g. https://<YOUR_GATEWAY_HOST>
+#   {{CONTROL_PLANE}}  control-plane base URL, e.g. https://<YOUR_CONTROL_PLANE_HOST>
+#   {{TOKEN}}          a control-plane bearer token (org admin or gateway admin)
+#   {{ORG}} {{API_ID}} {{ENV_ID}}  the org, the deployed API, its environment
+#   {{SESSION_ID}}     returned by the start call
+
+meta:
+  solution: 16-request-tracing
+  version: 1.0.0
+  executor: example/verify.sh
+  note: >-
+    Cases 1-7 are automated and use 3 of the session's recorded requests, under
+    the default cap of 10. The cap, both filters, a rejected filter and the
+    credentials check are manual: they need more traffic than one session's cap
+    allows, or a look at a record in the UI.
+  records_are_async: >-
+    Records reach the control plane a few seconds after the request. Every
+    assertion on a record polls; none sleeps once and assumes.
+
+cases:
+  - id: start-session
+    type: positive
+    intent: A session opens on one deployed API in one environment.
+    request: requests/start-session.http
+    expected: expected/session-started-200.json
+    expected_status: 200
+    asserts:
+      - status is "active"
+      - session_id is present
+      - requests_traced is 0 and filter is null (otherwise a session was already open and verify.sh refuses to reuse it)
+
+  - id: start-again
+    type: boundary
+    intent: >-
+      One session per API and environment. A second start returns the open
+      session, with its original expiry and filter, rather than a second one.
+    request: requests/start-session.http
+    expected: expected/session-started-200.json
+    expected_status: 200
+    asserts:
+      - session_id equals the one from start-session
+
+  - id: gateway-rejects
+    type: negative
+    intent: >-
+      A failure the GATEWAY produced is attributed to the gateway, by name. The
+      backend is never called.
+    request: requests/missing-title.http
+    expected: expected/missing-title-400.json
+    expected_status: 400
+    record_asserts:
+      - outcome == "short_circuit"
+      - short_circuit.plugin == "request-validation"
+      - upstream.status is absent
+
+  - id: gateway-changes
+    type: positive
+    intent: >-
+      A change the gateway made in flight is visible in the record, though the
+      caller never sees it.
+    request: requests/get-post.http
+    expected: expected/get-post-200.json
+    expected_status: 200
+    record_asserts:
+      - outcome == "ok"
+      - a proxy-rewrite change adds x-partner-channel with new_value "api"
+      - upstream.status == 200
+
+  - id: backend-rejects
+    type: negative
+    intent: >-
+      A failure the BACKEND produced is attributed to the backend. Same symptom
+      as gateway-rejects to the caller; the opposite owner.
+    request: requests/unknown-post.http
+    expected: expected/unknown-post-404.json
+    expected_status: 404
+    record_asserts:
+      - upstream.status == 404
+      - short_circuit is null
+
+  - id: response-unchanged
+    type: safety
+    intent: Tracing observes. The traced response is byte-identical to an untraced one.
+    request: requests/get-post.http
+    asserts:
+      - the body of GET /posts/1 sent during the session equals one sent before it
+
+  - id: stop-session
+    type: positive
+    intent: Stopping a session ends recording at once.
+    request: requests/stop-session.http
+    expected: expected/session-stopped-200.json
+    expected_status: 200
+    asserts:
+      - a request sent after stop does not appear in the session's records
+
+  # ---- manual ----------------------------------------------------------------
+
+  - id: recording-cap
+    type: boundary
+    manual: true
+    intent: >-
+      A session stops recording after its cap (10 by default, set by the gateway
+      operator). A new start then opens a new session.
+    procedure: >-
+      Start with no filter. Send 14 requests. Wait 20 seconds and read the
+      records: expect 10. Start again: expect a different session_id. The
+      session list may still show the full session without disabled_at until its
+      expiry, which is why a full session looks active.
+
+  - id: failures-only-filter
+    type: boundary
+    manual: true
+    intent: Requests that fail the filter are neither recorded nor counted.
+    procedure: >-
+      Start with filter [["status", ">=", 400]]. Send GET /posts/1, /posts/2,
+      /posts/3, a POST /posts with no title and GET /posts/999999. Expect exactly
+      the 400 and the 404.
+
+  - id: test-header-filter
+    type: boundary
+    manual: true
+    intent: Only requests carrying a header you control are recorded.
+    procedure: >-
+      Start with filter [["http_x_debug_trace", "==", "me"]]. Send three calls
+      without the header and two with X-Debug-Trace: me. Expect exactly the two.
+
+  - id: rejected-filter
+    type: negative
+    manual: true
+    intent: The gateway refuses a filter variable that identifies the route, and names it.
+    procedure: >-
+      Start with filter [["route_id", "==", "x"]]. Expect 400 with a message
+      naming route_id.
+
+  - id: credentials-visible
+    type: safety
+    manual: true
+    intent: >-
+      Headers are recorded unredacted. Proven so the team knows what a trace
+      holds before using one on live traffic.
+    procedure: >-
+      Send a request with apikey TEST-VALUE during a session. Open its record:
+      the value is under Headers, and again in each plugin's recorded state.

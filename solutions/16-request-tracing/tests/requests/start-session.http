@@ -1,0 +1,13 @@
+### Case: start-session — open a trace session on one API in one environment.
+###
+### Any start on an API that already has an active session returns THAT session,
+### unchanged (its expiry and filter included). Stop it first to change either.
+### ttl_seconds: 60 to 3600 in the UI; 300 if omitted.
+POST {{CONTROL_PLANE}}/api/orgs/{{ORG}}/apis/{{API_ID}}/envs/{{ENV_ID}}/trace/sessions
+authorization: Bearer {{TOKEN}}
+content-type: application/json
+
+{"ttl_seconds": 300}
+
+### Optional: record only failures. Evaluated after the response, so status works.
+### {"ttl_seconds": 300, "filter": [["status", ">=", 400]]}

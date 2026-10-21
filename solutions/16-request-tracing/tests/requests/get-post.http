@@ -1,0 +1,7 @@
+### Case: gateway-changes — a lookup the gateway tags on its way through.
+###
+### Expect 200. The caller never sees X-Partner-Channel; the backend does. In the
+### trace, proxy-rewrite's changes list the header it added, and the phase
+### timings show how much of the total was spent at the backend.
+GET {{GATEWAY}}/posts/1
+accept: application/json
