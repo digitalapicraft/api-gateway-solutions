@@ -254,9 +254,9 @@ within seconds:
 
 ## Install it directly
 
-If you'd rather script it against the control plane. `BASE` is the API address
-the portal calls (it usually starts with `api-`), not the portal page and not
-the gateway's address:
+To script it, call the control plane instead. `BASE` is the API address the
+portal calls (it usually starts with `api-`), not the portal page and not the
+gateway's address:
 
 ```bash
 export ORG=<ORG_ID>

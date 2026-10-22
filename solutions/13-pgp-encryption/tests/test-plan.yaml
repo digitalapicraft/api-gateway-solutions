@@ -16,9 +16,6 @@ meta:
     The wire-format and fail-close cases need no key material, which is deliberate:
     they are the ones worth running in a pipeline. The round trip needs gpg,
     GNUPGHOME and RECIPIENT.
-  status: >-
-    EXECUTED against a deployed revision — 7/7 including the round trip. See
-    ../validation/gateway-validation.yaml.
 
 cases:
   - id: statement-encrypted

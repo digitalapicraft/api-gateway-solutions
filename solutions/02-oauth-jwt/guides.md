@@ -74,6 +74,10 @@ Pick one of the two ways below. Both give you the same thing: an API called
    [`example/api-spec-basic.yaml`](example/api-spec-basic.yaml): the same four
    routes, no plugins. Then click **Import**.
 
+If an API with the same name already exists in your org, the import fails with
+*API with name '<name>' already exists*. Type another name in the form's
+**Display name** field, which overrides the name in the spec, and import again.
+
 > **A spec can carry the plugins too.** Add an `x-helix-gateway` block under a
 > path and method, and it covers that route only. This one goes on the token
 > route; the three `/posts` routes get the same block with `mode: validate`:
@@ -178,13 +182,14 @@ the two optional extras (`request-id`, `cors`) the full spec adds across the API
 **Changing it later.** A change to the upstream (host, port, scheme) applies to
 the live API straight away, with no new deploy. A change to routes or plugins
 does need one, because a live revision can't be edited: use **Clone Revision**,
-make your change on the copy, then **Force Deploy** it. The same steps roll you
-back: clone the older revision and force-deploy that.
+make your change on the copy, then **Force Deploy** it. Rolling back needs no
+copy: click **Deploy**, pick the older revision (for example `r1`), and click
+**Force Deploy**.
 
 **4. Create a product**
 1. Go to **API Distribution → API Products**, click **Add API Product**.
 2. Under **Basic Information**, set a **Display Name**, for example `Posts API`.
-3. Under **APIs**, click **Add API**, select your API, then **Continue**.
+3. Under **APIs**, click **Add API**, select your API, then **Add (1)**.
 4. Under **Authentication Methods**, pick a method for apps to use. Left blank, it
    defaults to `helix-auth`.
 5. Under **Quota**, make sure **Enable request quota** is on. It is by default,
@@ -204,9 +209,12 @@ Go to **API Distribution → Developers**, click **Add Developer**, fill in the 
 and email, then **Add**.
 
 **7. Create an app for that developer**
-Go to **API Distribution → Apps**, click **Add App**. Pick the **Environment** and
-the **Developer**, add the product, pick an authentication method and let
-credentials auto-generate, then **Create App**.
+Go to **API Distribution → Apps**, click **Add App**. Fill in **Display Name**,
+for example `posts-client`. Pick the **Environment** and the **Developer**, add
+the product, pick an authentication method and let credentials auto-generate,
+then **Create App**. If the product list says **No products found.**, the
+product isn't deployed to that environment yet: an app can only pick products
+that are. Go back to step 5.
 
 **8. Get the app's credentials**
 On the app's **Overview** tab, find the **Authentication** card. It shows
@@ -215,14 +223,25 @@ button. Copy **both**: the key is the **client id**, and with the secret it is
 what the app sends to `/oauth/token`. **Generate New Credentials**, in the same
 card, issues a new pair.
 
+**Switching a caller off.** There are two ways, and both stop the old
+credentials (the client id and secret) working within seconds:
+
+- **Keep the app's history: Generate New Credentials** on the app's
+  **Overview** tab, in the **Authentication** card. The old credentials stop
+  working, and the app's usage history and analytics stay.
+- **Remove the app completely: Delete.** The delete dialog warns that it also
+  deletes all usage history and analytics for that app.
+
 ## Install it directly
 
-If you'd rather script it against the control plane:
+To script it, call the control plane instead. `BASE` is the API address the
+portal calls (it usually starts with `api-`), not the portal page and not the
+gateway's address:
 
 ```bash
 export ORG=<ORG_ID>
 export TOKEN=<control-plane bearer token>      # short-lived
-export BASE=https://<YOUR_GATEWAY_HOST>/api
+export BASE=https://<YOUR_CONTROL_PLANE_API>/api
 H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
 
 # 1. Replace all four <YOUR_JWT_SIGNING_SECRET> placeholders in the spec with one
@@ -461,6 +480,8 @@ Every field of every plugin, and the wider product docs:
   app is on. To let in only the apps on a product that includes this API, add
   `api-product-enforcer` ([solution 01](../01-api-products/)); apps on other
   products then get HTTP 403 (forbidden).
+- **The product can't be undeployed.** Apps still subscribe to it. Remove the
+  product from those apps, or delete the apps, then undeploy.
 - **If *everything* returns 401, including calls with tokens issued moments ago,**
   suspect the signing secret before you suspect the client.
 - **Confirm `helix-auth`'s fields in your own org** with `get_plugin_config`

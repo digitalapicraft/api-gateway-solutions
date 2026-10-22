@@ -72,6 +72,10 @@ Pick one of the two ways below. Both give you the same thing: an API called
    [`example/api-spec-basic.yaml`](example/api-spec-basic.yaml): the same
    route, no plugins. Then click **Import**.
 
+If an API with the same name already exists in your org, the import fails with
+*API with name '<name>' already exists*. Type another name in the form's
+**Display name** field, which overrides the name in the spec, and import again.
+
 > **A spec can carry the plugins too.** Add an `x-helix-gateway` block that
 > lists them. At the top level of the file it covers every route; under one
 > path and method it covers that route only:
@@ -219,8 +223,9 @@ What every field means: [Configuration reference](#configuration-reference).
 **Changing it later.** A change to the upstream (host, port, scheme) applies to
 the live API straight away, with no new deploy. A change to routes or plugins
 does need one, because a live revision can't be edited: use **Clone Revision**,
-make your change on the copy, then **Force Deploy** it. The same steps roll you
-back: clone the older revision and force-deploy that.
+make your change on the copy, then **Force Deploy** it. Rolling back needs no
+copy: click **Deploy**, pick the older revision (for example `r1`), and click
+**Force Deploy**.
 
 That's it. No products, developers or apps are needed, because the route ships
 unauthenticated. Read [Where authentication would go](architecture.md#where-authentication-would-go)
@@ -228,12 +233,14 @@ before you point real partners at it.
 
 ## Install it directly
 
-If you'd rather script it against the control plane:
+To script it, call the control plane instead. `BASE` is the API address the
+portal calls (it usually starts with `api-`), not the portal page and not the
+gateway's address:
 
 ```bash
 export ORG=<ORG_ID>
 export TOKEN=<control-plane bearer token>      # short-lived
-export BASE=https://<YOUR_GATEWAY_HOST>/api
+export BASE=https://<YOUR_CONTROL_PLANE_API>/api
 H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
 
 # 0. Create the topic on your broker first, with your Kafka tooling.

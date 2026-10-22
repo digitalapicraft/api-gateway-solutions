@@ -72,6 +72,10 @@ Pick one of the two ways below. Both give you the same thing: an API called
    [`example/api-spec-basic.yaml`](example/api-spec-basic.yaml): the same two
    routes, no plugins. Then click **Import**.
 
+If an API with the same name already exists in your org, the import fails with
+*API with name '<name>' already exists*. Type another name in the form's
+**Display name** field, which overrides the name in the spec, and import again.
+
 > **A spec can carry the plugins too.** Add an `x-helix-gateway` block that
 > lists them. At the top level of the file it covers every route; under one
 > path and method it covers that route only:
@@ -157,13 +161,14 @@ means, and the two optional extras (`request-id`, `cors`) the full spec adds:
 **Changing it later.** A change to the upstream (host, port, scheme) applies to
 the live API straight away, with no new deploy. A change to routes or plugins
 does need one, because a live revision can't be edited: use **Clone Revision**,
-make your change on the copy, then **Force Deploy** it. The same steps roll you
-back: clone the older revision and force-deploy that.
+make your change on the copy, then **Force Deploy** it. Rolling back needs no
+copy: click **Deploy**, pick the older revision (for example `r1`), and click
+**Force Deploy**.
 
 **4. Create the Free product**
 1. Go to **API Distribution → API Products**, click **Add API Product**.
 2. Under **Basic Information**, set **Display Name** to `Free`.
-3. Under **APIs**, click **Add API**, select your API, then **Continue**.
+3. Under **APIs**, click **Add API**, select your API, then **Add (1)**.
 4. Under **Authentication Methods**, pick a method for apps to use. Left blank,
    it defaults to `helix-auth`.
 5. Under **Quota**, make sure **Enable request quota** is on. It is by default,
@@ -191,9 +196,12 @@ Go to **API Distribution → Developers**, click **Add Developer**, fill in the
 name and email, then **Add**.
 
 **8. Create two apps for that developer**
-Go to **API Distribution → Apps**, click **Add App**. Pick the **Environment**
-and the **Developer**, add the **Free** product, pick an authentication method
-and let credentials auto-generate, then **Create App**.
+Go to **API Distribution → Apps**, click **Add App**. Fill in **Display Name**,
+for example `free-app`. Pick the **Environment** and the **Developer**, add the
+**Free** product, pick an authentication method and let credentials
+auto-generate, then **Create App**. If the product list says **No products
+found.**, the product isn't deployed to that environment yet: an app can only
+pick products that are. Go back to step 5 (step 6 for Pro).
 
 Repeat for a second app subscribed to **Pro**. **This must be a second, separate
 app**, not a second product on the same app, or the quota will be shared and
@@ -206,14 +214,25 @@ button. Copy the **key**, not the secret: the key (the app's client id) is what
 you send in the `apikey` header. **Generate New Credentials**, in the same card,
 issues a new pair.
 
+**Switching a caller off.** There are two ways, and both stop the old key
+within seconds:
+
+- **Keep the app's history: Generate New Credentials** on the app's
+  **Overview** tab, in the **Authentication** card. The old key stops working,
+  and the app's usage history and analytics stay.
+- **Remove the app completely: Delete.** The delete dialog warns that it also
+  deletes all usage history and analytics for that app.
+
 ## Install it directly
 
-If you'd rather script it against the control plane:
+To script it, call the control plane instead. `BASE` is the API address the
+portal calls (it usually starts with `api-`), not the portal page and not the
+gateway's address:
 
 ```bash
 export ORG=<ORG_ID>
 export TOKEN=<control-plane bearer token>      # short-lived
-export BASE=https://<YOUR_GATEWAY_HOST>/api
+export BASE=https://<YOUR_CONTROL_PLANE_API>/api
 H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
 
 # 1. Import the spec. It carries helix-auth and api-product-enforcer, and the
@@ -350,6 +369,22 @@ analytics, never throttled.
 generate, switch the protected routes to `validate_auth_type: jwt-auth`, and
 leave `api-product-enforcer` exactly as it is.
 
+**Keep the key away from your backend.** The gateway passes the `apikey` header
+on to your backend exactly as the caller sent it, so the key can end up in your
+backend's logs. It also adds two headers of its own: `X-Consumer-Username` and
+`X-Credential-Identifier` (the app's id, not its name). `helix-auth` has no
+setting to hide the key. To remove it, add `proxy-rewrite` with the Configure
+plugin wizard, **Entire Revision**, with only this setting:
+
+```json
+{"headers":{"remove":["apikey"]}}
+```
+
+The key is checked before `proxy-rewrite` runs, so the key check still works.
+Run the [See it work](#see-it-work) calls again afterwards to confirm the quota
+still applies. On an API that's already live, use **Clone Revision**, add the
+plugin to the copy, then **Force Deploy** it.
+
 ## Configuration reference
 
 Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml) for the routes
@@ -419,6 +454,13 @@ and the wider product docs at [docs.digitalapi.ai/api-gateway](https://docs.digi
 - **Key-auth validate doesn't check the app's secret.** The `apikey` header carries
   the credential's **key** (its client id), not a secret. If you need proof of
   possession, use the client-credentials flow instead — [solution 02](../02-oauth-jwt/).
+- **Your client can't read the 401 message.** A rejected key gets HTTP 401 (not
+  signed in) with a JSON body, but the content type is `text/plain`. Parse the
+  body as JSON yourself.
+- **Your backend logs show app keys.** The gateway passes the `apikey` header on
+  as sent. Remove it with `proxy-rewrite`: see [Variations](#variations).
+- **The product can't be undeployed.** Apps still subscribe to it. Remove the
+  product from those apps, or delete the apps, then undeploy.
 - **Two keys on one app share one bucket.** A test using two keys from one app will
   look like the quota is broken when it isn't.
 - **Only the top-ranked covering product is checked.** If a 429 shows up sooner

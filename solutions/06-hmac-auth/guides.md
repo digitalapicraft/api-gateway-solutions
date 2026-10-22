@@ -82,6 +82,10 @@ Pick one of the two ways below. Both give you the same thing: an API called
    [`example/api-spec-basic.yaml`](example/api-spec-basic.yaml): the same two
    routes, no plugins. Then click **Import**.
 
+If an API with the same name already exists in your org, the import fails with
+*API with name '<name>' already exists*. Type another name in the form's
+**Display name** field, which overrides the name in the spec, and import again.
+
 > **A spec can carry the plugins too.** Add an `x-helix-gateway` block that
 > lists them. At the top level of the file, the block covers every route. Under
 > one path and method, it covers only that route. Here, signing goes on each
@@ -188,13 +192,14 @@ adds.
 **Changing it later.** A change to the upstream (host, port, scheme) applies to
 the live API straight away, with no new deploy. A change to routes or plugins
 does need a new deploy, because a live revision can't be edited. Use **Clone
-Revision**, make your change on the copy, then **Force Deploy** it. The same steps
-take you back to an older version: clone the older revision and force-deploy that.
+Revision**, make your change on the copy, then **Force Deploy** it. Rolling back
+needs no copy: click **Deploy**, pick the older revision (for example `r1`), and
+click **Force Deploy**.
 
 **4. Create the product**
 1. Go to **API Distribution → API Products**, click **Add API Product**.
 2. Under **Basic Information**, set **Display Name** to `Partner Albums API`.
-3. Under **APIs**, click **Add API**, select your API, then **Continue**.
+3. Under **APIs**, click **Add API**, select your API, then **Add (1)**.
 4. Under **Authentication Methods**, pick **`hmac-auth`**. Left blank, it defaults
    to `helix-auth`, and the app you create in step 7 is then rejected.
 5. Under **Quota**, make sure **Enable request quota** is on. It is by default,
@@ -219,9 +224,12 @@ Go to **API Distribution → Developers**, click **Add Developer**, fill in the
 partner's name and email, then **Add**.
 
 **7. Create an app for that developer**
-Go to **API Distribution → Apps**, click **Add App**. Pick the **Environment** and
-the **Developer**, add the product, pick **`hmac-auth`** as the authentication
-method and let credentials auto-generate, then **Create App**.
+Go to **API Distribution → Apps**, click **Add App**. Fill in **Display Name**,
+for example `settlement-partner`. Pick the **Environment** and the
+**Developer**, add the product, pick **`hmac-auth`** as the authentication
+method and let credentials auto-generate, then **Create App**. If the product
+list says **No products found.**, the product isn't deployed to that
+environment yet: an app can only pick products that are. Go back to step 5.
 
 **8. Get the `key_id` and `secret_key`**
 On the app's **Overview** tab, find the **Authentication** card. It shows
@@ -234,15 +242,25 @@ see the secret, create the app through
 [Install it directly](#install-it-directly) instead, where it is in the create
 response.
 
+**Switching a caller off.** There are two ways, and both stop the old
+credentials (the `key_id` and `secret_key`) working within seconds:
+
+- **Keep the app's history: Generate New Credentials** on the app's
+  **Overview** tab, in the **Authentication** card. The old credentials stop
+  working, and the app's usage history and analytics stay.
+- **Remove the app completely: Delete.** The delete dialog warns that it also
+  deletes all usage history and analytics for that app.
+
 ## Install it directly
 
 If you'd rather script it, call the control plane (where you manage APIs,
-products and apps) directly:
+products and apps) directly. `BASE` is the API address the portal calls (it
+usually starts with `api-`), not the portal page and not the gateway's address:
 
 ```bash
 export ORG=<ORG_ID>
 export TOKEN=<control-plane bearer token>      # short-lived
-export BASE=https://<YOUR_GATEWAY_HOST>/api
+export BASE=https://<YOUR_CONTROL_PLANE_API>/api
 H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
 
 # 0. Confirm hmac-auth is in your org.
@@ -529,6 +547,8 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
   A new route needs its own block.
 - **App creation fails on an unsupported auth plugin.** The product's
   `authMethods` is still the `["helix-auth"]` default.
+- **The product can't be undeployed.** Apps still subscribe to it. Remove the
+  product from those apps, or delete the apps, then undeploy.
 - **You need the secret again.** It is returned once and stored encrypted. Create
   a new key instead.
 - **Leaving `hmac-sha1` allowed.** It is in the plugin's default list. This spec

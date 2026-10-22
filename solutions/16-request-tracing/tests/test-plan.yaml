@@ -7,7 +7,7 @@
 #
 # Substitute your own values:
 #   {{GATEWAY}}        gateway base URL, e.g. https://<YOUR_GATEWAY_HOST>
-#   {{CONTROL_PLANE}}  control-plane base URL, e.g. https://<YOUR_CONTROL_PLANE_HOST>
+#   {{CONTROL_PLANE}}  control-plane base URL, e.g. https://<YOUR_CONTROL_PLANE_API>
 #   {{TOKEN}}          a control-plane bearer token (org admin or gateway admin)
 #   {{ORG}} {{API_ID}} {{ENV_ID}}  the org, the deployed API, its environment
 #   {{SESSION_ID}}     returned by the start call

@@ -81,6 +81,10 @@ tracing; step 2 adds three that make a trace more useful to read.
    routes, no plugins. There is no option to paste the spec as text. Then click
    **Import**.
 
+If an API with the same name already exists in your org, the import fails with
+*API with name '<name>' already exists*. Type another name in the form's
+**Display name** field, which overrides the name in the spec, and import again.
+
 > **A spec can carry the plugins too.** Add an `x-helix-gateway` block that
 > lists them. At the top level of the file it covers every route; under one
 > path and method it covers that route only:
@@ -192,15 +196,16 @@ Until you deploy, there is nothing to trace. Once it is deployed, continue at
 **Changing it later.** A change to the upstream (host, port, scheme) applies to
 the live API straight away, with no new deploy. A change to routes or plugins
 does need one, because a live revision can't be edited: use **Clone Revision**,
-make your change on the copy, then **Force Deploy** it. The same steps roll you
-back: clone the older revision and force-deploy that.
+make your change on the copy, then **Force Deploy** it. Rolling back needs no
+copy: click **Deploy**, pick the older revision (for example `r1`), and click
+**Force Deploy**.
 
 ## Install it directly
 
 ```bash
 export ORG=<ORG_ID>
 export TOKEN=<control-plane bearer token>      # short-lived
-export CP=https://<YOUR_CONTROL_PLANE_HOST>
+export CP=https://<YOUR_CONTROL_PLANE_API>
 H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
 
 # 1. Import the spec. Keep both ids the response returns.
@@ -377,7 +382,7 @@ session.
 
 ```bash
 GATEWAY=https://<YOUR_GATEWAY_HOST> \
-CONTROL_PLANE=https://<YOUR_CONTROL_PLANE_HOST> \
+CONTROL_PLANE=https://<YOUR_CONTROL_PLANE_API> \
 TOKEN=<control-plane bearer token> \
 ORG=<ORG_ID> API_ID=<API_ID> ENV_ID=<ENV_ID> \
 ./example/verify.sh
@@ -501,7 +506,7 @@ request-id:
 
 Placeholders in this package: `<ORG_ID>`, `<API_ID>`, `<ENV_ID>`,
 `<REVISION_ID>`, `<UPSTREAM_ID>`, `<SESSION_ID>`, `<YOUR_GATEWAY_HOST>`,
-`<YOUR_CONTROL_PLANE_HOST>`. Replace all of them before you run anything.
+`<YOUR_CONTROL_PLANE_API>`. Replace all of them before you run anything.
 
 Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digitalapi.ai/api-gateway).
 

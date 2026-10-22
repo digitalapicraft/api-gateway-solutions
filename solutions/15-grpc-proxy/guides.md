@@ -80,6 +80,10 @@ Pick one of the two ways below. Both give you the same thing: an API called
    [`example/api-spec-basic.yaml`](example/api-spec-basic.yaml): the same five
    routes, no plugins. Then click **Import**.
 
+If an API with the same name already exists in your org, the import fails with
+*API with name '<name>' already exists*. Type another name in the form's
+**Display name** field, which overrides the name in the spec, and import again.
+
 > **A spec can carry the plugins too.** Add an `x-helix-gateway` block that
 > lists them. At the top level of the file it covers every route; under one
 > path and method it covers that route only. This is one route's:
@@ -162,11 +166,12 @@ Repeat for each route. What every field means, and the optional extra (`request-
    is mapped yet, and **Deploy** once one is.)
 
 **Changing it later.** A change to the upstream's host or port applies to the
-live API straight away, with no new deploy. A change to its **scheme** (`grpc` or
-`grpcs`) does not: undeploy the revision and deploy it again. A change to routes or plugins
-does need one, because a live revision can't be edited: use **Clone Revision**,
-make your change on the copy, then **Force Deploy** it. The same steps roll you
-back: clone the older revision and force-deploy that.
+live API straight away, with no new deploy. A change to its **scheme** (`grpc`
+or `grpcs`) does not: undeploy the revision and deploy it again. A change to
+routes or plugins does need one, because a live revision can't be edited: use
+**Clone Revision**, make your change on the copy, then **Force Deploy** it.
+Rolling back needs no copy: click **Deploy**, pick the older revision (for
+example `r1`), and click **Force Deploy**.
 
 **4. Create a product for it**
 1. Go to **API Distribution → API Products**, click **Add API Product**.
@@ -190,9 +195,12 @@ and email, then **Add**.
 
 **6. Create an app**
 
-Go to **API Distribution → Apps**, click **Add App**. Pick the **Environment** and
-the **Developer**, add the product from step 4, pick an authentication method and
-let credentials auto-generate, then **Create App**.
+Go to **API Distribution → Apps**, click **Add App**. Fill in **Display Name**,
+for example `timing-unit-1`. Pick the **Environment** and the **Developer**, add
+the product from step 4, pick an authentication method and let credentials
+auto-generate, then **Create App**. If the product list says **No products
+found.**, the product isn't deployed to that environment yet: an app can only
+pick products that are. Deploy it as in step 4, item 7.
 
 **7. Get the app's key**
 
@@ -202,14 +210,26 @@ button. Copy the **key**, not the secret: the key (the app's client id) is what
 clients send as the `X-Unit-Key` gRPC metadata. **Generate New Credentials**, in
 the same card, issues a new pair.
 
+**Switching a caller off.** There are two ways, and both stop the old key
+opening new streams within seconds. A stream that is already open carries on
+until it ends, because the key is checked only when a stream opens.
+
+- **Keep the app's history: Generate New Credentials** on the app's
+  **Overview** tab, in the **Authentication** card. The old key stops working,
+  and the app's usage history and analytics stay.
+- **Remove the app completely: Delete.** The delete dialog warns that it also
+  deletes all usage history and analytics for that app.
+
 ## Install it directly
 
-If you'd rather script it against the control plane:
+To script it, call the control plane instead. `BASE` is the API address the
+portal calls (it usually starts with `api-`), not the portal page and not the
+gateway's address:
 
 ```bash
 export ORG=<ORG_ID>
 export TOKEN=<control-plane bearer token>      # short-lived
-export BASE=https://<YOUR_GATEWAY_HOST>/api
+export BASE=https://<YOUR_CONTROL_PLANE_API>/api
 H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
 
 # 1. Import the spec. Keep both ids the response returns.
@@ -397,6 +417,7 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
 | A revoked app is still connected | Expected. The key is checked once, when the stream opens. The open stream continues until it ends. |
 | A quota allows far more messages than expected | Expected. It counts streams, not messages. |
 | Deploy fails: `Only INACTIVE revisions can be updated` | Clone the revision or undeploy, then apply. |
+| The product can't be undeployed | Apps still subscribe to it. Remove the product from those apps, or delete the apps, then undeploy. |
 
 - **Use the trace inspector to see each step.** On the API's page, open the
   **Observability** tab and click **Start trace session**. It shows the headers

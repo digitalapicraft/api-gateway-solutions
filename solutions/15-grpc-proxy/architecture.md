@@ -30,7 +30,7 @@ For the full list of fields on every plugin mentioned here, see
 ```mermaid
 flowchart LR
   U["Timing unit<br/>(gRPC client)"] -->|"HTTP/2 · metadata: X-Unit-Key"| G[Gateway]
-  G --> A["helix-auth (2450, access)<br/>validates ONCE at stream open"]
+  G --> A["helix-auth (2450, rewrite)<br/>validates ONCE at stream open"]
   A -->|rejected| R["401<br/>(not a valid gRPC response)"]
   A -->|accepted| P["proxy · upstream scheme: grpc"]
   P <-->|"bidirectional, stays open"| B["gRPC service"]
@@ -124,7 +124,7 @@ That is why this package's two negative tests are plain `curl` calls.
 
 | Plugin | Priority | Phase | Runs |
 |---|---|---|---|
-| `helix-auth` (validate · key-auth, key from `X-Unit-Key`) | 2450 | access | **once**, at stream initiation |
+| `helix-auth` (validate · key-auth, key from `X-Unit-Key`) | 2450 | rewrite | **once**, at stream initiation |
 | `request-id` | — | API-wide | once per stream |
 
 There is deliberately nothing else. **No plugin that reads or rewrites a body can
@@ -230,4 +230,10 @@ Do not use it when:
 - **A stream's telemetry lands when it closes**, which is when its duration is
   known.
 - **It does not inspect messages** inside a stream.
+- **It does not hide the key from your backend.** The `X-Unit-Key` metadata
+  reaches the upstream unchanged, and the gateway adds `X-Consumer-Username` and
+  `X-Credential-Identifier` (the app's id, not its name). `helix-auth` has no
+  setting to hide the key. On HTTP APIs, `proxy-rewrite` can remove a header
+  before it reaches the backend; whether that works on a gRPC route hasn't been
+  confirmed yet.
 - **mTLS and client-certificate identity are out of scope.**

@@ -21,9 +21,6 @@ meta:
     configuration. Case 6 asserts a negative about syntax rather than about
     policy, which is unusual for this library — it is here because the failure it
     guards against is silent, returning 200 with empty strings and no error.
-  status: >-
-    EXECUTED against a live deployment, 6/6 passing. See
-    validation/gateway-validation.yaml for what ran and when.
 
 cases:
   - id: register
