@@ -1,13 +1,17 @@
-# Guides — API-key identity at the edge
+# Guides — API keys checked at the gateway
 
 > [Overview](README.md) · [Business need](business-need.md) · [Architecture](architecture.md) · **Guides** · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [API reference](api-reference.md)
 
 ---
 
 Three ways to build the same thing, then how to see it work. Whichever way you
-pick, the result is one API with two routes (`GET /fleet/price-list` and
-`POST /fleet/takings`) that only accept a known app's key in the `X-Device-Key`
-header, plus a product, a developer and one app whose key you test with.
+pick, you get:
+
+- one API with two routes, `GET /fleet/price-list` and `POST /fleet/takings`.
+  They accept a request only if it carries a known app's key in the
+  `X-Device-Key` header (a named value sent with the request);
+- a product (a bundle of APIs that apps sign up to), a developer (the owner of
+  the apps), and one app (one caller) whose key you test with.
 
 ## Pick your path
 
@@ -15,15 +19,15 @@ header, plus a product, a developer and one app whose key you test with.
 |---|---|---|
 | **1. Helix Agent** | want the quickest result and are happy to paste a prompt | [Build it with the Helix Agent](#build-it-with-the-helix-agent) |
 | **2. Helix control plane** | prefer clicking through screens and want to see every setting | [Build it in the UI](#build-it-in-the-ui) |
-| **3. API script** | are scripting this, or wiring it into a pipeline | [Install it directly](#install-it-directly) |
+| **3. API script** | want to script it, or add it to an automated build pipeline | [Install it directly](#install-it-directly) |
 
 Then, for everyone: [See it work](#see-it-work) · [Variations](#variations) ·
 [Configuration reference](#configuration-reference) · [Troubleshooting](#troubleshooting)
 
 ## Build it with the Helix Agent
 
-Works on a **fresh org**. [`helix-agent-prompt.md`](helix-agent-prompt.md) has two
-steps: Step 1 creates and protects the API, Step 2 issues a key and gives you the
+Works on a **new org**. [`helix-agent-prompt.md`](helix-agent-prompt.md) has two
+steps: Step 1 creates and protects the API, Step 2 creates a key and gives you the
 calls that test it. **Paste one step at a time and confirm between them**, in the
 same chat.
 
@@ -127,8 +131,7 @@ plugin per route: four times in all, picking the route named below each time.
    ```
 
    Fill in **apikey → source** even if the Properties list shows it as
-   optional. Without it
-   the deploy is refused.
+   optional. Without it the deploy is refused.
 
    There is **no key to type in here**. The keys live on the apps you create in
    step 7.
@@ -158,8 +161,7 @@ plugin per route: four times in all, picking the route named below each time.
    your own backend, use its paths instead.
 
 Repeat until both routes carry both plugins. What every field means, and the
-optional
-extra (`request-id`) the full spec adds:
+optional extra (`request-id`) the full spec adds:
 [Configuration reference](#configuration-reference).
 
 **3. Give it an upstream, then deploy it**
@@ -213,7 +215,7 @@ On each app's **Overview** tab, find the **Authentication** card. It shows
 `helix-auth` with a key and a secret, both hidden, each with a show and a copy
 button. Copy the **key**: that's the value the caller sends in the
 `X-Device-Key` header. It is the credential **key**, not the app's id and not
-its secret. **Generate New Credentials**, in the same card, issues a new pair.
+its secret. **Generate New Credentials**, in the same card, creates a new pair.
 
 ## Install it directly
 
@@ -259,14 +261,14 @@ curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/developers/<DEVELOPER_ID>/envs/<TEST_
   -d '{"name":"<TERMINAL_APP_NAME>","products":{"<PRODUCT_ID>":1},"plugins":{"helix-auth":{}}}'
 ```
 
-`plugins` on an app names the auth method it authenticates with, and an empty
-`{"helix-auth":{}}` asks the control plane to generate the key and secret, like
-the UI's auto-generate option. Confirm the shape your org's build expects before
-scripting this for real.
+On an app, `plugins` names the way the app proves who it is. An empty
+`{"helix-auth":{}}` asks the control plane to create the key and secret, like the
+UI's auto-generate option. Check the shape your org's version of the gateway
+expects before you script this for real.
 
-> Revisions must be **INACTIVE** to accept a spec change. An ACTIVE one returns
-> `Only INACTIVE revisions can be updated`. Clone the revision (keeping the live
-> one as a rollback target) or undeploy first.
+> A revision can only be changed while it is **INACTIVE**, meaning not deployed.
+> A deployed (ACTIVE) one returns `Only INACTIVE revisions can be updated`. Clone the revision first, and keep the
+> live one so you can go back to it. Or undeploy first.
 
 The same calls without narration: [API reference](api-reference.md).
 
@@ -305,7 +307,7 @@ DEVICE_KEY=<DEVICE_API_KEY> APP_SECRET=<APP_SECRET> \
 
 Exit code 0 means the key is required, checked, and accepted only in the one
 header the route names. What each check proves, plus the manual tests `verify.sh`
-can't run for you (switch-off and rotation): [Tests](tests.md).
+can't run for you (switching a caller off, and changing a key): [Tests](tests.md).
 
 ## Variations
 
@@ -320,7 +322,7 @@ me what that costs me: which logs the key will now appear in, and what
 compensating controls you'd put on the route.
 ```
 
-Use this only as a last resort. A key in a URL lands in every log it passes.
+Use this only as a last resort. A key in a URL is copied into every log it passes through.
 
 **One key per site rather than per terminal.**
 
@@ -339,7 +341,7 @@ a caller sees when it goes over.
 ```
 
 That is [solution 01](../01-api-products/): add `api-product-enforcer` to the
-routes and the product's quota becomes enforced per app.
+routes, and the product's quota (usage limit) is then enforced for each app.
 
 **Move to tokens for the callers that can manage it.**
 
@@ -349,16 +351,17 @@ a second API for them using helix-auth generate + validate as in solution 02, an
 leave the device API on key-auth. Don't mix the two on one route.
 ```
 
-**Rotate a key without downtime.** Create a second app for the same caller, give
-it the new key, confirm it returns 200, then delete the first app. Rotating one
-app's key in place cuts over immediately.
+**Change a key without interrupting the caller.** Create a second app for the
+same caller. Give the caller the new key and check it returns 200. Then delete the
+first app. Giving one app a new key in place cuts over at once: the old key stops
+working straight away.
 
 ## Configuration reference
 
 Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml).
 [`example/api-spec-basic.yaml`](example/api-spec-basic.yaml) is the same routes
-with no plugins, for adding them yourself. One block carries the whole solution,
-and it is on every protected route:
+with no plugins, for adding them yourself. One block of settings does the whole
+job, and it is on every protected route:
 
 ```yaml
 helix-auth:
@@ -371,27 +374,28 @@ helix-auth:
 
 | Plugin | Field | Value here | What it means |
 |---|---|---|---|
-| `helix-auth` | `mode` | `validate` | Check an existing credential. (`generate`, issuing tokens, is not used here.) |
-| `helix-auth` | `validate_auth_type` | `key-auth` | A mode of `helix-auth`, not a separate plugin. Finds the app the key belongs to. |
-| `helix-auth` | `apikey.source` | `header` | Where the key is read from. **Required in practice**, although the schema marks it optional. `query` is allowed and a bad idea. |
-| `helix-auth` | `apikey.key` | `X-Device-Key` | The header name. Any name works; it becomes part of the contract you publish to callers. |
-| `proxy-rewrite` | `uri` | `/todos/1` on `GET /fleet/price-list` · `/posts` on `POST /fleet/takings` | Maps your published paths to the upstream's. Swap these when you point at your own backend. |
-| `request-id` | `algorithm` / `header_name` | `uuid` / `X-Request-Id` | API-wide. Ties the gateway's record of a refusal to the backend's record of the calls that got through. |
+| `helix-auth` | `mode` | `validate` | Check a credential the caller already has. (`generate`, which creates tokens, is not used here.) |
+| `helix-auth` | `validate_auth_type` | `key-auth` | A setting of `helix-auth`, not a separate plugin. Finds the app the key belongs to. |
+| `helix-auth` | `apikey.source` | `header` | Where the key is read from. **Required in practice**, although the schema (the plugin's list of fields) marks it optional. `query` (the URL) is allowed, but is a bad idea. |
+| `helix-auth` | `apikey.key` | `X-Device-Key` | The header name. Any name works. Callers must use exactly this name, so treat it as fixed once you publish it. |
+| `proxy-rewrite` | `uri` | `/todos/1` on `GET /fleet/price-list` · `/posts` on `POST /fleet/takings` | Changes the path callers use into the path on the upstream (your backend). Change these values when you use your own backend. |
+| `request-id` | `algorithm` / `header_name` | `uuid` / `X-Request-Id` | On the whole API. Gives each request an id, so you can match the gateway's log of a refused call with your backend's log of the calls that got through. |
 
-**Read what that block does not contain.** There is no key and no secret. The
-route names the *header the key arrives in*; the key itself is issued on the app
+**Notice what that block does not contain.** There is no key and no secret. The
+route names the *header the key arrives in*. The key itself is created on the app
 by the control plane. Unlike the signing secret in [solution 02](../02-oauth-jwt/),
 there is nothing here to fill in and nothing to leak, the same as
 [solution 06](../06-hmac-auth/).
 
-**Not in the spec, on purpose:** `secret_validation` (it would let the app's
-secret in as an *alternative* to the key), `cors` (devices aren't browsers), and
-`api-product-enforcer` (this solution identifies callers; metering is
-[solution 01](../01-api-products/)).
+**Not in the spec, on purpose:** `secret_validation` (it would accept the app's
+secret as an *alternative* to the key), `cors` (lets browser pages call the API,
+and devices aren't browsers), and `api-product-enforcer` (this solution
+identifies callers; usage limits are [solution 01](../01-api-products/)).
 
-`helix-auth` is attached per route rather than API-wide. Both routes need it
-identically, so either would work; per route keeps adding an unauthenticated
-health-check route later a local change.
+`helix-auth` is added to each route, not to the whole API. Both routes need the
+same settings, so either way works. Adding it per route means you can later add a
+route that needs no key (a health check, for example) without changing the
+others.
 
 Placeholders in this package: `<ORG_ID>`, `<TEST_ENV_ID>`, `<API_ID>`,
 `<REVISION_ID>`, `<UPSTREAM_ID>`, `<PRODUCT_ID>`, `<DEVELOPER_ID>`,
@@ -402,35 +406,43 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
 
 ## Troubleshooting
 
-- **The dry-run rejects the config, naming `apikey`.** `apikey.source` is missing.
-  It is required on both routes even though the schema says it's optional.
-- **Every request gets *Missing API key in request*.** The header on the wire is
-  not the one in `apikey.key`, or the key is in the query string while `source` is
-  `header`.
+- **The dry-run rejects the config, naming `apikey`.** (A dry-run is a test
+  deploy that checks the configuration without changing anything live.)
+  `apikey.source` is missing. It is required on both routes, even though the
+  schema says it's optional.
+- **Every request gets *Missing API key in request*.** The header in the request
+  is not the one named in `apikey.key`. Or the key is in the query string while
+  `source` is `header`.
 - **Every request gets *Invalid API key in request*.** The value is not a
   credential key. Usually the app's id or the app's secret was sent instead. This
   is the most common cause of "401 with a key I'm certain is right".
-- **A valid key returns 403, not 200.** The key was recognised, but the app's
-  product doesn't include this API. Add the API to the product. A product problem, not a key problem.
-- **An unknown key returns 200.** The most serious failure: the route isn't
-  checking keys at all and is passing everything through while looking
-  configured. Read the deployed revision back.
-- **A switched-off caller keeps working for a short while.** The gateway caches
-  credential state. That delay is your real revocation time; measure it.
+- **A valid key returns 403, not 200.** (HTTP 403 means forbidden.) The key was
+  recognised, but the app's product doesn't include this API. Add the API to the
+  product. It is a product problem, not a key problem.
+- **An unknown key returns 200.** This is the most serious failure. The route
+  isn't checking keys at all. It lets everything through while looking set up.
+  Read the deployed revision back.
+- **A switched-off caller keeps working for a short while.** The gateway keeps a
+  short-term copy of credential details (a cache). That delay is how long it
+  really takes to switch a caller off. Measure it.
 - **Turning on `secret_validation` lets a caller in with only the secret.** That
-  is what it does. It is not a second factor. Turn it off.
-- **Don't add `limit-count` keyed on the caller to meter these apps.** Per-caller
-  metering is the product quota, counted per app. See
-  [solution 01](../01-api-products/).
+  is what it does. It is not a second check. Turn it off.
+- **You want to limit how often each app calls.** Don't add `limit-count` keyed
+  on the caller. Usage limits for each caller come from the product quota, counted
+  per app. See [solution 01](../01-api-products/).
 - **Deploy fails with `Only INACTIVE revisions can be updated`.** Clone the
   revision or undeploy, then apply.
-- **A valid key returns 403, not 200.** The key was recognised, but the app's product doesn't contain this API.
-- **Everything 401s with *Missing API key*.** The header on the wire isn't the one in `apikey.key`, or the key is in the query string.
-- **The agent renames the routes to `/todos/1` and `/posts`.** It matched the upstream instead of rewriting to it. Keep your paths; use `proxy-rewrite`.
-- **The agent reaches for a `key-auth` plugin.** It's a `validate_auth_type` of `helix-auth` here, not a plugin.
-- **The agent puts a key value in the spec.** The route names the header only; the control plane issues the key on the app.
-- **`create_api` fails saying the API exists.** A previous run left one behind. Use a free name.
-- **You ask the agent to run `validate_route`.** It always fails on this platform, whatever the route says. Ask for `dry_run_deploy` instead.
+- **The agent renames the routes to `/todos/1` and `/posts`.** It copied the
+  backend's paths instead of changing the forwarded path. Keep your paths, and use
+  `proxy-rewrite`.
+- **The agent tries to use a `key-auth` plugin.** Here it is a
+  `validate_auth_type` setting of `helix-auth`, not a plugin.
+- **The agent puts a key value in the spec.** The route names the header only.
+  The control plane creates the key on the app.
+- **`create_api` fails saying the API exists.** A previous run left one behind.
+  Use a name that isn't taken.
+- **You ask the agent to run `validate_route`.** It always fails on this
+  platform, whatever the route says. Ask for `dry_run_deploy` instead.
 - **Use the trace inspector to see each step.** On the API's page, open the
   **Observability** tab and click **Start trace session**. It shows the headers
   each plugin changes and the request body at every stage, which is the fastest

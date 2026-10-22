@@ -1,11 +1,12 @@
-# Solution 08 — API keys: identify every device or partner job with one header, and switch any of them off in seconds
+# Solution 08 — API keys: know which device or partner is calling, and switch any one of them off in seconds
 
 > **Overview** · [Business need](business-need.md) · [Architecture](architecture.md) · [Guides](guides.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [API reference](api-reference.md)
 
-**In short:** give every caller its own key, sent in one header. The gateway
-works out which caller each request comes from before it reaches your backend,
-and you can cut off any single caller without a code change, a redeploy or a
-firmware update.
+**In short:** give every caller its own key. The caller sends it in one header
+(a named line of extra information that travels with each request). The gateway
+works out which caller sent each request before it reaches your backend. You can
+cut off any one caller without changing code, deploying again or updating the
+device's software.
 
 | | |
 |---|---|
@@ -15,25 +16,33 @@ firmware update.
 
 ---
 
-## What is API-key identity?
+## What is an API key?
 
-An **API key** is a long random value a caller sends with every request, here in
-an `X-Device-Key` header. Each caller gets its own key, issued by the gateway's
-control plane on that caller's **app** (one app per device, partner or job).
+An **API key** is a long random value that a caller sends with every request.
+Here it goes in a header called `X-Device-Key`. Each caller gets its own key.
 
-When a request arrives, the gateway looks the key up and finds the app it belongs
-to. Known key: the request goes through, labelled with that app. Missing or
-unknown key: it is refused before your backend sees it.
+The key belongs to an **app**. An app stands for one caller: one device, one
+partner, or one scheduled job. The **control plane** (the part of the platform
+where you manage APIs, products, developers and apps) creates the key when you
+create the app.
 
-It works like a building pass. Everyone has their own card, the door reader knows
-whose card it is, and reception can cancel one lost card without changing the
-locks for everyone else.
+When a request arrives, the gateway looks up the key and finds the app it
+belongs to:
 
-**How this differs from [solution 01](../01-api-products/):** 01 uses the same
-key check *and* enforces a usage limit per app. This solution does only the first
-half: it identifies the caller. The app still needs a product (that is how an app
-gets a key), but no usage limit is enforced. Add 01's quota check later if you
-need one.
+- **A known key:** the request goes through, marked with the name of that app.
+- **A missing or unknown key:** the gateway refuses the request. Your backend
+  never sees it.
+
+It works like a building pass. Everyone has their own card. The door reader knows
+whose card it is. Reception can cancel one lost card without changing the locks
+for everyone else.
+
+**How this differs from [solution 01](../01-api-products/):** 01 does the same
+key check. It also sets a usage limit for each app. This solution does only the
+first part: it finds out who the caller is. Each app still needs a **product** (a
+bundle of APIs that apps sign up to), because signing up to a product is how an
+app gets its key. But no usage limit is applied. You can add 01's limit check
+later if you need one.
 
 ## The use case
 
@@ -45,38 +54,45 @@ need one.
 > isn't published. Last month one terminal was stolen out of a forecourt and
 > nobody could tell me whether it was still calling us."*
 
-Three needs hold at once:
+(A payment terminal is the card machine at the till. "An OAuth exchange" means
+swapping a secret for a short-lived token before calling the API.)
 
-- **The caller can't run a token exchange.** Embedded devices, old middleware and
-  a partner's scheduled script can set one header and nothing more.
-- **You still need to know who is calling.** "Which terminal?" is the first
-  question in every incident, and an IP address doesn't answer it.
-- **A compromised caller must be stoppable today**, not at the next firmware
-  release.
+Three needs apply at the same time:
 
-## What it gives you
+- **The caller can't swap a secret for a token.** Small devices, old software
+  that sits between systems, and a partner's scheduled script can set one header
+  and nothing more.
+- **You still need to know who is calling.** "Which device?" is the first
+  question when something goes wrong. An IP address doesn't answer it.
+- **You must be able to stop a stolen or misused caller today**, not at the next
+  device software update.
 
-- **A per-caller identity** on every request, found before the backend is touched.
-- **Instant, per-caller switch-off.** Delete or rotate one app; that caller's
-  next request is refused.
+## What API keys give you
+
+- **Every request names its caller.** The gateway finds the app before your
+  backend is touched.
+- **You can switch off one caller at once.** Delete that app, or give it a new
+  key. Its next request with the old key is refused.
 - **No secret in the API's configuration.** The route only names the header the
-  key arrives in. Keys live on the apps.
-- **Nothing to change on the caller** beyond one header, and nothing on the
-  backend.
+  key arrives in. The keys are stored on the apps.
+- **Nothing to change on the caller** except one header, and nothing to change on
+  the backend.
 
 ## Benefits
 
-- **A stolen device becomes a short task in the control plane**, not an open-ended
-  exposure.
-- **Incidents start with an answer.** Every request is tied to a specific app.
-- **One leaked key affects one caller**, not the whole fleet.
-- **Sets up metering and analytics.** Per-app quotas
-  ([solution 01](../01-api-products/)) and per-app analytics
-  ([solution 04](../04-analytics/)) need an app to count against. This creates it.
+- **A stolen device is a short task in the control plane.** It does not stay an
+  open risk.
+- **When something goes wrong, you already know who is involved.** Every request
+  is tied to one named app.
+- **A leaked key affects one caller**, not all your devices.
+- **It prepares the ground for usage limits and reports.** Per-app usage limits
+  ([solution 01](../01-api-products/)) and per-app reports
+  ([solution 04](../04-analytics/)) need an app to count each request under. This
+  solution creates it.
 
 ## Example
 
-A fleet of terminals calls two routes: `GET /fleet/price-list` and
+A set of payment terminals calls two routes: `GET /fleet/price-list` and
 `POST /fleet/takings`.
 
 | A terminal sends… | It gets back |
@@ -93,6 +109,9 @@ product with the API in it, deploy the product, add a developer, create one app
 per caller, then copy each app's key.
 [Full click-by-click walkthrough →](guides.md#build-it-in-the-ui)
 
+(A plugin is a ready-made feature you switch on for a route. The upstream is your
+backend service, where the gateway forwards requests that pass.)
+
 [Build it any of three ways, then see it work →](guides.md)
 
 ## Where to go next
@@ -100,7 +119,8 @@ per caller, then copy each app's key.
 - **Want the business case first?** [Business need](business-need.md) explains why
   this matters, in plain terms.
 - **Want to understand how it works?** [Architecture](architecture.md) covers how a
-  key is checked, and which credential type fits which caller.
+  key is checked, and which kind of credential (key, token or signature) fits
+  which caller.
 - **Ready to build it?** [Guides](guides.md) walks you through it step by step.
 - **Want the full product documentation?** Every plugin, screen and API call is
   covered at [docs.digitalapi.ai/api-gateway](https://docs.digitalapi.ai/api-gateway).
@@ -108,9 +128,10 @@ per caller, then copy each app's key.
 ## Related solutions
 
 - **[02 — OAuth 2.0 with JWT](../02-oauth-jwt/)** · **[05 — OAuth with Okta](../05-okta-jwt/)** ·
-  **[06 — Signed requests](../06-hmac-auth/)** — the other three answers to "who
-  is calling?". Pick by what the caller can hold.
+  **[06 — Signed requests](../06-hmac-auth/)** — the other three ways to answer
+  "who is calling?". Pick one by what the caller can store and do.
 - **[01 — API Products](../01-api-products/)** — add a usage limit to the apps
-  this solution identifies. The quota is counted per app, the same object.
-- **[04 — Analytics](../04-analytics/)** — per-app reporting, which only works
-  because the caller was identified here.
+  this solution identifies. The limit is counted per app, the same app this
+  solution creates.
+- **[04 — Analytics](../04-analytics/)** — reports for each app. They only work
+  because this solution has already found out which app is calling.

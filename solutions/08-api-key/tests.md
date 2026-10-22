@@ -1,14 +1,19 @@
-# Tests — API-key identity at the edge
+# Tests — API keys checked at the gateway
 
 > [Overview](README.md) · [Business need](business-need.md) · [Architecture](architecture.md) · [Guides](guides.md) · [Agent prompt](helix-agent-prompt.md) · **Tests** · [API reference](api-reference.md)
 
 ---
 
-10 test cases in total: **7 automated**, run by `example/verify.sh` against a live
-deployment, and **3 manual**, because they change control-plane state or need a
-configuration this package deliberately does not ship. The full machine-readable
-plan is [`tests/test-plan.yaml`](tests/test-plan.yaml); this page is the readable
-walkthrough of what it checks and why.
+There are 10 test cases in total:
+
+- **7 automated.** `example/verify.sh` runs them against a live deployment.
+- **3 manual.** They change things in the control plane (where you manage APIs,
+  products, developers and apps), or they need a configuration this package
+  deliberately does not ship.
+
+The full plan, in a form a script can read, is
+[`tests/test-plan.yaml`](tests/test-plan.yaml). This page explains in plain words
+what it checks and why.
 
 ## Running the automated tests
 
@@ -18,48 +23,59 @@ DEVICE_KEY=<DEVICE_API_KEY> APP_SECRET=<APP_SECRET> \
 ./example/verify.sh
 ```
 
-`DEVICE_KEY` is the app's credential **key**, not its secret and not its id.
-`APP_SECRET` is optional: it turns on case 6, which is skipped (with a note)
-without it. Optional overrides: `READ_PATH` (default `/fleet/price-list`),
-`WRITE_PATH` (default `/fleet/takings`), `KEY_HEADER` (default `X-Device-Key`).
+`DEVICE_KEY` is the app's credential **key**. (An app's credential is the key and
+secret the control plane created for it.) Use the key, not the secret and not the
+app's id.
+`APP_SECRET` is optional. It turns on case 6; without it, case 6 is skipped with
+a note. You can also change these settings: `READ_PATH` (default
+`/fleet/price-list`), `WRITE_PATH` (default `/fleet/takings`), `KEY_HEADER`
+(default `X-Device-Key`).
 
-Exit code 0 means all seven held:
+Exit code 0 means all seven passed:
 
 | # | Case | Expected |
 |---|---|---|
 | 1 | No key | `401` *Missing API key in request* |
-| 2 | A live app's key | `200` + the upstream's payload |
+| 2 | A live app's key | `200` + the upstream's data |
 | 3 | An unknown key | `401` *Invalid API key in request* |
 | 4 | **The right key in an `apikey:` header** | `401` |
 | 5 | **The right key as a query parameter** | `401` |
 | 6 | **The app's secret sent as the key** | `401` |
 | 7 | The key on the write route | `201` |
 
-**Cases 4–6 are the ones not to skip.** Each proves the contract is narrower than
-it looks: the header *name* is part of it (4), `source: header` means the header
-and nothing else (5), and the app's secret is not accepted in place of its key (6)
-— which is exactly what `secret_validation: true` would change.
+(401 means not authenticated. 200 means OK. 201 means the item was created. The
+upstream is your backend service, where the gateway forwards requests that pass.)
 
-**Case 3 matters in the other direction.** If an unknown key returns 200, the
-route isn't checking keys at all: it is passing traffic through while looking
-configured. An unknown key is also what a switched-off caller looks like, which
-is what makes switch-off testable.
+**Don't skip cases 4–6.** Each one proves the gateway accepts less than you might
+expect:
 
-Raw fixtures, if you want to run one case by hand instead of the whole script:
-[`tests/requests/`](tests/requests/) (the HTTP requests) and
-[`tests/expected/`](tests/expected/) (the expected status and body for each — the
-single source of truth both `verify.sh` and the plan read from, so they can't
-drift apart).
+- **Case 4:** the header *name* matters. The right key under another name is
+  refused.
+- **Case 5:** `source: header` means the header and nothing else. The right key in
+  the URL's query string (the part after `?`) is refused.
+- **Case 6:** the app's secret is not accepted in place of its key. Turning on
+  `secret_validation: true` would change exactly this.
+
+**Case 3 matters for the opposite reason.** If an unknown key returns 200, the
+route isn't checking keys at all. It is letting traffic through while looking
+set up. An unknown key is also what a switched-off caller looks like. That is
+what makes switch-off possible to test.
+
+To run one case by hand instead of the whole script, use the raw files:
+[`tests/requests/`](tests/requests/) holds the HTTP requests, and
+[`tests/expected/`](tests/expected/) holds the expected status and body for each.
+Both `verify.sh` and the plan read their expected results from those files, so
+the two can't drift apart.
 
 ## The manual tests
 
 | Case | What it proves | How to run it |
 |---|---|---|
-| **Switch-off (revocation)** | Deleting the app stops the caller on its next request, with no config change and no redeploy. In this design, fast switch-off stands in for a short credential lifetime, so prove it once per environment. | Confirm the key returns `200`. Delete the app in the control plane (or rotate its credentials). Replay the **same** request with the **same** key. Expect `401` *Invalid API key in request*, within the gateway's credential cache delay. Measure that delay and publish it as your revocation time. Kept out of `verify.sh` because it destroys the credential every other case needs. |
-| **Rotation** | The rotation procedure and its failure mode, before a real device needs it, since a fleet can't be updated all at once. | Create a **second** app for the same caller, give the device the new key, confirm it returns `200`, then delete the first app. Expect both keys to return `200` during the overlap, and the old key to return `401` once its app is deleted. Rotating one app's key in place cuts over immediately. |
-| **`secret_validation` variant** | What `secret_validation: true` actually does, so nobody turns it on expecting a second factor. | In a **throwaway** environment only, add `secret_validation: true` and an `apisecret` block to the route, deploy, then send **only** the app's secret in the `apisecret` header, with no `X-Device-Key`. The plugin's own schema says it will succeed: the secret is accepted as an *alternative* credential. This variant is not shipped in this package's spec, and the expected result is the schema's description, not a result recorded here. |
+| **Switch-off (revocation)** | Deleting the app stops the caller on its next request. No config change and no new deploy are needed. In this design, quick switch-off takes the place of a credential that expires on its own, so prove it once in each environment. | Check that the key returns `200`. Delete the app in the control plane (or give it new credentials). Send the **same** request with the **same** key again. Expect `401` *Invalid API key in request*, within the gateway's credential cache delay (how long the gateway keeps a short-term copy of credential details). Measure that delay and publish it as the time it takes to switch a caller off. This test is not in `verify.sh` because it destroys the credential every other case needs. |
+| **Changing a key (rotation)** | How to give a caller a new key, and what goes wrong, before a real device needs it. Devices can't all be updated at once. | Create a **second** app for the same caller. Give the device the new key and check it returns `200`. Then delete the first app. Expect both keys to return `200` while both apps exist, and the old key to return `401` once its app is deleted. Giving one app a new key in place cuts over at once. |
+| **`secret_validation` variant** | What `secret_validation: true` really does, so nobody turns it on expecting a second check. | In a **throwaway** environment only, add `secret_validation: true` and an `apisecret` block to the route, and deploy. Then send **only** the app's secret in the `apisecret` header, with no `X-Device-Key`. The plugin's own schema (its list of fields) says this will succeed: the secret is accepted as an *alternative* credential. This variant is not in this package's spec. The expected result is the schema's description, not a result recorded here. |
 
-Full procedures, plus the exact assertions each one makes:
+Full steps, and exactly what each one checks:
 [`tests/test-plan.yaml`](tests/test-plan.yaml).
 
 ## Coverage
@@ -68,5 +84,5 @@ Full procedures, plus the exact assertions each one makes:
 |---|---|
 | Positive | valid key, write route |
 | Negative | no key, unknown key, secret sent as key |
-| Boundary | wrong header, key in the query string, rotation |
+| Boundary | wrong header, key in the query string, changing a key (rotation) |
 | Failure | switch-off (revocation), `secret_validation` variant |
