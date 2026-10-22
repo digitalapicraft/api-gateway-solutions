@@ -1,0 +1,42 @@
+# Solution 07 — HTTP to Kafka: the basic example spec.
+#
+# One route and nothing else: no plugins. Import this when you want to add the
+# plugins yourself in the UI, so you see what each one does. The walkthrough is
+# ../guides.md, "Build it in the UI".
+#
+# The same API with the plugins already in it is api-spec.yaml, next to this file.
+#
+# Until you add the plugins, POST /events is simply forwarded to whatever
+# upstream you bind: nothing is checked, nothing is answered by the gateway, and
+# nothing is published to Kafka.
+
+openapi: 3.0.3
+
+info:
+  title: Event Ingest API
+  version: 1.0.0
+  description: >-
+    A single route for submitting events. Add the plugins yourself to check each
+    event, answer the caller from the gateway and publish the event to a Kafka
+    topic.
+
+paths:
+  /events:
+    post:
+      summary: Submit an event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [event_id, event_type, occurred_at]
+              properties:
+                event_id:
+                  type: string
+                  description: Caller-generated unique id.
+                event_type:  { type: string }
+                occurred_at: { type: string, format: date-time }
+                payload:     { type: object }
+      responses:
+        default: { description: Whatever the upstream returns }

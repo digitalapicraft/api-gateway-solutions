@@ -69,7 +69,7 @@ status="$(curl -s -o "$BODY_FILE" -w '%{http_code}' "$API_URL")"
      response. Check GATEWAY, DNS and network reachability before anything else;
      every assertion below depends on the gateway answering."
 [[ "$status" == "$EXP_UNAUTH" ]] \
-  && pass "no token → 401 (rejected in the access phase, never reached upstream)" \
+  && pass "no token → 401 (rejected by helix-auth, never reached upstream)" \
   || fail "no token → ${status} (expected 401 — is helix-auth validate on ${API_PATH}?)"
 
 # --- 2: client-credentials exchange ------------------------------------------

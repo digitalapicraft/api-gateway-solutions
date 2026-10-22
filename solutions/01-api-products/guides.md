@@ -47,81 +47,206 @@ Screen and button names below are the real ones. The API lives under
   **Admin → Orgs → (your org) → Environments**, not from the API Gateway sidebar,
   and need a Gateway to attach to. Ask your admin if you're not sure.
 
-**1. Import the API**
+**1. Create the API**
+
+Pick one of the two ways below. Both give you the same thing: an API called
+`Posts API` with two routes and no plugins yet.
+
+*Option A — from scratch*
+1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
+2. Choose **Create from scratch**. Set **Display name** to `Posts API`, then
+   **Create**.
+3. On the API's page, open **Configuration → Routes** and add two routes, both
+   with method `GET`:
+   - `/posts`, the list of posts
+   - `/posts/:postId`, one post. The gateway writes a path parameter as
+     `:postId`, not `{postId}`.
+
+   The route form opens already filled in with the name *New* and the path
+   `/new-route`. Clear both fields first, then type your own.
+
+*Option B — from an OpenAPI spec*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
 2. Set **Method** to **Import an OpenAPI spec**.
-3. Drag in [`example/api-spec.yaml`](example/api-spec.yaml), or paste its
-   contents, then click **Import**.
+3. Drag in your own OpenAPI 3.0 file, or use our example,
+   [`example/api-spec-basic.yaml`](example/api-spec-basic.yaml): the same two
+   routes, no plugins. Then click **Import**.
 
-This creates the API and its first revision with routes and plugins included.
-It does **not** bind an upstream or deploy, and nothing warns you if you skip
-that. The routes just never go live.
+If an API with the same name already exists in your org, the import fails with
+*API with name '<name>' already exists*. Type another name in the form's
+**Display name** field, which overrides the name in the spec, and import again.
 
-**2. Give it an upstream, then deploy it**
+> **A spec can carry the plugins too.** Add an `x-helix-gateway` block that
+> lists them. At the top level of the file it covers every route; under one
+> path and method it covers that route only:
+>
+> ```yaml
+> x-helix-gateway:
+>   plugins:
+>     helix-auth:
+>       mode: validate
+>       validate_auth_type: key-auth
+>       apikey: { source: header, key: apikey }
+>     api-product-enforcer:
+>       error_policy: fail_close
+> ```
+>
+> [`example/api-spec.yaml`](example/api-spec.yaml) is this API with all its
+> plugins already in place. Import that instead and you can skip step 2.
+
+Either way, the API is not live yet: it has no upstream and isn't deployed.
+That comes in step 3.
+
+**2. Add the plugins**
+
+Two plugins turn this API into a metered product. Add them **before** you
+deploy: a live revision can't be changed.
+
+On the API's page, open **Configuration → Plugins** and click **Configure
+plugin**. A short wizard opens:
+
+1. **Plugin** — pick the plugin from the catalog.
+2. **Scope** — **Entire Revision** applies it to every route; **Specific
+   endpoint** applies it to one route.
+3. **Configure** — the JSON editor and the Properties list sit side by side.
+   Paste the JSON below, or fill in the fields. Then **Next**.
+4. **Review** — shows the configuration before and after. Click **Apply**.
+
+Do this once for each plugin below. Both go on the **Entire Revision**.
+
+1. **`helix-auth` — checks who is calling.** It reads the app's key from the
+   `apikey` header and looks up which products that app is subscribed to.
+
+   | Field | Value |
+   |---|---|
+   | **mode** | `validate` |
+   | **validate_auth_type** | `key-auth` |
+   | **apikey → source** | `header` |
+   | **apikey → key** | `apikey` |
+
+   ```json
+   {"mode":"validate","validate_auth_type":"key-auth","apikey":{"source":"header","key":"apikey"}}
+   ```
+
+2. **`api-product-enforcer` — applies the plan's limit.** Each call uses one
+   request from the calling app's product quota. When the quota is used up, the
+   call gets HTTP 429 (too many requests).
+
+   | Field | Value |
+   |---|---|
+   | **error_policy** | `fail_close` |
+
+   ```json
+   {"error_policy":"fail_close"}
+   ```
+
+Each plugin then appears under **Configuration → Plugins**. What every field
+means, and the two optional extras (`request-id`, `cors`) the full spec adds:
+[Configuration reference](#configuration-reference).
+
+**3. Give it an upstream, then deploy it**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick environment
-   `test`, point it at `jsonplaceholder.typicode.com` (or your own host), then
-   **Create Upstream**.
-2. Back on the API's page, click **Deploy** on the revision. The dialog asks you
-   to map an upstream for `test`. Pick the one you just created, then **Deploy**.
+   `test`, and add a node at `jsonplaceholder.typicode.com`, port `443`, scheme
+   HTTPS (or your own host). If you switch the scheme to HTTP, the port stays at
+   `443`: change it to `80` by hand.
+2. **Pass Host** is set to **Rewrite**, which makes **Upstream Host** required.
+   It fills in from the node's host; check it reads
+   `jsonplaceholder.typicode.com`.
+3. Click **Next** through the remaining tabs, then **Add Upstream**.
+4. Back on the API's page, click **Deploy** on the revision. The dialog asks you
+   to map an upstream for `test`. Pick the one you just created, then click
+   **Map & Deploy**. (The button reads **Map & Deploy** while no upstream is
+   mapped yet, and **Deploy** once one is.)
 
-**3. Create the Free product**
+**Changing it later.** A change to the upstream (host, port, scheme) applies to
+the live API straight away, with no new deploy. A change to routes or plugins
+does need one, because a live revision can't be edited: use **Clone Revision**,
+make your change on the copy, then **Force Deploy** it. Rolling back needs no
+copy: click **Deploy**, pick the older revision (for example `r1`), and click
+**Force Deploy**.
+
+**4. Create the Free product**
 1. Go to **API Distribution → API Products**, click **Add API Product**.
 2. Under **Basic Information**, set **Display Name** to `Free`.
-3. Under **APIs**, click **Add API**, select your API, then **Continue**.
+3. Under **APIs**, click **Add API**, select your API, then **Add (1)**.
 4. Under **Authentication Methods**, pick a method for apps to use. Left blank,
    it defaults to `helix-auth`.
-5. Under **Quota**, turn on **Enable request quota**. Set **Request limit** `5`,
-   **Interval** `1`, **Unit** `Minute`.
-6. Click **Create API Product**.
+5. Under **Quota**, make sure **Enable request quota** is on. It is by default,
+   set to 1000 per 1 hour, so don't click the switch: that turns the quota off,
+   and every product needs one (see [Troubleshooting](#troubleshooting)). Change
+   **Request limit** to `5` and **Unit** from **Hour** to **Minute**, and keep
+   **Interval** at `1`. The summary line should read *"Subscribers can make up
+   to 5 requests per 1 minute"*.
+6. Leave **Quota scope** on **App level**, so every app gets its own allowance.
+   **Developer level** makes all of a developer's apps share one; see
+   [Variations](#variations).
+7. Click **Create API Product**.
 
-**4. Deploy it**
+**5. Deploy it**
 On the product's page, click **Deploy**, pick `test`, then **Deploy** again. The
 badge changes from **Not deployed** to **Deployed**. This is a *different* deploy
-from step 2. The product needs its own.
+from step 3. The product needs its own.
 
-**5. Create the Pro product**
-Repeat steps 3 and 4 with **Display Name** `Pro` and **Request limit** `1000`.
+**6. Create the Pro product**
+Repeat steps 4 and 5 with **Display Name** `Pro`, **Request limit** `1000` and
+**Unit** **Minute**.
 
-**6. Create a developer**
+**7. Create a developer**
 Go to **API Distribution → Developers**, click **Add Developer**, fill in the
 name and email, then **Add**.
 
-**7. Create two apps for that developer**
-Go to **API Distribution → Apps**, click **Add App**. Pick the **Environment**
-and the **Developer**, add the **Free** product, pick an authentication method
-and let credentials auto-generate, then **Create App**.
+**8. Create two apps for that developer**
+Go to **API Distribution → Apps**, click **Add App**. Fill in **Display Name**,
+for example `free-app`. Pick the **Environment** and the **Developer**, add the
+**Free** product, pick an authentication method and let credentials
+auto-generate, then **Create App**. If the product list says **No products
+found.**, the product isn't deployed to that environment yet: an app can only
+pick products that are. Go back to step 5 (step 6 for Pro).
 
 Repeat for a second app subscribed to **Pro**. **This must be a second, separate
 app**, not a second product on the same app, or the quota will be shared and
 isolation will look broken.
 
-**8. Get each app's key**
-On each app's page, open **Credentials** and copy the key. That's the value you
-send as the `apikey` header. For key-auth it's the client id.
+**9. Get each app's key**
+On each app's **Overview** tab, find the **Authentication** card. It shows
+`helix-auth` with a key and a secret, both hidden, each with a show and a copy
+button. Copy the **key**, not the secret: the key (the app's client id) is what
+you send in the `apikey` header. **Generate New Credentials**, in the same card,
+issues a new pair.
 
-One gap worth knowing: the UI has no field for `quota_key_scope` (pooling a
-developer's apps into one budget). That's only settable through the API or the
-spec today. See [Variations](#variations).
+**Switching a caller off.** There are two ways, and both stop the old key
+within seconds:
+
+- **Keep the app's history: Generate New Credentials** on the app's
+  **Overview** tab, in the **Authentication** card. The old key stops working,
+  and the app's usage history and analytics stay.
+- **Remove the app completely: Delete.** The delete dialog warns that it also
+  deletes all usage history and analytics for that app.
 
 ## Install it directly
 
-If you'd rather script it against the control plane:
+To script it, call the control plane instead. `BASE` is the API address the
+portal calls (it usually starts with `api-`), not the portal page and not the
+gateway's address:
 
 ```bash
 export ORG=<ORG_ID>
 export TOKEN=<control-plane bearer token>      # short-lived
-export BASE=https://<YOUR_GATEWAY_HOST>/api
+export BASE=https://<YOUR_CONTROL_PLANE_API>/api
 H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
 
 # 1. Import the spec. It carries helix-auth and api-product-enforcer, and the
 #    import assigns the route a service_id. Keep both ids the response returns.
-curl -s "${H[@]}" -F "file=@example/api-spec.yaml" "$BASE/orgs/$ORG/apis/from-spec"
+curl -s -H "authorization: Bearer $TOKEN" -F "file=@example/api-spec.yaml" \
+  "$BASE/orgs/$ORG/apis/from-spec"     # multipart upload, so no JSON content-type
 # → {"api":{"id":"<API_ID>", ...}, "revision":{"id":"<REVISION_ID>", ...}}
 
-# 2. Import does NOT make the routes live. Create an upstream (no /api prefix on
-#    this one call), bind it to the revision, then deploy the revision.
+# 2. Import does NOT make the routes live. Create an upstream, bind it
+#    to the revision, then deploy the revision.
+# pass_host + upstream_host: without them the backend gets the gateway's host
+# and every call returns 502.
 curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/envs/<TEST_ENV_ID>/upstreams" \
-  -d '{"name":"posts-upstream","specification":{"scheme":"https","nodes":[{"host":"jsonplaceholder.typicode.com","port":443,"weight":1}]}}'
+  -d '{"name":"posts-upstream","specification":{"scheme":"https","pass_host":"rewrite","upstream_host":"jsonplaceholder.typicode.com","nodes":[{"host":"jsonplaceholder.typicode.com","port":443,"weight":1}]}}'
 # → {"id":"<UPSTREAM_ID>", ...}
 
 curl -s "${H[@]}" -X PATCH "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/upstream-bindings/add" \
@@ -197,6 +322,12 @@ contract (window length, backoff with jitter) in your own docs, and show
 remaining quota in your developer portal or analytics instead. See
 [solution 04](../04-analytics/).
 
+You may see `x-ratelimit-limit` and `x-ratelimit-remaining` on the successful
+200 responses. Those come from the jsonplaceholder test backend (the same
+responses carry its `x-powered-by: Express`), not from the gateway, and have
+nothing to do with your product quota. To hide them in a demo, strip them from
+the response with the `response-rewrite` plugin.
+
 To run all five checks as a script, including the isolation case:
 
 ```bash
@@ -211,7 +342,9 @@ not just that a rate limit exists. What each check proves, plus the manual tests
 
 ## Variations
 
-**Pool a developer's apps into one budget.** Add `quota_key_scope` to a product:
+**Pool a developer's apps into one budget.** In the product's **Quota** section,
+set **Quota scope** to **Developer level**. Through the API or a script, that's
+`quota_key_scope` on the product's quota:
 
 ```json
 {"name":"posts-pro","apiIds":["<API_ID>"],
@@ -236,12 +369,30 @@ analytics, never throttled.
 generate, switch the protected routes to `validate_auth_type: jwt-auth`, and
 leave `api-product-enforcer` exactly as it is.
 
+**Keep the key away from your backend.** The gateway passes the `apikey` header
+on to your backend exactly as the caller sent it, so the key can end up in your
+backend's logs. It also adds two headers of its own: `X-Consumer-Username` and
+`X-Credential-Identifier` (the app's id, not its name). `helix-auth` has no
+setting to hide the key. To remove it, add `proxy-rewrite` with the Configure
+plugin wizard, **Entire Revision**, with only this setting:
+
+```json
+{"headers":{"remove":["apikey"]}}
+```
+
+The key is checked before `proxy-rewrite` runs, so the key check still works.
+Run the [See it work](#see-it-work) calls again afterwards to confirm the quota
+still applies. On an API that's already live, use **Clone Revision**, add the
+plugin to the copy, then **Force Deploy** it.
+
 ## Configuration reference
 
 Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml) for the routes
 and plugins, plus the two products (Free, Pro) created in the UI or via the API.
-[Install it directly](#install-it-directly) has their exact fields. Two plugins
-make this a metered product:
+[Install it directly](#install-it-directly) has their exact fields.
+[`example/api-spec-basic.yaml`](example/api-spec-basic.yaml) is the same routes
+with no plugins, for adding them yourself. Two plugins make this a metered
+product:
 
 ```yaml
 # identity — checks the key AND looks up the app's product subscriptions
@@ -303,6 +454,13 @@ and the wider product docs at [docs.digitalapi.ai/api-gateway](https://docs.digi
 - **Key-auth validate doesn't check the app's secret.** The `apikey` header carries
   the credential's **key** (its client id), not a secret. If you need proof of
   possession, use the client-credentials flow instead — [solution 02](../02-oauth-jwt/).
+- **Your client can't read the 401 message.** A rejected key gets HTTP 401 (not
+  signed in) with a JSON body, but the content type is `text/plain`. Parse the
+  body as JSON yourself.
+- **Your backend logs show app keys.** The gateway passes the `apikey` header on
+  as sent. Remove it with `proxy-rewrite`: see [Variations](#variations).
+- **The product can't be undeployed.** Apps still subscribe to it. Remove the
+  product from those apps, or delete the apps, then undeploy.
 - **Two keys on one app share one bucket.** A test using two keys from one app will
   look like the quota is broken when it isn't.
 - **Only the top-ranked covering product is checked.** If a 429 shows up sooner
@@ -312,3 +470,19 @@ and the wider product docs at [docs.digitalapi.ai/api-gateway](https://docs.digi
   differently between the control plane and the gateway, and deploy will fail.
 - **Confirm `api-product-enforcer` exists in your org** with `get_plugin_config`
   before you design around it.
+- **Use the trace inspector to see each step.** On the API's page, open the
+  **Observability** tab and click **Start trace session**. It shows the headers
+  each plugin changes and the request body at every stage, which is the fastest
+  way to see what each plugin did to a call. A session stops after 10 requests,
+  so use **Advanced: filter which requests to capture** to record only the ones
+  you care about (skipped requests don't count). The list doesn't refresh by
+  itself: click **Refresh**. The **Inspector** shows API keys and cookies in
+  plain text, so don't share your screen or paste a trace into a ticket without
+  removing them. A compressed response, which browsers always ask for, is
+  unreadable in the **Response** tab, so call the API with curl to read it. The
+  **Upstream** tab's **Total** adds connect time to response time, so it can be
+  larger than the request's own total.
+- **See what changed, and when, in Audit Logs.** **Observability → Audit Logs**
+  lists every clone, plugin change and deploy. Its times are in your local time,
+  while analytics uses UTC. Anything done with your token, including scripts and
+  the Helix Agent, appears under your name.

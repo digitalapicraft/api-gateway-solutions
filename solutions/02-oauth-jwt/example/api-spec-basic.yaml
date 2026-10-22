@@ -1,0 +1,79 @@
+# Solution 02 — OAuth 2.0 with gateway-issued JWTs: the basic example spec.
+#
+# Four routes and nothing else: no plugins. Import this when you want to add the
+# plugins yourself in the UI, so you see what each one does. The walkthrough is
+# ../guides.md, "Build it in the UI".
+#
+# The same API with the plugins already in it is api-spec.yaml, next to this file.
+#
+# Until you add the plugins, nothing here issues or checks a token: every route
+# is simply forwarded to the upstream.
+#
+# RUNNABLE ON A FRESH FREE-TRIAL ORG. The upstream is public
+# https://jsonplaceholder.typicode.com, so GET /posts returns real data with no
+# backend of your own.
+
+openapi: 3.0.3
+
+info:
+  title: Posts API
+  version: 1.0.0
+  description: >-
+    A sample API that proxies the public jsonplaceholder service, so it returns
+    real data on a fresh org. Add the plugins yourself to issue tokens on
+    /oauth/token and require them on the /posts routes; point it at your own
+    upstream when ready.
+
+paths:
+  /oauth/token:
+    post:
+      summary: Issue an OAuth 2.0 access token (client credentials grant)
+      description: >-
+        The token endpoint. It issues a token only once you add the
+        token-issuing plugin to this route (see ../guides.md).
+      responses:
+        '200':
+          description: Access token issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token: { type: string, description: Signed JWT }
+                  token_type:   { type: string, example: Bearer }
+                  expires_in:   { type: integer, description: Seconds until expiry }
+
+  /posts:
+    get:
+      summary: List posts
+      description: Proxies the upstream's /posts.
+      responses:
+        '200': { description: Array of posts }
+
+    post:
+      summary: Create a post
+      description: Proxies the upstream's POST /posts.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, body, userId]
+              properties:
+                title:  { type: string }
+                body:   { type: string }
+                userId: { type: integer }
+      responses:
+        '201': { description: Created }
+        '400': { description: Invalid payload }
+
+  /posts/{postId}:
+    get:
+      summary: Get a post
+      description: Proxies the upstream's /posts/{postId}.
+      parameters:
+        - { name: postId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Post }
+        '404': { description: Not found }

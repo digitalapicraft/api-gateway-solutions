@@ -65,11 +65,13 @@ costs a round-trip:
 ## Example
 
 The sample API in this package has three routes that fail or behave in three
-different ways. One trace session shows all three:
+different ways. One trace session shows all three. The sample carries a few
+plugins so these differences show up; tracing itself works on any API, with or
+without plugins.
 
 | Call | What the caller sees | What the trace says |
 |---|---|---|
-| `POST /posts` with no title | `400` | Outcome **short circuit**: the `request-validation` plugin answered. The backend was never called. |
+| `POST /posts` with no title | `400` | Outcome **Upstream not called**: the `request-validation` plugin answered. The backend was never called. |
 | `GET /posts/1` | `200` | `proxy-rewrite` **added** `X-Partner-Channel: api` before the backend saw it. About 35 ms of the 43 ms total was the backend. |
 | `GET /posts/999999` | `404` | No plugin said no. The backend's own status was `404`. |
 
@@ -78,19 +80,10 @@ trace shows they belong to different teams.
 
 **In the UI it takes four steps:** deploy the sample API, open
 **Observability → Traces**, click **Start tracing session** and pick the API,
-then send the calls and click a row to inspect it.
+then send the calls, click **Refresh**, and click a row's path to inspect it.
 [Full walkthrough →](guides.md#start-a-trace-session)
 
 [Build it any of three ways, then see it work →](guides.md)
-
-## Before you trace a live API
-
-- **Headers are recorded as sent, including credentials.** An `apikey` or
-  `Authorization` header appears in the record in plain text. Trace with a test
-  app's key, and treat a trace like a log file that contains secrets.
-- **A session records up to 10 requests by default**, then stops recording. On
-  a busy API, add a filter so those 10 are the ones you want. See
-  [Guides](guides.md#record-only-what-you-need).
 
 ## Where to go next
 

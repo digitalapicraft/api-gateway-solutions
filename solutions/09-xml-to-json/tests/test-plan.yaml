@@ -15,9 +15,6 @@ meta:
     Cases 3 and 4 assert what the BACKEND received, so they need an upstream that
     echoes the request. The package's sample upstream does; against your own
     backend run verify.sh with ECHOES_REQUEST=0 and read its log instead.
-  status: >-
-    EXECUTED against a deployed revision — 5/5. See
-    ../validation/gateway-validation.yaml for the recorded outcome.
 
 cases:
   - id: response-converted

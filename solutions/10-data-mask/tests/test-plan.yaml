@@ -16,10 +16,6 @@ meta:
     evidence. No client-side assertion can establish what a logger wrote, so the
     log half has its own procedure below rather than a status borrowed from the
     response half.
-  status: >-
-    EXECUTED against a deployed revision — 6/6 on the response side, and the log
-    side verified separately against a real logger. See
-    ../validation/gateway-validation.yaml.
 
 cases:
   - id: list-masked

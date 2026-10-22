@@ -1,0 +1,51 @@
+# Solution 10 — mask sensitive values: the basic example spec.
+#
+# Two routes and nothing else: no plugins. Import this when you want to add the
+# plugins yourself in the UI, so you see what each one does. The walkthrough is
+# ../guides.md, "Build it in the UI".
+#
+# The same API with the plugins already in it is api-spec.yaml, next to this file.
+#
+# On its own this masks nothing, and the routes do not reach the public test
+# backend (jsonplaceholder.typicode.com) yet: pointing each route at the right
+# backend path is one of the plugins you add.
+
+openapi: 3.0.3
+
+info:
+  title: Support Console API
+  version: 1.0.0
+  description: >-
+    The customer lookup a support agent calls fifty times a day. Add the plugins
+    yourself to remove the parts of each record nobody in support needs to read;
+    point it at your own upstream when ready.
+
+paths:
+  /support/customers:
+    get:
+      summary: List customers
+      responses:
+        '200':
+          description: Customer list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        '502': { description: The backend was unreachable }
+
+  /support/customers/{customerId}:
+    get:
+      summary: Fetch one customer
+      parameters:
+        - { name: customerId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: One customer
+          content:
+            application/json:
+              schema:
+                type: object
+        '404': { description: No such customer }
+        '502': { description: The backend was unreachable }

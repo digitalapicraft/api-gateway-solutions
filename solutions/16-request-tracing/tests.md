@@ -14,7 +14,7 @@ readable walkthrough.
 
 ```bash
 GATEWAY=https://<YOUR_GATEWAY_HOST> \
-CONTROL_PLANE=https://<YOUR_CONTROL_PLANE_HOST> \
+CONTROL_PLANE=https://<YOUR_CONTROL_PLANE_API> \
 TOKEN=<control-plane bearer token> \
 ORG=<ORG_ID> API_ID=<API_ID> ENV_ID=<ENV_ID> \
 ./example/verify.sh

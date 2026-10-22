@@ -10,28 +10,36 @@
 # token the portal uses). Get one from the portal (DevTools → a request's
 # Authorization header) or your own login flow, then:
 #
-#   CP=https://<YOUR_CONTROL_PLANE_HOST> \
+#   CP=https://<YOUR_CONTROL_PLANE_API> \
 #   ORG=<YOUR_ORG_ID> \
 #   TOKEN=<bearer token> \
 #   ./query-analytics.sh
 #
+# CP is the API address of your control plane: the address the portal itself
+# calls (in DevTools, the host of those requests, usually starting with "api-").
+# It is NOT the address of the portal page you log in to. With the wrong one
+# every view used to print "no data"; now the script says it couldn't read the
+# reply. The token lasts about an hour.
+#
 # Optional:
 #   WINDOW_HOURS   default 1     how far back to look
-#   API_NAME       if set, filter every view to this one API
+#   API_NAME       if set, filter every view to this one API. Use the short
+#                  internal name (e.g. posts-api), not the name shown in the
+#                  portal ("Posts API") — that matches nothing.
 #   TOP            default 20    max rows per grouped view
 #
-# Requires: curl, python3.
+# Requires: curl, python3 (3.6 or later).
 
 set -uo pipefail
-CP="${CP:?set CP to the control-plane base URL, e.g. https://<YOUR_CONTROL_PLANE_HOST>}"
+CP="${CP:?set CP to the API address of the control plane, e.g. https://<YOUR_CONTROL_PLANE_API> (not the portal address)}"
 ORG="${ORG:?set ORG to your org id}"
 TOKEN="${TOKEN:?set TOKEN to a control-plane bearer token (see header)}"
 WINDOW_HOURS="${WINDOW_HOURS:-1}"
 API_NAME="${API_NAME:-}"
 TOP="${TOP:-20}"
 
-ST="$(python3 -c "import datetime;print((datetime.datetime.now(datetime.UTC)-datetime.timedelta(hours=$WINDOW_HOURS)).strftime('%Y-%m-%dT%H:%M:%SZ'))")"
-ET="$(python3 -c "import datetime;print(datetime.datetime.now(datetime.UTC).strftime('%Y-%m-%dT%H:%M:%SZ'))")"
+ST="$(python3 -c "import datetime;print((datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(hours=$WINDOW_HOURS)).strftime('%Y-%m-%dT%H:%M:%SZ'))")"
+ET="$(python3 -c "import datetime;print(datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'))")"
 
 # Build a filters[] fragment when API_NAME is set.
 FILTER=""
@@ -52,9 +60,19 @@ show() { # title dim json label unit
   printf '\n\033[1m%s\033[0m\n' "$title"
   python3 -c "
 import sys,json
-d=json.load(sys.stdin); rows=d.get('groupedResults') or []
+raw=sys.stdin.read()
+try:
+    d=json.loads(raw)
+except ValueError:
+    print('  (could not read the reply: check CP is the API address, and that TOKEN has not expired)')
+    print('  ' + raw[:160].replace(chr(10),' '))
+    sys.exit()
+if not isinstance(d,dict) or ('groupedResults' not in d and ('error' in d or 'message' in d or 'status' in d)):
+    print('  (the API returned an error: %s)' % (d.get('message') or d.get('error') or d if isinstance(d,dict) else d))
+    sys.exit()
+rows=d.get('groupedResults') or []
 if not rows: print('  (no data in the window)'); sys.exit()
-rows.sort(key=lambda r:-(r['value'] or 0))
+# Rows arrive in the order asked for (slowest first, or fastest first). Keep it.
 for r in rows:
     k=r['dimensions'].get('$dim'); k='(unattributed)' if k in (None,'') else k
     v=r['value'] or 0

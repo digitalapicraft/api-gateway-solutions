@@ -19,9 +19,6 @@ meta:
     Requires grpcurl. No descriptor file is needed: this package routes gRPC
     reflection, so the schema is discovered over the connection. Set PROTOSET
     only if you chose not to route reflection.
-  status: >-
-    EXECUTED against live deployments on two environments, 6/6 passing on both.
-    See validation/gateway-validation.yaml.
 
 cases:
   - id: no-key

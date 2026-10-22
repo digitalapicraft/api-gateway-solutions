@@ -1,10 +1,21 @@
 # Agent-mode prompt — HMAC request signing
 
+> [Overview](README.md) · [Business need](business-need.md) · [Architecture](architecture.md) · [Guides](guides.md) · **Agent prompt** · [Tests](tests.md) · [API reference](api-reference.md)
+
+---
+
 Paste this to the Helix Agent as one message, replacing the `{{...}}` values. It
-works from a fresh, empty org on a public upstream, so you need nothing of your
-own. Why it is worded this way, what the agent decides on its own, and what to
-check before you trust it are in the
-[README](README.md#build-it-with-the-helix-agent).
+works from a fresh, empty org on a public test service, so you need nothing of your
+own.
+
+**If the run ends early, paste the three steps one at a time instead.** When it
+finishes, read the deployed revision back and check that each route carries
+`hmac-auth` with its own `signed_headers`: `@request-target`, `date` and `digest`
+on `POST /albums`, which also checks the body against its digest, and
+`@request-target` and `date` on the `GET`. A route with no `signed_headers` still
+deploys and accepts signed requests, but the caller decides what its signature
+covers. Then check the product's sign-in method is `hmac-auth`. See
+[Troubleshooting](guides.md#troubleshooting) if something looks off.
 
 ## Prompt
 

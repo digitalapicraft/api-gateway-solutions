@@ -83,8 +83,9 @@ case "$status" in
   200) pass "valid key → 200 (upstream reached, payload returned)" ;;
   401) fail "valid key → 401. The key did not resolve to an app. Check that the key is the app's
      CREDENTIAL KEY (not its secret, not the app id) and that the app still exists." ;;
-  403) fail "valid key → 403. Authentication succeeded and authorization did not — the app's product
-     does not cover this API. Add the API to the product the app is subscribed to." ;;
+  403) fail "valid key → 403. This package's routes don't check products, so another plugin is on the
+     route (for example api-product-enforcer). Read the deployed revision back; if you added the
+     enforcer on purpose, add this API to the app's product." ;;
   502|503|504) fail "valid key → ${status}. Auth passed but the upstream errored — check the upstream binding." ;;
   *)   fail "valid key → ${status} (expected ${EXP_VALID}). Body: $(body)" ;;
 esac

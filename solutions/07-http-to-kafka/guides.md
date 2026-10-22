@@ -1,0 +1,464 @@
+# Guides — HTTP to Kafka at the edge
+
+> [Overview](README.md) · [Business need](business-need.md) · [Architecture](architecture.md) · **Guides** · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [API reference](api-reference.md)
+
+---
+
+Three ways to build the same thing, then how to see it work. Whichever way you
+pick, the result is one API with a single route, `POST /events`, that checks an
+event, answers `202 {"accepted":true}` itself, and publishes the event to your
+Kafka topic.
+
+**Before any of them: create the Kafka topic.** Don't rely on the broker creating
+it automatically. The message that triggers auto-creation is dropped, and the
+caller still gets a 202.
+
+## Pick your path
+
+| | Choose this if you… | Go to |
+|---|---|---|
+| **1. Helix Agent** | want the quickest result and are happy to paste a prompt | [Build it with the Helix Agent](#build-it-with-the-helix-agent) |
+| **2. Helix control plane** | prefer clicking through screens | [Build it in the UI](#build-it-in-the-ui) |
+| **3. API script** | are scripting this, or wiring it into a pipeline | [Install it directly](#install-it-directly) |
+
+Then, for everyone: [See it work](#see-it-work) · [Variations](#variations) ·
+[Configuration reference](#configuration-reference) · [Troubleshooting](#troubleshooting)
+
+## Build it with the Helix Agent
+
+Works on a **fresh, empty org**. [`helix-agent-prompt.md`](helix-agent-prompt.md)
+has two steps: Step 1 creates the ingest route, Step 2 gives you the commands that
+prove it. **Paste Step 1, check the result, then paste Step 2.** The agent's
+version checks only that the required fields are present; for the full field
+checks, import [`example/api-spec.yaml`](example/api-spec.yaml) instead.
+
+See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the ground rules these prompts
+assume.
+
+## Build it in the UI
+
+Screen and button names below are the real ones. The API lives under
+**API Gateway** in the left sidebar.
+
+**Before you start:**
+
+- **You have an account.** If you don't, register for a free trial at
+  [trial.digitalapi.ai](https://trial.digitalapi.ai/). A new trial org comes with
+  a `test` environment, which is all this walkthrough needs.
+- **Your org has the plugins.** `kafka-logger`, `mocking` and
+  `request-validation` must be available. Ask your org admin if you're not sure.
+- **You have a Kafka broker the gateway can reach**, and you have created the
+  topic.
+
+**1. Create the API**
+
+Pick one of the two ways below. Both give you the same thing: an API called
+`Event Ingest API` with one route and no plugins yet.
+
+*Option A — from scratch*
+1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
+2. Choose **Create from scratch**. Set **Display name** to `Event Ingest API`,
+   then **Create**.
+3. On the API's page, open **Configuration → Routes** and add one route:
+   - `POST /events`, where callers send their events
+
+   The route form opens already filled in with the name *New* and the path
+   `/new-route`. Clear both fields first, then type your own.
+
+*Option B — from an OpenAPI spec*
+1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
+2. Set **Method** to **Import an OpenAPI spec**.
+3. Drag in your own OpenAPI 3.0 file, or use our example,
+   [`example/api-spec-basic.yaml`](example/api-spec-basic.yaml): the same
+   route, no plugins. Then click **Import**.
+
+If an API with the same name already exists in your org, the import fails with
+*API with name '<name>' already exists*. Type another name in the form's
+**Display name** field, which overrides the name in the spec, and import again.
+
+> **A spec can carry the plugins too.** Add an `x-helix-gateway` block that
+> lists them. At the top level of the file it covers every route; under one
+> path and method it covers that route only:
+>
+> ```yaml
+> paths:
+>   /events:
+>     post:
+>       x-helix-gateway:
+>         plugins:
+>           kafka-logger:
+>             brokers:
+>               - host: "<YOUR_KAFKA_BROKER>"
+>                 port: 9092
+>             kafka_topic: events
+> ```
+>
+> [`example/api-spec.yaml`](example/api-spec.yaml) is this API with all its
+> plugins already in place. Replace `<YOUR_KAFKA_BROKER>` with your broker and
+> `events` with your topic, then import that instead and you can skip step 2.
+
+Either way, the API is not live yet: it has no upstream and isn't deployed.
+That comes in step 3.
+
+**2. Add the plugins**
+
+Three plugins turn this route into an event intake that publishes to Kafka. Add
+them **before** you deploy: a live revision can't be changed.
+
+On the API's page, open **Configuration → Plugins** and click **Configure
+plugin**. A short wizard opens:
+
+1. **Plugin** — pick the plugin from the catalog.
+2. **Scope** — **Entire Revision** applies it to every route; **Specific
+   endpoint** applies it to one route.
+3. **Configure** — the JSON editor and the Properties list sit side by side.
+   Paste the JSON below, or fill in the fields. Then **Next**.
+4. **Review** — shows the configuration before and after. Click **Apply**.
+
+Do this once for each plugin below. All three go on **Specific endpoint**, with
+`POST /events` picked as the route. The gateway runs the three in its own fixed
+order, whatever order you add them in.
+
+1. **`request-validation` — turns away malformed events.** An event missing
+   `event_id`, `event_type` or `occurred_at` gets HTTP 400 (bad request), and is
+   not published.
+
+   | Field | Value |
+   |---|---|
+   | **rejected_code** | `400` |
+   | **rejected_msg** | `the event failed schema validation` |
+
+   `body_schema` is the list of required fields, so paste it into the JSON
+   editor:
+
+   ```json
+   {
+     "body_schema": {
+       "type": "object",
+       "required": ["event_id", "event_type", "occurred_at"],
+       "properties": {
+         "event_id":    {"type": "string", "minLength": 1},
+         "event_type":  {"type": "string", "minLength": 1},
+         "occurred_at": {"type": "string"},
+         "payload":     {"type": "object"}
+       }
+     },
+     "rejected_code": 400,
+     "rejected_msg": "the event failed schema validation"
+   }
+   ```
+
+2. **`mocking` — answers the caller from the gateway.** A valid event gets
+   HTTP 202 (accepted) and `{"accepted":true}` straight away. No backend is
+   contacted.
+
+   | Field | Value |
+   |---|---|
+   | **response_status** | `202` |
+   | **content_type** | `application/json` |
+   | **response_example** | `{"accepted":true}` |
+   | **with_mock_header** | `false` |
+
+   ```json
+   {"response_status":202,"content_type":"application/json","response_example":"{\"accepted\":true}","with_mock_header":false}
+   ```
+
+3. **`kafka-logger` — publishes each accepted event to your topic.** It sends
+   the event after the caller has had its 202, and only for calls that got a 202,
+   so a rejected event never reaches the topic.
+
+   Paste this into the JSON editor, then replace `<YOUR_KAFKA_BROKER>` with a broker
+   hostname the **gateway** can reach (not one only your laptop can reach), and
+   `events` with your topic. Neither value is a secret. If your broker needs
+   SASL, the `brokers` entry takes a `sasl_config` object; check the plugin's
+   schema in your org.
+
+   ```json
+   {
+     "brokers": [{"host": "<YOUR_KAFKA_BROKER>", "port": 9092}],
+     "kafka_topic": "events",
+     "_meta": {"filter": [["status", "==", 202]]},
+     "include_req_body": true,
+     "log_format": {
+       "event": "$request_body",
+       "request_id": "$apisix_request_id",
+       "received_at": "$time_iso8601"
+     },
+     "producer_type": "sync",
+     "batch_max_size": 1,
+     "required_acks": -1,
+     "max_retry_count": 3,
+     "retry_delay": 1
+   }
+   ```
+
+Repeat for each plugin.
+
+4. **`request-id` — the correlation id.** Scope: **Entire Revision**. It puts an
+   `X-Request-Id` header on every response, and `kafka-logger` writes the same id
+   into each message, so a caller's 202 can be matched to the event on the topic.
+   Don't skip it: `verify.sh` checks for this header.
+
+   ```json
+   {"algorithm":"uuid","header_name":"X-Request-Id"}
+   ```
+
+What every field means: [Configuration reference](#configuration-reference).
+
+**3. Give it an upstream, then deploy it**
+1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick environment
+   `test`, and add a node at `jsonplaceholder.typicode.com`, port `443`, scheme
+   HTTPS (any host will do). If you switch the scheme to HTTP, the port stays at
+   `443`: change it to `80` by hand. The `/events` route never contacts it, but
+   a revision won't deploy without one.
+2. **Pass Host** is set to **Rewrite**, which makes **Upstream Host** required.
+   It fills in from the node's host; check it reads
+   `jsonplaceholder.typicode.com`.
+3. Click **Next** through the remaining tabs, then **Add Upstream**.
+4. Back on the API's page, click **Deploy** on the revision. The dialog asks you
+   to map an upstream for `test`. Pick the one you just created, then click
+   **Map & Deploy**. (The button reads **Map & Deploy** while no upstream is
+   mapped yet, and **Deploy** once one is.)
+
+**Changing it later.** A change to the upstream (host, port, scheme) applies to
+the live API straight away, with no new deploy. A change to routes or plugins
+does need one, because a live revision can't be edited: use **Clone Revision**,
+make your change on the copy, then **Force Deploy** it. Rolling back needs no
+copy: click **Deploy**, pick the older revision (for example `r1`), and click
+**Force Deploy**.
+
+That's it. No products, developers or apps are needed, because the route ships
+unauthenticated. Read [Where authentication would go](architecture.md#where-authentication-would-go)
+before you point real partners at it.
+
+## Install it directly
+
+To script it, call the control plane instead. `BASE` is the API address the
+portal calls (it usually starts with `api-`), not the portal page and not the
+gateway's address:
+
+```bash
+export ORG=<ORG_ID>
+export TOKEN=<control-plane bearer token>      # short-lived
+export BASE=https://<YOUR_CONTROL_PLANE_API>/api
+H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
+
+# 0. Create the topic on your broker first, with your Kafka tooling.
+#    Then edit example/api-spec.yaml: replace <YOUR_KAFKA_BROKER> with a broker
+#    host the GATEWAY can reach, and set kafka_topic to your topic.
+
+# 1. Import the spec. It carries all four plugins. Keep both ids it returns.
+curl -s -H "authorization: Bearer $TOKEN" \
+  -F "file=@example/api-spec.yaml" "$BASE/orgs/$ORG/apis/from-spec"
+# → {"api":{"id":"<API_ID>", ...}, "revision":{"id":"<REVISION_ID>", ...}}
+
+# 2. Import does NOT make the route live. Create an upstream — any host will do, the
+#    route never reaches it — bind it to the revision, then deploy the revision.
+# pass_host + upstream_host: without them the backend gets the gateway's host
+# and every call returns 502.
+curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/envs/<TEST_ENV_ID>/upstreams" \
+  -d '{"name":"ingest-upstream","specification":{"scheme":"https","pass_host":"rewrite","upstream_host":"jsonplaceholder.typicode.com","nodes":[{"host":"jsonplaceholder.typicode.com","port":443,"weight":1}]}}'
+# → {"id":"<UPSTREAM_ID>", ...}
+
+curl -s "${H[@]}" -X PATCH "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/upstream-bindings/add" \
+  -d '{"environmentUpstreams":[{"environmentId":"<TEST_ENV_ID>","upstreamId":"<UPSTREAM_ID>"}]}'
+curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/deploy" \
+  -d '{"environmentId":"<TEST_ENV_ID>","force":false}'
+```
+
+> Revisions must be **INACTIVE** to accept a spec change. If it's live, undeploy
+> first, or clone the revision so you keep a rollback target.
+
+The same calls without narration: [API reference](api-reference.md).
+
+## See it work
+
+Prove the part a caller can see:
+
+```bash
+GATEWAY=https://<YOUR_GATEWAY_HOST> ./example/verify.sh
+```
+
+It posts a valid event, a malformed one and checks the headers, then prints the
+`event_id` and `X-Request-Id` of the event it posted. Exit code 0 means the edge
+contract holds. What each check proves: [Tests](tests.md).
+
+### Verifying the Kafka leg
+
+`verify.sh` deliberately doesn't try to check Kafka. It can't: the publish
+happens after the response, so nothing in any response shows whether it worked.
+A script that took a 202 as proof of delivery would be making exactly the
+assumption this solution warns against.
+
+Take the `event_id` and `X-Request-Id` that `verify.sh` printed to your topic
+browser:
+
+1. Open the topic in Kafka UI, Redpanda Console, or
+   `kafka-console-consumer.sh --from-beginning`.
+2. Look at the newest messages. Find the one whose `request_id` matches the
+   `X-Request-Id` that `verify.sh` printed.
+3. Confirm its `event` field contains the JSON you posted.
+
+**Step 3 is the real check.** Match on `request_id` rather than picking the newest
+message: on a busy topic, timestamps can't tell apart two events posted in the
+same second, and `received_at` is the gateway's clock, not yours. Published
+messages also carry `route_id` and `service_id` alongside the fields in
+`log_format`, so don't treat `log_format` as the complete list when you write a
+consumer schema.
+
+**Run the broker-down test once**, in front of whoever is deciding whether this
+suits the data. Point `brokers[].host` at an address that doesn't answer and post
+a valid event. You still get a 202, at normal speed, and the event never reaches
+the topic. The caller has no way to tell. It is the quickest way to make the
+limitation concrete.
+
+## Variations
+
+Each of these has a ready-made prompt at the end of
+[`helix-agent-prompt.md`](helix-agent-prompt.md#prompt). Use one only if you need
+it.
+
+**Add signing — it replaces `request-validation`.** Add `hmac-auth` to
+`POST /events` with `signed_headers ["@request-target","date","digest"]`,
+`validate_request_body: true`, `clock_skew: 300`, and remove
+`request-validation` at the same time. Both run in the rewrite phase and
+`request-validation` (2800) re-encodes the body before `hmac-auth` (2530) checks
+it, so every signature check would fail with a 401. Then create a product with
+`authMethods ["hmac-auth"]`, a developer, and an app so callers get a `key_id`
+and `secret_key`. Validate the event shape in your consumer instead. Full
+walkthrough: [solution 06](../06-hmac-auth/).
+
+**Know who is calling, without touching the body.** Add `helix-auth` in validate
+mode so callers are identified by their app credential. It doesn't touch the body,
+so `request-validation` can stay. You lose proof that the body wasn't changed.
+
+**A real acknowledgement instead of at-most-once.** Replace `mocking` and
+`kafka-logger` with a `service-callout` to a Kafka REST Proxy, in the access
+phase, with `error_handling.policy: fail-close`. The caller then gets a 503 when
+Kafka rejects the message, rather than a 202 it can't trust. It costs an HTTP hop,
+a REST-proxy deployment and latency on every request. See
+[solution 11](../11-service-callout/) for how `service-callout` behaves.
+
+**A second event type.** Add `POST /events/telemetry` with the same three plugins,
+a different `kafka_topic`, and a `body_schema` listing its own required fields.
+Through the agent, keep that schema to `type` and `required` only — no
+`properties` map — for the reason in
+[Build it with the Helix Agent](#build-it-with-the-helix-agent).
+
+## Configuration reference
+
+Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml).
+[`example/api-spec-basic.yaml`](example/api-spec-basic.yaml) is the same route
+with no plugins, for adding them yourself. The `/events` route carries three
+plugins, and `request-id` is set API-wide:
+
+```yaml
+request-validation:
+  body_schema:
+    type: object
+    required: [event_id, event_type, occurred_at]
+    properties:
+      event_id:    { type: string, minLength: 1 }
+      event_type:  { type: string, minLength: 1 }
+      occurred_at: { type: string }
+      payload:     { type: object }
+  rejected_code: 400
+  rejected_msg: "the event failed schema validation"
+
+mocking:
+  response_status: 202
+  content_type: "application/json"
+  response_example: '{"accepted":true}'
+  with_mock_header: false
+
+kafka-logger:
+  brokers:
+    - host: "<YOUR_KAFKA_BROKER>"
+      port: 9092
+  kafka_topic: events
+  _meta:
+    filter:
+      - ["status", "==", 202]
+  include_req_body: true
+  log_format:
+    event: "$request_body"
+    request_id:  "$apisix_request_id"
+    received_at: "$time_iso8601"
+  producer_type: sync
+  batch_max_size: 1
+  required_acks: -1
+  max_retry_count: 3
+  retry_delay: 1
+```
+
+| Plugin | Field | Value here | What it means |
+|---|---|---|---|
+| `request-validation` | `body_schema` | required `event_id`, `event_type`, `occurred_at` | A JSON Schema. Keep it in step with the OpenAPI `requestBody` schema: they are two separate documents and nothing keeps them in step. The first enforces, the second documents. |
+| `request-validation` | `rejected_code` / `rejected_msg` | `400` / `the event failed schema validation` | What a caller gets for a malformed event. |
+| `mocking` | `response_status` / `response_example` | `202` / `{"accepted":true}` | The gateway's own answer. No backend is contacted. |
+| `mocking` | `with_mock_header` | `false` | Defaults to **true**, which stamps every response with a header naming the plugin and the gateway version. |
+| `kafka-logger` | `brokers` / `kafka_topic` | `<YOUR_KAFKA_BROKER>:9092` / `events` | Replace both. The broker must be reachable from the gateway. |
+| `kafka-logger` | `_meta.filter` | `status == 202` | Without it a 400 is published too, and rejected events reach the topic anyway. |
+| `kafka-logger` | `include_req_body` | `true` | Tested and **not** needed for the body to be published when `log_format` uses `$request_body`. Left on because it costs nothing. |
+| `kafka-logger` | `log_format` | `event`, `request_id`, `received_at` | `request_id` must be `$apisix_request_id`, not `$request_id`. See [Architecture](architecture.md#correlation-matching-a-request-to-its-message). |
+| `kafka-logger` | `producer_type` | `sync` | A real broker round trip, so a rejection is logged rather than vanishing. Also removes the async producer's 1-second wait. |
+| `kafka-logger` | `required_acks` | `-1` | All in-sync replicas. The default, `1`, is the leader only, which loses the event if the leader fails before copying it. |
+| `kafka-logger` | `max_retry_count` / `retry_delay` | `3` / `1` | The default is **0**: a failed batch is dropped, not retried. |
+| `kafka-logger` | `batch_max_size` | `1` | Publish each event on its own rather than in batches. Costs ordering — see [What it does not do](architecture.md#what-it-does-not-do). |
+| `request-id` | `algorithm` / `header_name` | `uuid` / `X-Request-Id` | The correlation id returned to the caller and written into every message. |
+
+Placeholders in this package: `<YOUR_KAFKA_BROKER>`, `<ORG_ID>`, `<API_ID>`,
+`<REVISION_ID>`, `<UPSTREAM_ID>`, `<TEST_ENV_ID>`, `<YOUR_GATEWAY_HOST>`. Replace
+all of them before you deploy.
+
+Every field of every plugin, and the wider product docs:
+[docs.digitalapi.ai/api-gateway](https://docs.digitalapi.ai/api-gateway).
+
+## Troubleshooting
+
+- **A 202 is not a delivery guarantee.** The most important point on this page.
+  Everything else is a detail by comparison.
+- **Create topics explicitly.** With `auto.create.topics.enable`, the message that
+  triggers creation is dropped: the metadata request creates the topic, and the
+  message that prompted it is gone. The caller gets a 202. Every new topic costs
+  exactly one event, and in production that is a real one.
+- **The broker must be reachable from the gateway**, not from your laptop. A
+  private broker inside a VPC needs the gateway inside that network.
+- **`request-validation` re-encodes the body.** Key order in the published `event`
+  is the re-encoded order, not your client's. Harmless here; it breaks `hmac-auth`
+  if you add it. It is *not* needed for the body to be published — that was tested
+  both ways.
+- **`request-validation` and `hmac-auth`'s `validate_request_body` can't share a
+  route.** See [Variations](#variations).
+- **Events arrive out of order.** `batch_max_size: 1` makes each event its own
+  timer, and those timers race. Order downstream on a timestamp inside the event.
+- **`key` is a fixed string.** There is no variable resolution, so you can't
+  partition by a field in the body.
+- **Bodies over `max_req_body_bytes` (512 KB by default) are truncated** in the
+  published message, not rejected.
+- **The correlation id doesn't match.** `log_format` is using `$request_id`.
+  Use `$apisix_request_id`.
+- **`verify.sh` gets a 404.** The route isn't deployed. A 400 on a valid event
+  means `request-validation` rejected it: compare `body_schema` with the payload.
+- **The deploy fails on a missing binding.** Bind any upstream, even though the
+  route never uses it.
+- **An `x-mock-by` header appears on responses.** `with_mock_header` is still at
+  its default, `true`.
+- **Confirm the three plugins exist in your org** before you design around them,
+  with `GET /api/orgs/{orgId}/plugin-schemas?page=1&size=300`.
+- **Use the trace inspector to see each step.** On the API's page, open the
+  **Observability** tab and click **Start trace session**. It shows the headers
+  each plugin changes and the request body at every stage, which is the fastest
+  way to see what each plugin did to a call. A session stops after 10 requests,
+  so use **Advanced: filter which requests to capture** to record only the ones
+  you care about (skipped requests don't count). The list doesn't refresh by
+  itself: click **Refresh**. The **Inspector** shows API keys and cookies in
+  plain text, so don't share your screen or paste a trace into a ticket without
+  removing them. A compressed response, which browsers always ask for, is
+  unreadable in the **Response** tab, so call the API with curl to read it. The
+  **Upstream** tab's **Total** adds connect time to response time, so it can be
+  larger than the request's own total.
+- **See what changed, and when, in Audit Logs.** **Observability → Audit Logs**
+  lists every clone, plugin change and deploy. Its times are in your local time,
+  while analytics uses UTC. Anything done with your token, including scripts and
+  the Helix Agent, appears under your name.

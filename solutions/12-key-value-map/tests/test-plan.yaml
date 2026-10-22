@@ -17,9 +17,6 @@ meta:
     where the key comes from — and every crypto behaviour it relies on (the
     base64-of-armor wire format, the generic error messages, whole-body buffering)
     is established there.
-  status: >-
-    EXECUTED against a deployed revision — 7/7 including the rotation case. See
-    ../validation/gateway-validation.yaml.
 
 cases:
   - id: no-key-registered

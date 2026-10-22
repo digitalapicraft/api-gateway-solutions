@@ -24,11 +24,6 @@ meta:
     authorization server. Case 8 (expiry) requires waiting out the token lifetime
     and case 9 (key rotation) requires rotating an Okta signing key, so both are
     manual and deliberately outside verify.sh.
-  status: >-
-    EXECUTED 2026-08-30 against THIS spec, deployed verbatim with only the four
-    placeholders substituted, using a real IdP-issued token. 7/7. An earlier run
-    (2026-08-27) reported PASS against a control configuration with public_key
-    pinned; that result is withdrawn — see validation/gateway-validation.yaml.
   known_gap: >-
     audience-mismatch is NOT enforced. A token whose aud is an unrelated API
     returned 200. See case wrong-audience below — it is documented, not asserted,

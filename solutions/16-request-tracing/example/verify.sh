@@ -24,7 +24,7 @@
 #
 # Usage:
 #   GATEWAY=https://<YOUR_GATEWAY_HOST> \
-#   CONTROL_PLANE=https://<YOUR_CONTROL_PLANE_HOST> \
+#   CONTROL_PLANE=https://<YOUR_CONTROL_PLANE_API> \
 #   TOKEN=<control-plane bearer token> \
 #   ORG=<ORG_ID> API_ID=<API_ID> ENV_ID=<ENV_ID> \
 #   ./verify.sh
@@ -35,7 +35,7 @@
 set -uo pipefail
 
 GATEWAY="${GATEWAY:?set GATEWAY to the gateway base URL, e.g. https://<YOUR_GATEWAY_HOST>}"
-CONTROL_PLANE="${CONTROL_PLANE:?set CONTROL_PLANE to the control-plane base URL, e.g. https://<YOUR_CONTROL_PLANE_HOST>}"
+CONTROL_PLANE="${CONTROL_PLANE:?set CONTROL_PLANE to the control-plane base URL, e.g. https://<YOUR_CONTROL_PLANE_API>}"
 TOKEN="${TOKEN:?set TOKEN to a control-plane bearer token}"
 ORG="${ORG:?set ORG to your org id}"
 API_ID="${API_ID:?set API_ID to the id of the deployed API}"
