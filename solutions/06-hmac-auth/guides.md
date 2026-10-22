@@ -1,20 +1,22 @@
-# Guides — HMAC request signing at the edge
+# Guides — HMAC request signing at the gateway
 
 > [Overview](README.md) · [Business need](business-need.md) · [Architecture](architecture.md) · **Guides** · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [API reference](api-reference.md)
 
 ---
 
-Three ways to build the same thing, then how to see it work. Whichever way you
-pick, the result is one API, "Partner Albums API", with two signed routes
-(`POST /albums`, whose signature also covers the body, and `GET /albums/{albumId}`),
-plus one app whose `key_id` and `secret_key` you sign with.
+There are three ways to build the same thing. After that, this page shows how to
+see it work. Whichever way you pick, you end up with:
+
+- one API, "Partner Albums API", with two routes that need a signature:
+  `POST /albums`, whose signature also covers the body, and `GET /albums/{albumId}`
+- one app, whose `key_id` and `secret_key` you sign requests with.
 
 ## Pick your path
 
 | | Choose this if you… | Go to |
 |---|---|---|
 | **1. Helix Agent** | want the quickest result and are happy to paste a prompt | [Build it with the Helix Agent](#build-it-with-the-helix-agent) |
-| **2. Helix control plane** | prefer clicking through screens and want to see every setting | [Build it in the UI](#build-it-in-the-ui) |
+| **2. Helix control plane** | prefer clicking through the screens where you manage APIs, products and apps, and want to see every setting | [Build it in the UI](#build-it-in-the-ui) |
 | **3. API script** | are scripting this, or wiring it into a pipeline | [Install it directly](#install-it-directly) |
 
 Then, for everyone: [See it work](#see-it-work) · [Variations](#variations) ·
@@ -22,14 +24,19 @@ Then, for everyone: [See it work](#see-it-work) · [Variations](#variations) ·
 
 ## Build it with the Helix Agent
 
-Works on a **fresh, empty org**. [`helix-agent-prompt.md`](helix-agent-prompt.md)
-has three steps: Step 1 creates the API and its two routes, Step 2 makes both
-routes accept only signed requests, and Step 3 creates a developer, a product and
-an app, and gives you the app's key id and secret. Paste the whole thing as one
-message, or one step at a time if the run ends early. When it finishes, read the
-revision back and check each route has its own `signed_headers` — a route without
-them still deploys, and is wide open. Then send one signed request using
-[See it work](#see-it-work).
+This works on a **new, empty org**. [`helix-agent-prompt.md`](helix-agent-prompt.md)
+has three steps:
+
+- Step 1 creates the API and its two routes.
+- Step 2 makes both routes accept only signed requests.
+- Step 3 creates a developer, a product and an app, and gives you the app's key id
+  and secret.
+
+Paste the whole prompt as one message. If the run ends early, paste one step at a
+time instead. When it finishes, read the revision (the saved version of the API's
+configuration) back. Check that each route has its own `signed_headers`. A route
+without them still deploys, and is wide open. Then send one signed request, as
+shown in [See it work](#see-it-work).
 
 See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the ground rules these prompts
 assume.
@@ -76,9 +83,9 @@ Pick one of the two ways below. Both give you the same thing: an API called
    routes, no plugins. Then click **Import**.
 
 > **A spec can carry the plugins too.** Add an `x-helix-gateway` block that
-> lists them. At the top level of the file it covers every route; under one
-> path and method it covers that route only. Signing goes on each route here,
-> because each route signs a different set of headers:
+> lists them. At the top level of the file, the block covers every route. Under
+> one path and method, it covers only that route. Here, signing goes on each
+> route separately, because each route signs a different set of headers:
 >
 > ```yaml
 > paths:
@@ -95,8 +102,8 @@ Pick one of the two ways below. Both give you the same thing: an API called
 > plugins already in place, on both routes. It contains no secret and no
 > placeholder. Import that instead and you can skip step 2.
 
-Either way, the API is not live yet: it has no upstream and isn't deployed.
-That comes in step 3.
+Either way, the API is not live yet. It has no upstream (the backend service the
+gateway forwards requests to), and it isn't deployed. That comes in step 3.
 
 **2. Add the plugins**
 
@@ -123,9 +130,9 @@ in step 7, and the gateway looks it up from the key id each request carries.
 
 1. **`hmac-auth` on `POST /albums` — checks the signature, and that the body
    wasn't changed.** The caller signs the method, the path, the `Date` header and
-   a fingerprint of the body (the `Digest` header). If any of these was altered
-   on the way, or the signature is missing, wrong or too old, the call gets
-   HTTP 401 (not authenticated) and never reaches your upstream.
+   a fingerprint of the body (the `Digest` header). The call gets HTTP 401 (not
+   authenticated) if any of these changed on the way, or if the signature is
+   missing, wrong or too old. It then never reaches your backend (the upstream).
 
    | Field | Value |
    |---|---|
@@ -157,12 +164,12 @@ in step 7, and the gateway looks it up from the key id each request carries.
    {"signed_headers":["@request-target","date"],"validate_request_body":false,"clock_skew":300,"allowed_algorithms":["hmac-sha256","hmac-sha512"],"hide_credentials":true,"realm":"partner-events"}
    ```
 
-Don't leave `signed_headers` out on either route: without it the caller decides
-what its own signature covers, and the route is effectively open.
+Don't leave out `signed_headers` on either route. Without it, the caller decides
+what its own signature covers, and the route is as good as open.
 
-Repeat for the second route. What every field means, and the optional
-extra (`request-id`) the full spec adds:
-[Configuration reference](#configuration-reference).
+Repeat for the second route. [Configuration reference](#configuration-reference)
+explains every field, and the optional extra (`request-id`) that the full spec
+adds.
 
 **3. Give it an upstream, then deploy it**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick environment
@@ -170,7 +177,7 @@ extra (`request-id`) the full spec adds:
    HTTPS (or your own host). If you switch the scheme to HTTP, the port stays at
    `443`: change it to `80` by hand.
 2. **Pass Host** is set to **Rewrite**, which makes **Upstream Host** required.
-   It fills in from the node's host; check it reads
+   It fills in from the node's host. Check that it reads
    `jsonplaceholder.typicode.com`.
 3. Click **Next** through the remaining tabs, then **Add Upstream**.
 4. Back on the API's page, click **Deploy** on the revision. The dialog asks you
@@ -178,9 +185,9 @@ extra (`request-id`) the full spec adds:
 
 **Changing it later.** A change to the upstream (host, port, scheme) applies to
 the live API straight away, with no new deploy. A change to routes or plugins
-does need one, because a live revision can't be edited: use **Clone Revision**,
-make your change on the copy, then **Force Deploy** it. The same steps roll you
-back: clone the older revision and force-deploy that.
+does need a new deploy, because a live revision can't be edited. Use **Clone
+Revision**, make your change on the copy, then **Force Deploy** it. The same steps
+take you back to an older version: clone the older revision and force-deploy that.
 
 **4. Create the product**
 1. Go to **API Distribution → API Products**, click **Add API Product**.
@@ -227,7 +234,8 @@ response.
 
 ## Install it directly
 
-If you'd rather script it against the control plane:
+If you'd rather script it, call the control plane (where you manage APIs,
+products and apps) directly:
 
 ```bash
 export ORG=<ORG_ID>
@@ -273,11 +281,11 @@ curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/developers/<DEVELOPER_ID>/envs/<TEST_
 ```
 
 To match a secret a partner already holds, put your own `key_id` and `secret_key`
-in the `hmac-auth` object instead of leaving it empty. Rotating replaces both; you
-cannot rotate one and keep the other.
+in the `hmac-auth` object instead of leaving it empty. Changing the key replaces
+both values. You can't change one and keep the other.
 
-> Revisions must be **INACTIVE** to accept a spec change. If it's live, undeploy
-> first, or clone the revision so you keep a rollback target.
+> A revision accepts a spec change only when it is **INACTIVE**. If it's live,
+> undeploy it first. Or clone the revision, so you keep the old one to go back to.
 
 The same calls without narration: [API reference](api-reference.md).
 
@@ -315,8 +323,8 @@ WWW-Authenticate: hmac realm="partner-events"
 {"message":"client request can't be validated: missing Authorization header"}
 ```
 
-What each other rejection looks like, and how to find the real reason in the
-gateway log: [Architecture → Reading a rejection](architecture.md#reading-a-rejection).
+To see what the other rejections look like, and how to find the real reason in
+the gateway log, read [Architecture: Reading a rejection](architecture.md#reading-a-rejection).
 
 To run all eight checks as a script:
 
@@ -325,26 +333,29 @@ GATEWAY=https://<YOUR_GATEWAY_HOST> KEY_ID=<KEY_ID> SECRET_KEY=<SECRET_KEY> \
   ./example/verify.sh
 ```
 
-[`example/verify.sh`](example/verify.sh) contains the same signing steps as a
-reusable shell function, for both the with-digest and no-digest signed sets. Exit
-code 0 means all eight held, including the one that proves `signed_headers` is
-enforced. What each check proves: [Tests](tests.md).
+[`example/verify.sh`](example/verify.sh) has the same signing steps as a shell
+function you can reuse. It covers both kinds of signature: with a body fingerprint
+(digest) and without one. Exit code 0 means all eight checks passed, including the
+one that proves `signed_headers` is enforced. What each check proves:
+[Tests](tests.md).
 
 ## Variations
 
 Each of these is a follow-up prompt to paste into the same Helix Agent session
 after the build. Paste one only if you want that change.
 
-**Tighter replay window.** Shrinks the replay window fivefold. Only do this if
-your callers are servers with accurate clocks.
+**A shorter time limit.** Cuts the time in which someone can resend a copied
+request from 5 minutes to 1. Only do this if your callers are servers with
+accurate clocks.
 
 ```text
 Cut the allowed clock skew to 60 seconds on both routes. Our callers are servers
 with NTP, so a one-minute window is realistic.
 ```
 
-**Fail safe instead of per route.** Signing moves API-wide with the `POST` rules,
-so any route added later is signed by default.
+**Safe by default, instead of per route.** Signing moves to the whole API, using
+the `POST` route's rules. Any route you add later then needs a signature by
+default.
 
 ```text
 Make signing API-wide with the POST route's rules, so any route I add later is
@@ -355,18 +366,19 @@ for an empty body.
 The answer should be `SHA-256=47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=`, the
 digest of an empty body.
 
-**Meter the partners as well.**
+**Count each partner's usage too.**
 
 ```text
 Enforce the product's quota per app on both routes. If the quota can't identify
 the app from a signed request, tell me rather than working around it.
 ```
 
-This combination was tested and works without extra setup: with a 3-a-minute
-quota, three signed requests returned 201 and the next three returned
-`429 {"error":"quota exceeded"}`. See [solution 01](../01-api-products/).
+We tested this combination, and it works with no extra setup. With a quota of 3 a
+minute, three signed requests returned 201. The next three returned
+`429 {"error":"quota exceeded"}` (HTTP 429, too many requests). See
+[solution 01](../01-api-products/).
 
-**Let unsigned reads through, attributed.**
+**Let unsigned reads through, counted under one named caller.**
 
 ```text
 Allow unsigned GET /albums/{albumId} calls, attributed to {{anonymous_consumer_name}},
@@ -382,23 +394,25 @@ headers with a modified body → 401; a Date 20 minutes old → 401; a signature
 leaves the digest out of what it covers → 401.
 ```
 
-Check the script pipes `printf` straight into `openssl`: `$( )` strips the
-signing base's final newline, and every request then gets 401 with a signature
-that looks right.
+Check that the script pipes `printf` straight into `openssl`. `$( )` removes the
+final newline from the text to sign. Then every request gets 401, even though the
+signature looks right.
 
 **Bring your own secret.** When creating the app, put the partner's existing
 `key_id` and `secret_key` in the `hmac-auth` object instead of an empty one.
 
-**Rotate without downtime.** Rotating an app's credential cuts over immediately.
-Create a second app for the same partner, move them to it, then delete the first.
+**Change the key with no downtime.** When you change an app's credential, the old
+one stops working at once. Instead, create a second app for the same partner,
+move them to it, then delete the first.
 
 ## Configuration reference
 
-Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml) for the routes
-and plugins, plus the product in [`example/products.json`](example/products.json).
-[`example/api-spec-basic.yaml`](example/api-spec-basic.yaml) is the same routes
-with no plugins, for adding them yourself. Each route carries its own
-`hmac-auth` block:
+The files that define this solution are
+[`example/api-spec.yaml`](example/api-spec.yaml) for the routes and plugins, and
+[`example/products.json`](example/products.json) for the product.
+[`example/api-spec-basic.yaml`](example/api-spec-basic.yaml) has the same routes
+with no plugins, so you can add them yourself. Each route has its own `hmac-auth`
+block:
 
 ```yaml
 # POST /albums — the signature must also cover the body
@@ -423,18 +437,19 @@ hmac-auth:
 | Field | Value here | What it means |
 |---|---|---|
 | `signed_headers` | POST: `@request-target`, `date`, `digest` · GET: `@request-target`, `date` | What every signature on this route **must** cover. **The setting that makes this secure.** No default; without it the caller chooses. |
-| `validate_request_body` | POST `true` · GET `false` | Compare the body with its `Digest`. Only meaningful because `digest` is in `signed_headers`. |
-| `clock_skew` | `300` | How many seconds a request's `Date` may differ from now. Also the replay window. |
+| `validate_request_body` | POST `true` · GET `false` | Compare the body with its `Digest`. Only useful because `digest` is in `signed_headers`. |
+| `clock_skew` | `300` | How many seconds a request's `Date` may differ from now. Also how long someone can resend a copied request. |
 | `allowed_algorithms` | `hmac-sha256`, `hmac-sha512` | `hmac-sha1` is in the plugin's default list and is left out on purpose. |
-| `hide_credentials` | `true` | Remove the `Authorization` header before forwarding. The upstream has no use for it. |
+| `hide_credentials` | `true` | Remove the `Authorization` header before forwarding. The backend (upstream) has no use for it. |
 | `realm` | `partner-events` | Sent as `WWW-Authenticate: hmac realm="partner-events"` on a 401. |
 
 `hmac-auth` accepts only those fields plus `anonymous_consumer` and `_meta`.
-**There is no secret field**; the secret lives on the app credential.
+**There is no secret field.** The secret is stored on the app's credential.
 
-The spec also carries `request-id` API-wide (`X-Request-Id`). It matters more than
-usual here: most rejections are the same short message, and the request id is the
-one thing a caller can quote to have the log line found.
+The spec also adds `request-id` to the whole API. It puts an `X-Request-Id` header
+on each response. That matters more than usual here. Most rejections give the same
+short message. The request id is the one thing a caller can quote so that you can
+find the log line.
 
 The product, from [`example/products.json`](example/products.json):
 
@@ -443,7 +458,7 @@ The product, from [`example/products.json`](example/products.json):
 | `name` / `displayName` | `partner-events` / `Partner Albums API` | — |
 | `apiIds` | `["<API_ID>"]` | Fill in from the import response, or `GET /api/orgs/{orgId}/apis`. |
 | `authMethods` | `["hmac-auth"]` | **Must** name `hmac-auth`. The default is `["helix-auth"]`. |
-| `quota` | `10000` per `1` `hour` | Every product needs one (a product without one is rejected at creation). **Not enforced** here, because no `api-product-enforcer` is on the routes. |
+| `quota` | `10000` per `1` `hour` | Every product needs one (a product without one is rejected when you create it). **Not enforced** here, because no `api-product-enforcer` is on the routes. |
 
 Placeholders in this package: `<API_ID>`, `<PRODUCT_ID>`, `<DEVELOPER_ID>`,
 `<ORG_ID>`, `<TEST_ENV_ID>`, `<UPSTREAM_ID>`, `<REVISION_ID>`, `<KEY_ID>`,
@@ -453,80 +468,84 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
 
 ## Troubleshooting
 
-- **A signature that looks right always gets 401.** The signing base lost its
-  final newline: `$(...)` strips trailing newlines. Pipe `printf` straight into
-  `openssl`; never put the base in a variable first. This is the most common cause.
-  Next most likely: the `keyId` line is missing, the `Date` is outside
-  `clock_skew` because the caller's clock has drifted, or the credential is from a
-  different app.
-- **An off-the-shelf HTTP Signatures (draft-cavage) library gets 401.** It signs
+- **A signature that looks right always gets 401.** The text to sign lost its
+  final newline: `$(...)` removes trailing newlines. Pipe `printf` straight into
+  `openssl`. Never put the text in a variable first. This is the most common
+  cause. The next most likely causes: the `keyId` line is missing; the `Date` is
+  outside `clock_skew` because the caller's clock is wrong; or the credential
+  belongs to a different app.
+- **A ready-made HTTP Signatures (draft-cavage) library gets 401.** It signs
   different text: no `keyId` line, no final newline, and lowercase
-  `(request-target)`. Each alone changes the signature. Use the worked example.
-- **`Invalid digest` in the log after a "hardening" change.** `request-validation`
-  was added to the route and re-encoded the body. They cannot share a route. Check
-  the schema behind the gateway instead.
+  `(request-target)`. Each difference alone changes the signature. Use the worked
+  example.
+- **The digest stops matching (`Invalid digest` in the log) after a "hardening"
+  change.** Someone added `request-validation` to the route, and it re-wrote the
+  body. The two plugins can't share a route. Check the schema in your backend,
+  behind the gateway, instead.
 - **`Date` can't be set from browser JavaScript.** `fetch` and `XHR` refuse to set
-  it, so this can't be driven from a browser as written. That is intended (see
+  it, so this can't be driven from a browser as written. That is on purpose (see
   [Architecture](architecture.md#signature-or-token--decide-this-first)), but it
   surprises people building an admin screen.
 - **A header named in `headers=` but not sent is skipped**, not reported as an
-  error. `signed_headers` catches the ones you require; anything else listed is up
+  error. `signed_headers` catches the ones you require. Anything else listed is up
   to the caller.
 - **Signatures break behind a proxy.** `@request-target` includes the query
-  string. Anything that reorders, normalises or adds query parameters breaks every
+  string. Anything that reorders, tidies up or adds query parameters breaks every
   signature it touches.
-- **Bursts of 401s that look like credential problems.** Clock drift. A device
-  fleet without time sync drifts outside the 300-second window.
+- **Bursts of 401s that look like credential problems.** The callers' clocks are
+  wrong. Devices that don't keep their clocks in sync drift outside the 300-second
+  limit.
 - **A correctly signed request gets 401, but one listing `(request-target)` is
   accepted.** The route's `signed_headers` says `(request-target)`, the older
   draft-cavage spelling. The gateway treats it as an ordinary header that isn't
-  there and leaves it out of what is signed, so the method and path are not
-  covered at all. Change every entry to `@request-target`, then check that a
+  there, and leaves it out of what is signed. So the method and path are not
+  covered at all. Change every entry to `@request-target`. Then check that a
   signature for one path is refused on another.
 - **The read route returns `404 Route Not Found`.** It was created as
   `/albums/{albumId}`. Routes written directly on the gateway take
-  `/albums/:albumId`; importing the spec converts `{albumId}` for you.
+  `/albums/:albumId`. Importing the spec converts `{albumId}` for you.
 - **A request signed over only its `keyId` is accepted.** `signed_headers` is
-  missing from the route, so the caller chooses what its signature covers. Set it
-  on each route.
+  missing from the route, or was dropped, so the caller chooses what its signature
+  covers. Set it on each route. If the agent built the API, ask it to set what the
+  signature must cover on each route, and read the revision back.
+- **A changed body is accepted.** `validate_request_body` is off on
+  `POST /albums`, or `digest` is missing from its `signed_headers`.
 - **A `POST` with no body is accepted.** `validate_request_body` checks that the
-  body matches its `Digest`, not that there is a body: a `POST` with no body and
-  the empty-body digest passes. Requiring a body is a schema check, and
+  body matches its `Digest`. It does not check that there is a body. A `POST` with
+  no body and the empty-body digest passes. Requiring a body is a schema check, and
   `request-validation` breaks the digest here (see above).
-- **A `GET` caller is asked for a `Digest`.** A bodyless `GET` needs none, unless
-  the route's `signed_headers` lists `digest`, or the caller lists it in
-  `headers=`. Copying the `POST` signing code to a `GET` is the usual way that
-  happens.
-- **Every bodyless GET gets 401.** `hmac-auth` was moved API-wide with the POST
-  settings, so the GET now needs a digest. Send the empty-body digest or go back
-  to per-route blocks.
-- **A route added later is open to everyone.** `hmac-auth` is per route here; a
-  new route needs its own block.
+- **A `GET` caller is asked for a `Digest`.** A `GET` with no body needs none,
+  unless the route's `signed_headers` lists `digest`, or the caller lists it in
+  `headers=`. This usually happens when someone copies the `POST` signing code to
+  a `GET`.
+- **Every `GET` with no body gets 401.** `hmac-auth` was moved to the whole API
+  with the POST settings, so the GET now needs a digest. Send the empty-body
+  digest, or go back to one block per route.
+- **A route added later is open to everyone.** `hmac-auth` is set per route here.
+  A new route needs its own block.
 - **App creation fails on an unsupported auth plugin.** The product's
   `authMethods` is still the `["helix-auth"]` default.
-- **You need the secret again.** It is returned once and stored encrypted. Rotate
-  instead.
+- **You need the secret again.** It is returned once and stored encrypted. Create
+  a new key instead.
 - **Leaving `hmac-sha1` allowed.** It is in the plugin's default list. This spec
-  narrows it to SHA-256 and SHA-512; keep it that way.
-- **A request signed over only `keyId` is accepted.** `signed_headers` was dropped, so the caller chooses what it signs. Ask for each route to fix what the signature must cover, and read it back.
-- **A modified body is accepted.** `validate_request_body` is off on `POST /albums`, or `digest` is missing from its `signed_headers`.
-- **A signature that looks correct always 401s.** The signing base lost its final newline: `$( )` strips it. Pipe `printf` straight into `openssl`.
-- **Every bodyless GET 401s.** `hmac-auth` was moved to the API level, so the GET now requires a digest.
-- **The digest stops matching after a "hardening" change.** `request-validation` landed on the route and re-encoded the body.
-- **App creation fails on an unsupported auth plugin.** The product's `authMethods` is still the `["helix-auth"]` default.
-- **The agent invents a `secret_key` or `signing_secret` field on the route.** There is none. The credential carries it.
-- **The routes exist with **no plugins**, though every step reported success.** The agent wrapped the plugins in `x-helix-gateway` inside the live route, which a live route silently discards. Ask for a plain top-level `plugins` map and read the revision back; if it still won't, import the spec.
-- **You need the secret again.** It's returned once and stored encrypted. Rotate instead.
-- **The session ends with `stream closed with reason: error` part-way through.** The configuration may already have been saved. Read the revision back to see what landed, then carry on from there.
+  narrows the list to SHA-256 and SHA-512. Keep it that way.
+- **The agent invents a `secret_key` or `signing_secret` field on the route.**
+  There is none. The credential carries the secret.
+- **The routes exist with no plugins, though every step reported success.** The
+  agent wrapped the plugins in `x-helix-gateway` inside the live route. A live
+  route silently throws that away. Ask for a plain top-level `plugins` map and
+  read the revision back. If that still doesn't work, import the spec.
+- **The session ends part-way through with `stream closed with reason: error`.**
+  The configuration may already be saved. Read the revision back to see what was
+  saved, then carry on from there.
 - **Use the trace inspector to see each step.** On the API's page, open the
   **Observability** tab and click **Start trace session**. It shows the headers
-  each plugin changes and the request body at every stage, which is the fastest
-  way to see what each plugin did to a call. A session stops after 10 requests,
-  so use **Advanced: filter which requests to capture** to record only the ones
-  you care about (skipped requests don't count). The list doesn't refresh by
-  itself: click **Refresh**. The **Inspector** shows API keys and cookies in
-  plain text, so don't share your screen or paste a trace into a ticket without
-  removing them.
+  each plugin changes, and the request body at every stage. It is the fastest way
+  to see what each plugin did to a call. A session stops after 10 requests, so use
+  **Advanced: filter which requests to capture** to record only the ones you care
+  about (skipped requests don't count). The list doesn't refresh by itself: click
+  **Refresh**. The **Inspector** shows API keys and cookies in plain text. Don't
+  share your screen, or paste a trace into a ticket, without removing them first.
 - **See what changed, and when, in Audit Logs.** **Observability → Audit Logs**
   lists every clone, plugin change and deploy. Its times are in your local time,
   while analytics uses UTC. Anything done with your token, including scripts and

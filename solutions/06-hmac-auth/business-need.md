@@ -4,34 +4,37 @@
 
 ---
 
-> Your payments partner posts settlement files with an API key you issued three
-> years ago. It's in their runbook, their CI, and a support ticket. Rotating it
-> means a release on their side, so nobody has — and even a safe key says nothing
-> about the payload: rewrite the amount in transit and the key still checks out.
+> Your payments partner sends settlement files using an API key you gave them
+> three years ago. It's in their setup notes, their build scripts and a support
+> ticket. Changing it means a release on their side, so nobody has. And even a
+> safe key says nothing about the file: if someone changes the amount on the way,
+> the key still checks out.
 >
-> **At the edge, the secret stops travelling and the signature covers the
-> request.**
+> **With signing at the gateway, the secret is never sent, and the signature
+> covers the request itself.**
 
-- **Secret on the wire: every request → never.** The caller proves it holds the
-  secret by signing; a proxy log or a pasted request is no longer a rotation event.
-- **A captured request is worth: the credential, forever → that one request, for
-  five minutes.** The signature binds method, path, timestamp and a hash of the
-  body. Alter any of them and it fails at the edge.
-- **Backend code changed: none.** And partners recognise the pattern — Stripe,
-  GitHub, Shopify, Slack and Twilio all sign their webhooks.
+- **The secret is never sent.** Before: it goes out with every request. After: it
+  is never sent. The caller proves it has the secret by signing. A log file or a pasted request is no longer a reason to change the key.
+- **A copied request is worth far less.** Before: it gave away the key, for good.
+  After: it is good for that one request, for five minutes. The signature covers
+  the method, the path, the time and a fingerprint of the body. Change any of them
+  and the gateway rejects it.
+- **No backend code changes.** And partners know the pattern: Stripe, GitHub,
+  Shopify, Slack and Twilio all sign their webhooks.
 
-The control is real only if the *route* decides what a signature must cover.
-Leave that to the caller and it is decoration:
+This only protects you if the *route* decides what a signature must cover. If the
+caller decides, the signature gives no protection:
 
-| The route requires the signature to cover | A captured signature can be reused for |
+| The route requires the signature to cover | Someone who copies a signature can reuse it for |
 |---|---|
-| nothing — the caller chooses | any body, any path, indefinitely |
-| method, path, date | that path, any body, for the clock-skew window |
-| method, path, date, body digest | that exact request, for the clock-skew window — this package |
+| nothing — the caller chooses | any body, any path, for ever |
+| method, path, date | that path, any body, within the 5-minute time limit |
+| method, path, date, body fingerprint | that exact request, within the 5-minute time limit — this package |
 
-It is authentication and integrity, not authorization, not replay protection
-inside the window, and not for browsers — a secret on a user's device is not a
-secret. [How it works, and what this does not buy you, are in
+It proves who is calling and that the request wasn't changed. It does not decide
+what a caller is allowed to do. It does not stop someone resending a copied
+request within those 5 minutes. And it is not for browsers: a secret on a user's
+device is not a secret. [How it works, and what this does not buy you, are in
 Architecture](architecture.md#limits-worth-knowing).
 
 *Also searched as: HMAC authentication API gateway · signed API requests · webhook
