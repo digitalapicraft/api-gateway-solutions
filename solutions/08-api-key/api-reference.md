@@ -18,7 +18,7 @@ skip them, nothing gives you a clear error.
 | Step | Call | Body | Notes |
 |---|---|---|---|
 | Import the spec | `POST /api/orgs/{orgId}/apis/from-spec` | `multipart/form-data`, part `file` — or a JSON body `{"spec": <document>}` | Nothing to fill in first. Adds `helix-auth` and `proxy-rewrite` to each route and `request-id` to the whole API. The response is `{"api", "revision"}`; keep both ids. A raw `application/yaml` body is rejected with 415 (unsupported content type). |
-| Create an upstream | `POST /api/orgs/{orgId}/envs/{envId}/upstreams` | `{"name","specification":{"scheme","nodes":[{"host","port","weight"}], ...}}` | Each environment has its own upstreams. |
+| Create an upstream | `POST /api/orgs/{orgId}/envs/{envId}/upstreams` | `{"name","specification":{"scheme","pass_host":"rewrite","upstream_host","nodes":[{"host","port","weight"}], ...}}` | Each environment has its own upstreams. Set `pass_host` to `rewrite` and `upstream_host` to the backend's host: without them the backend gets the gateway's host and every call returns HTTP 502 (bad gateway). |
 | Link the upstream to the revision | `PATCH /api/orgs/{orgId}/apis/{apiId}/revisions/{revisionId}/upstream-bindings/add` | `{"environmentUpstreams":[{"environmentId","upstreamId"}]}` | This must succeed before the deploy call below. |
 | Deploy the revision | `POST /api/orgs/{orgId}/apis/{apiId}/revisions/{revisionId}/deploy` | `{"environmentId","force":false}` | This is what makes the routes live. A revision that is deployed (ACTIVE) can't be edited: it returns `Only INACTIVE revisions can be updated`. |
 | List APIs (to get `<API_ID>`) | `GET /api/orgs/{orgId}/apis` | — | Find the id of the imported "Terminal API" here, if you didn't keep it from the import response. |

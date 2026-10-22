@@ -18,14 +18,15 @@
 #                        and signs a short-lived JWT. Deliberately NOT behind
 #                        validation: a caller has no token yet.
 #   everything else    — the gateway verifies the JWT it signed and rejects
-#                        anything else in the access phase, before the request
-#                        reaches the upstream.
+#                        anything else in the rewrite phase (priority 2450,
+#                        first), before the request reaches the upstream.
 #
 # ROUTES MATCH THE UPSTREAM PATHS, so no proxy-rewrite is needed — a request to
 # /posts is forwarded to the upstream's /posts unchanged. (Validated.)
 #
 # EXECUTION IS PRIORITY/PHASE-ORDERED, NOT DOCUMENT-ORDERED. helix-auth validate
-# runs in the access phase, so a rejected request never reaches the upstream.
+# runs first, in the rewrite phase (priority 2450), so a rejected request never
+# reaches the upstream.
 #
 # THE SIGNING SECRET MUST MATCH on the issue route and every validate route.
 # A mismatch rejects every freshly issued token with an opaque error — the single
@@ -97,7 +98,7 @@ paths:
         '401': { description: Missing, malformed, expired or badly signed Bearer token }
       x-helix-gateway:
         plugins:
-          # Identity, access phase. Rejects anything without a valid JWT this
+          # Identity, rewrite phase, runs first. Rejects anything without a valid JWT this
           # gateway signed, before the request reaches the upstream.
           # signing_secret MUST equal the value on /oauth/token.
           helix-auth:

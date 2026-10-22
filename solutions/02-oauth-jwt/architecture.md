@@ -58,7 +58,7 @@ sequenceDiagram
         UP-->>GW: 200
         GW-->>C: 200
     else missing, invalid or expired
-        GW--xC: 401 — access phase, upstream never sees it
+        GW--xC: 401 — checked first, upstream never sees it
     end
 ```
 
@@ -67,8 +67,8 @@ token yet. If it were protected, getting a token would require already having on
 This is why token checking is set on each protected route, not across the whole
 API.
 
-**A rejected request costs your backend nothing.** The check runs in the
-gateway's **access phase**, before the request is forwarded. A call with a bad
+**A rejected request costs your backend nothing.** The check runs first, in the
+gateway's **rewrite phase** (priority 2450), before the request is forwarded. A call with a bad
 token never opens a connection to your service, never reaches your database, and
 never shows up in your application logs.
 
@@ -79,7 +79,7 @@ never shows up in your application logs.
 | **401** on a protected route | The gateway could not confirm who is calling: no `Authorization` header, no `Bearer ` prefix, an expired token, or a token this gateway didn't sign | The client's token. The message in the body says which: see [See it work](guides.md#see-it-work). |
 | **401** on `/oauth/token` | Unknown client id, or the secret doesn't match. No token is issued. | Is the app sending its client id where the id goes, and its secret where the secret goes? |
 | **401** on every call, even with a token issued seconds ago | The signing secret differs between the token route and the protected route | The `signing_secret` values in the spec |
-| **403** with a valid token | The gateway knows who is calling, but the app is not subscribed to a product that covers this API | The app's products |
+| **403** with a valid token | Only with `api-product-enforcer` on the route, which this package doesn't add: the app is not on a product that covers this API. Without it, `helix-auth` accepts a token from any app | The route's plugins, then the app's products |
 
 Each rejection carries a short message saying what went wrong, so partners can
 fix most problems themselves. **Put those messages in your developer docs**, and
@@ -93,8 +93,8 @@ protected route:
 
 | Order | Plugin | Phase | Produces | Needs |
 |---|---|---|---|---|
-| 1 | `helix-auth` (validate) | access | the calling app | the `Authorization` header and the signing secret |
-| 2 | *(any authorization or metering plugin you add)* | access | — | the app from step 1 |
+| 1 | `helix-auth` (validate) | rewrite (priority 2450) | the calling app | the `Authorization` header and the signing secret |
+| 2 | *(any authorization or metering plugin you add)* | runs after `helix-auth` | — | the app from step 1 |
 | — | `request-id` | rewrite / log | an `X-Request-Id` header | — |
 | — | analytics (platform-wide) | log | a record of the request | the app from step 1 |
 
@@ -146,7 +146,7 @@ signing and is out of scope here.
 | Check client credentials | `helix-auth` mode `generate` | Credentials are already stored by the platform. Custom code would need its own credential store. |
 | Sign a JWT | `helix-auth` mode `generate` | Signing is easy to write and easy to write insecurely. Safe comparison, correct expiry handling and fixed algorithms are handled here. |
 | Check a JWT | `helix-auth` mode `validate`, `validate_auth_type: jwt-auth` | Hand-written token checks are where the well-known JWT security bugs come from. |
-| Reject before the backend | the access phase | A custom filter would run in the same phase with more ways to be wrong. |
+| Reject before the backend | `helix-auth` running first, in the rewrite phase | A custom filter would have to run just as early, with more ways to be wrong. |
 | Trace an auth failure | `request-id` | — |
 
 The one thing this solution deliberately does *not* attempt: **scopes and

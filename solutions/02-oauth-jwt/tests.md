@@ -44,8 +44,8 @@ looking configured. That is the most serious way this solution can fail.
 
 When a case fails, the script says what usually causes it: a 401 on case 3 almost
 always means the signing secret differs between the token route and the protected
-route; a 403 there means the app is identified but not subscribed to a product
-that covers the API.
+route; a 403 there means another plugin, such as `api-product-enforcer`, is on
+the route, because `helix-auth` alone doesn't check the app's product.
 
 Raw fixtures, if you want to run one case by hand instead of the whole script:
 [`tests/requests/`](tests/requests/) (the HTTP requests) and

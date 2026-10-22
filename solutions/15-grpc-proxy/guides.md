@@ -158,7 +158,8 @@ Repeat for each route. What every field means, and the optional extra (`request-
 3. Click **Next** through the remaining tabs, then **Add Upstream**.
 4. Back on the API's page, click **Deploy** on the revision. The dialog asks you
    to map an upstream for `test`. Pick the gRPC upstream you just created, then
-   **Deploy**.
+   click **Map & Deploy**. (The button reads **Map & Deploy** while no upstream
+   is mapped yet, and **Deploy** once one is.)
 
 **Changing it later.** A change to the upstream's host or port applies to the
 live API straight away, with no new deploy. A change to its **scheme** (`grpc` or
@@ -174,7 +175,7 @@ back: clone the older revision and force-deploy that.
 4. Under **Authentication Methods**, leave the default (`helix-auth`).
 5. Under **Quota**, make sure **Enable request quota** is on. It is by default,
    set to 1000 per 1 hour, so don't click the switch: that turns the quota off,
-   and a product with no quota gets HTTP 403 (forbidden) on every call. Set
+   and every product needs one. Set
    **Request limit**, **Interval** and **Unit** to the allowance you want; here
    it counts **streams, not messages**. Check the summary line, for example
    *"Subscribers can make up to 1000 requests per 1 hour"*.
@@ -405,7 +406,10 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
   you care about (skipped requests don't count). The list doesn't refresh by
   itself: click **Refresh**. The **Inspector** shows API keys and cookies in
   plain text, so don't share your screen or paste a trace into a ticket without
-  removing them.
+  removing them. A compressed response, which browsers always ask for, is
+  unreadable in the **Response** tab, so call the API with curl to read it. The
+  **Upstream** tab's **Total** adds connect time to response time, so it can be
+  larger than the request's own total.
 - **See what changed, and when, in Audit Logs.** **Observability → Audit Logs**
   lists every clone, plugin change and deploy. Its times are in your local time,
   while analytics uses UTC. Anything done with your token, including scripts and

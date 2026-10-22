@@ -41,8 +41,8 @@ sequenceDiagram
 
 **Nothing checks who is calling.** This package is the translation only, so every
 request that reaches the gateway reaches your SOAP system. Sign-in is
-[solution 02](../02-oauth-jwt/). When you add it, it runs in the gateway's
-**access phase**, before both plugins above, so a rejected call costs no
+[solution 02](../02-oauth-jwt/). When you add it, `helix-auth` runs first
+(rewrite phase, priority 2450), before both plugins above, so a rejected call costs no
 conversion work and never opens a connection to your backend.
 
 ## The one thing everybody gets wrong

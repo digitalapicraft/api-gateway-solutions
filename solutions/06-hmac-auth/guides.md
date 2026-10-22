@@ -181,7 +181,9 @@ adds.
    `jsonplaceholder.typicode.com`.
 3. Click **Next** through the remaining tabs, then **Add Upstream**.
 4. Back on the API's page, click **Deploy** on the revision. The dialog asks you
-   to map an upstream for `test`. Pick the one you just created, then **Deploy**.
+   to map an upstream for `test`. Pick the one you just created, then click
+   **Map & Deploy**. (The button reads **Map & Deploy** while no upstream is
+   mapped yet, and **Deploy** once one is.)
 
 **Changing it later.** A change to the upstream (host, port, scheme) applies to
 the live API straight away, with no new deploy. A change to routes or plugins
@@ -254,8 +256,10 @@ curl -s -H "authorization: Bearer $TOKEN" -F "file=@example/api-spec.yaml" \
 
 # 2. Import does NOT make the routes live. Create an upstream, bind it
 #    to the revision, then deploy the revision.
+# pass_host + upstream_host: without them the backend gets the gateway's host
+# and every call returns 502.
 curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/envs/<TEST_ENV_ID>/upstreams" \
-  -d '{"name":"albums-upstream","specification":{"scheme":"https","nodes":[{"host":"jsonplaceholder.typicode.com","port":443,"weight":1}]}}'
+  -d '{"name":"albums-upstream","specification":{"scheme":"https","pass_host":"rewrite","upstream_host":"jsonplaceholder.typicode.com","nodes":[{"host":"jsonplaceholder.typicode.com","port":443,"weight":1}]}}'
 # → {"id":"<UPSTREAM_ID>", ...}
 
 curl -s "${H[@]}" -X PATCH "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/upstream-bindings/add" \
@@ -540,12 +544,16 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
   saved, then carry on from there.
 - **Use the trace inspector to see each step.** On the API's page, open the
   **Observability** tab and click **Start trace session**. It shows the headers
-  each plugin changes, and the request body at every stage. It is the fastest way
-  to see what each plugin did to a call. A session stops after 10 requests, so use
-  **Advanced: filter which requests to capture** to record only the ones you care
-  about (skipped requests don't count). The list doesn't refresh by itself: click
-  **Refresh**. The **Inspector** shows API keys and cookies in plain text. Don't
-  share your screen, or paste a trace into a ticket, without removing them first.
+  each plugin changes, and the request body at every stage. It is the fastest
+  way to see what each plugin did to a call. A session stops after 10 requests,
+  so use **Advanced: filter which requests to capture** to record only the ones
+  you care about (skipped requests don't count). The list doesn't refresh by
+  itself: click **Refresh**. The **Inspector** shows API keys and cookies in
+  plain text. Don't share your screen, or paste a trace into a ticket, without
+  removing them first. A compressed response, which browsers always ask for, is
+  unreadable in the **Response** tab, so call the API with curl to read it. The
+  **Upstream** tab's **Total** adds connect time to response time, so it can be
+  larger than the request's own total.
 - **See what changed, and when, in Audit Logs.** **Observability → Audit Logs**
   lists every clone, plugin change and deploy. Its times are in your local time,
   while analytics uses UTC. Anything done with your token, including scripts and

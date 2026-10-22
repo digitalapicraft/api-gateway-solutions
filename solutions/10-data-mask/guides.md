@@ -189,7 +189,9 @@ spec adds API-wide: [Configuration reference](#configuration-reference).
    `jsonplaceholder.typicode.com`.
 3. Click **Next** through the remaining tabs, then **Add Upstream**.
 4. Back on the API's page, click **Deploy** on the revision. The dialog asks you
-   to map an upstream for `test`. Pick the one you just created, then **Deploy**.
+   to map an upstream for `test`. Pick the one you just created, then click
+   **Map & Deploy**. (The button reads **Map & Deploy** while no upstream is
+   mapped yet, and **Deploy** once one is.)
 
 **Changing it later.** A change to the upstream (host, port, scheme) applies to
 the live API straight away, with no new deploy. A change to routes or plugins
@@ -227,8 +229,10 @@ curl -s -H "authorization: Bearer $TOKEN" \
 
 # 2. Import does NOT make the routes live. Create an upstream, bind it
 #    to the revision, then deploy the revision.
+# pass_host + upstream_host: without them the backend gets the gateway's host
+# and every call returns 502.
 curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/envs/<TEST_ENV_ID>/upstreams" \
-  -d '{"name":"customers-upstream","specification":{"scheme":"https","nodes":[{"host":"jsonplaceholder.typicode.com","port":443,"weight":1}]}}'
+  -d '{"name":"customers-upstream","specification":{"scheme":"https","pass_host":"rewrite","upstream_host":"jsonplaceholder.typicode.com","nodes":[{"host":"jsonplaceholder.typicode.com","port":443,"weight":1}]}}'
 # → {"id":"<UPSTREAM_ID>", ...}
 
 curl -s "${H[@]}" -X PATCH "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/upstream-bindings/add" \
@@ -427,7 +431,10 @@ Every field of every plugin, and the wider product docs:
   you care about (skipped requests don't count). The list doesn't refresh by
   itself: click **Refresh**. The **Inspector** shows API keys and cookies in
   plain text, so don't share your screen or paste a trace into a ticket without
-  removing them.
+  removing them. A compressed response, which browsers always ask for, is
+  unreadable in the **Response** tab, so call the API with curl to read it. The
+  **Upstream** tab's **Total** adds connect time to response time, so it can be
+  larger than the request's own total.
 - **See what changed, and when, in Audit Logs.** **Observability → Audit Logs**
   lists every clone, plugin change and deploy. Its times are in your local time,
   while analytics uses UTC. Anything done with your token, including scripts and
