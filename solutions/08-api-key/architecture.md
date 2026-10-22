@@ -74,7 +74,7 @@ sequenceDiagram
     Note over T,GW: every call sends the same header
     T->>GW: GET /fleet/price-list<br/>X-Device-Key: <the app's key>
 
-    Note over GW: helix-auth checks the key (key-auth), access phase<br/>finds the app the key belongs to
+    Note over GW: helix-auth checks the key (key-auth), rewrite phase, first<br/>finds the app the key belongs to
     alt key belongs to an existing app
         GW->>UP: GET /todos/1 (path rewritten)
         UP-->>GW: 200
@@ -91,8 +91,8 @@ sequenceDiagram
     GW--xT: 401 — no deploy, no config change, no device update
 ```
 
-The key is checked in the **access phase**, before the request is forwarded (see
-[Execution order](#execution-order)). So a refused request costs your backend
+The key is checked first, before anything else changes the request or forwards
+it (see [Execution order](#execution-order)). So a refused request costs your backend
 nothing. Your backend never sees it, your database never sees it, and it uses
 none of your backend's connections.
 
@@ -123,18 +123,18 @@ went wrong. Treat the message as a hint, not a promise that it will never change
 ## Execution order
 
 Plugins don't run in the order they appear in the file. They run in stages, called
-**phases**. Inside a phase they run by **priority**, highest number first. The
-rewrite phase runs before the access phase.
+**phases**. Inside a phase they run by **priority**, highest number first.
 
 | Order | Plugin | Phase | Priority | What it does |
 |---|---|---|---|---|
 | — | `request-id` | — | — | On the whole API. Adds an `X-Request-Id` header: an id you can use to match up log entries for one request |
-| 1 | `proxy-rewrite` | rewrite | 1008 | Changes the path sent to the upstream. Takes no part in the key check. |
-| 2 | `helix-auth` (validate · key-auth) | access | 2450 | Finds the app from the key. Refuses anything else. |
+| 1 | `helix-auth` (validate · key-auth) | rewrite | 2450 | Finds the app from the key. Refuses anything else. |
+| 2 | `proxy-rewrite` | rewrite | 1008 | Changes the path sent to the upstream. Takes no part in the key check. |
 
-`helix-auth` has the higher priority number (2450 against 1008), but it still runs
-second, because its phase comes later. **Phase beats priority.** On this platform,
-this is the most common reason people think the plugins are in the wrong order.
+Both run in the rewrite phase, so priority decides: `helix-auth` (2450) runs
+before `proxy-rewrite` (1008). A refused call stops there. Its path is never
+changed and it never reaches your backend. A trace of the request shows the same
+order.
 
 Once `helix-auth` has found the app, later plugins that need to know who is
 calling (usage limits, reports) read it from the request. They don't work it out
