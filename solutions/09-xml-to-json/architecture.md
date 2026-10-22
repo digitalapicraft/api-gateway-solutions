@@ -114,7 +114,7 @@ off a schema.
 | Attributes on the **root** element | Ordinary keys next to the child elements | Indistinguishable from elements once converted |
 | Attributes on **child** elements | **Were not present in the converted output** | If data lives in child attributes, check your own document before relying on it |
 | An empty element | `null` | Not `""`, and not a missing key |
-| Mixed content (`Why <em>X</em> is great`) | Reshaped into separate keys, with the text rejoined | Don't put meaning in mixed content |
+| Mixed content (`Why <em>X</em> are great`) | Split into separate keys: `{"em":"X","text":"Why are great"}`. The word order is lost | The sentence can't be rebuilt. Don't put meaning in mixed content |
 | A hyphenated name | An underscored key | `order-id` → `order_id` |
 
 And the other direction, JSON → XML:
@@ -195,7 +195,8 @@ Do not use it when:
   natural home for.
 - **Report its own failures.** Both gates fail open, and a body over
   `max_body_size` is forwarded unconverted, silently. Conversion failures show up
-  as **backend** errors, which is why `request-id` is on every route.
+  as **backend** errors, which is why the full spec puts `request-id` on every
+  route.
 - **Authenticate anyone.** This package ships open so the conversion is the only
   thing being shown.
 - **Guarantee XML element order.** JSON key order isn't kept on the way to XML.

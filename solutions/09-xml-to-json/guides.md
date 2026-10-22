@@ -146,8 +146,10 @@ On the `POST /catalog/orders` route (Scope: **Specific endpoint**, that route):
 
 1. **`xml-to-json` — converts in both directions.** The caller's JSON body is
    turned into XML (wrapped in an `<order>` element with the namespace your
-   backend expects) before the backend sees it, and the backend's XML reply is
-   turned back into JSON. **`transform_request` must be `true`**: it defaults to
+   backend expects) before the backend sees it. An XML reply would be turned
+   back into JSON too, but the test backend replies to `POST /post` in JSON,
+   which passes through unchanged; only `GET /catalog/items` shows the reply
+   being converted. **`transform_request` must be `true`**: it defaults to
    `false`, and then the backend receives the JSON unchanged. Leave `pretty`
    unset: on this build it makes the route fail with HTTP 503 (service
    unavailable).
@@ -177,8 +179,20 @@ On the `POST /catalog/orders` route (Scope: **Specific endpoint**, that route):
    {"uri":"/post"}
    ```
 
-Repeat for each plugin and route. What every field means, and the two
-optional extras (`request-id`, `cors`) the full spec adds API-wide:
+Repeat for each plugin and route.
+
+Then, on the **Entire Revision**:
+
+1. **`request-id` — a tracking id on every call (recommended).** It adds an
+   `X-Request-Id` header to each response. Conversion problems show up as errors
+   from your backend, not the gateway, and this id is how you find the call they
+   came from. Without it, responses carry no `X-Request-Id`.
+
+   ```json
+   {"algorithm":"uuid","header_name":"X-Request-Id"}
+   ```
+
+What every field means, and the optional `cors` the full spec also adds:
 [Configuration reference](#configuration-reference).
 
 **Using your own backend?** In this step, set each `proxy-rewrite` `uri` to your
@@ -413,7 +427,16 @@ Every field of every plugin, and the wider product docs:
 - **The `Accept` check is a simple match.** It ignores preference weights, so
   `application/xml;q=0.9, application/json;q=0.1` still gets JSON.
 - **Conversion failures are reported by the *backend*, not the gateway.** That is
-  why `request-id` is on every route.
+  why the full spec puts `request-id` on every route. If you built it in the UI
+  and responses have no `X-Request-Id`, add it on the **Entire Revision** (end of step 2).
+- **Your backend receives the caller's other headers too**, including a
+  browser's cookies. That's normal for a proxy, but check what your own backend
+  logs.
+- **Attributes on child elements are dropped.** `<slide type="all">` comes back
+  without `type`. Attributes on the root element are kept as ordinary fields.
+- **Mixed text loses its word order.** `Why <em>WonderWidgets</em> are great`
+  becomes `{"em":"WonderWidgets","text":"Why are great"}`, and the sentence can't
+  be rebuilt.
 - **`transform_request` also changes the outgoing headers.** The backend receives
   `Content-Type` and `Accept` both set to `application/xml`, not the client's.
 - **Confirm `xml-to-json` exists in your org** before you design around it.
