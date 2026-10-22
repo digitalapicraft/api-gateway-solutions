@@ -16,7 +16,7 @@ it, and an honest record of what was and wasn't validated.
 
 ---
 
-## The thirteen solutions
+## The solutions
 
 | # | Solution | The problem it solves | Build it with the Agent |
 |---|---|---|---|
@@ -35,6 +35,7 @@ it, and an honest record of what was and wasn't validated.
 | **13** | [PGP encryption](solutions/13-pgp-encryption/) | *"The bank only accepts PGP-encrypted payloads. Today that's a Python script with a keyring on a VM, and it's what pages us at 2am."* Decrypt inbound and encrypt outbound at the edge; the backend never handles ciphertext. | [prompt](solutions/13-pgp-encryption/helix-agent-prompt.md) |
 | **14** | [Dynamic mock](solutions/14-dynamic-mock/) | *"Every partner gets the same canned response from our sandbox, so nobody catches an integration bug until production."* Answer each caller with that caller's own stored values — one route, no backend, and changing a value is a write rather than a release. | [prompt](solutions/14-dynamic-mock/helix-agent-prompt.md) |
 | **15** | [gRPC stream proxy](solutions/15-grpc-proxy/) | *"Our units hold a bidirectional gRPC stream open for hours. Anything that wants to authenticate or count them has to be built into the service."* Authenticate each stream as it opens, from gRPC metadata, without touching the service. | [prompt](solutions/15-grpc-proxy/helix-agent-prompt.md) |
+| **16** | [Request tracing](solutions/16-request-tracing/) | *"A partner says our API returns 400 on calls that look fine. Our logs show a 400 and nothing else."* Trace a deployed API's live requests and see which plugin answered, what reached the backend, and where the time went. No redeploy. | [prompt](solutions/16-request-tracing/helix-agent-prompt.md) |
 
 They compose. 02 gives you identity, 03 gives you the protocol bridge, 01 turns
 the result into something sellable, and 04 tells you what happened. Running all

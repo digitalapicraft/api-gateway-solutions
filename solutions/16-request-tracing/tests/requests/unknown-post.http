@@ -1,0 +1,6 @@
+### Case: backend-rejects — a post that does not exist.
+###
+### Expect 404, answered by the backend and passed through unchanged. In the
+### trace: upstream.status 404, and no short_circuit — no plugin said no.
+GET {{GATEWAY}}/posts/999999
+accept: application/json

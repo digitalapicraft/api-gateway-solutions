@@ -1,0 +1,87 @@
+# Solution 16 — the API you are about to investigate with a trace session.
+#
+# This is the importable artifact: an OpenAPI 3.0.3 document carrying
+# x-helix-gateway.plugins. Tracing itself is NOT in this file. A trace session is
+# opened on a deployed API from Observability → Traces (or the control-plane
+# API) and needs no plugin and no redeploy. This file only gives the session
+# something worth looking at.
+#
+# RUNNABLE ON A FRESH FREE-TRIAL ORG. The upstream is public
+# https://jsonplaceholder.typicode.com, so every route returns real data with no
+# backend of your own. Deploy to the "test" environment (the free-trial default).
+#
+# THREE ROUTES, THREE KINDS OF TRACE RECORD:
+#   POST /posts without "title"  → the GATEWAY says no. request-validation
+#                                  answers 400 and the backend is never called.
+#                                  The record names the plugin that answered.
+#   GET  /posts/{postId}         → the gateway CHANGES the request on its way
+#                                  through. proxy-rewrite adds X-Partner-Channel,
+#                                  and the record shows the request as the
+#                                  backend actually received it.
+#   GET  /posts/999999           → the BACKEND says no. The gateway passes a 404
+#                                  through, and the record shows the upstream's
+#                                  own status and timing.
+#
+# No authentication, on purpose: the lesson is reading a trace, not issuing keys.
+# Put helix-auth in front (solution 01 or 02) and a rejected key shows up in a
+# trace exactly like the request-validation case below.
+
+openapi: 3.0.3
+
+info:
+  title: Posts API
+  version: 1.0.0
+  description: >-
+    A sample API to investigate with a trace session. It proxies the public
+    jsonplaceholder service, rejects a new post with no title at the gateway, and
+    tags every lookup before it reaches the backend.
+
+paths:
+  /posts:
+    post:
+      summary: Create a post
+      description: Rejected at the gateway when the body has no title.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+      responses:
+        '201': { description: Created (jsonplaceholder echoes the post with an id) }
+        '400': { description: The body has no title. Answered by the gateway; the backend never sees it. }
+      x-helix-gateway:
+        plugins:
+          # Kept shallow on purpose: "required" with no "properties" map.
+          request-validation:
+            body_schema:
+              type: object
+              required: [title]
+            rejected_code: 400
+
+  /posts/{postId}:
+    get:
+      summary: Get a post
+      parameters:
+        - { name: postId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Post }
+        '404': { description: No such post. Answered by the backend, passed through unchanged. }
+      x-helix-gateway:
+        plugins:
+          # Tags the request on its way to the backend. The partner never sees
+          # this header. Only the backend does, and the trace shows both sides.
+          proxy-rewrite:
+            headers:
+              set:
+                X-Partner-Channel: api
+
+# API-WIDE POLICY.
+x-helix-gateway:
+  plugins:
+    # A correlation id on every response, so a partner's report and a trace
+    # record can be matched to each other.
+    request-id:
+      algorithm: uuid
+      header_name: X-Request-Id

@@ -1,0 +1,9 @@
+### Case: gateway-rejects — a new post with no title.
+###
+### Expect 400 "property \"title\" is required", answered by request-validation.
+### The backend is never called. In the trace: outcome short_circuit, and
+### short_circuit.plugin names request-validation.
+POST {{GATEWAY}}/posts
+content-type: application/json
+
+{"body": "a post with no title"}
