@@ -76,7 +76,7 @@ sequenceDiagram
 
     Note over GW: helix-auth checks the key (key-auth), rewrite phase, first<br/>finds the app the key belongs to
     alt key belongs to an existing app
-        GW->>UP: GET /todos/1 (path rewritten)
+        GW->>UP: GET /todos/1 (path rewritten)<br/>X-Device-Key passed on as sent
         UP-->>GW: 200
         GW-->>T: 200 + X-Request-Id
     else no header
@@ -86,7 +86,7 @@ sequenceDiagram
     end
 
     Note over CP,GW: switching a caller off is done in the control plane
-    CP-)GW: delete the app
+    CP-)GW: delete the app, or generate new credentials
     T->>GW: GET /fleet/price-list (same key)
     GW--xT: 401 — no deploy, no config change, no device update
 ```
@@ -108,7 +108,7 @@ the paths the devices call never have to follow the backend.
 |---|---|---|
 | **401** *Missing API key in request* | Nothing arrived in `X-Device-Key` | The header name in the request, or the key was sent in the URL instead |
 | **401** *Invalid API key in request* | Something arrived, but it belongs to no app | Usually the app's id or secret was sent instead of its key, or the app was deleted |
-| **Dry-run rejected**, naming `apikey` | `apikey.source` is missing from the config | See [Settings worth extra attention](#settings-worth-extra-attention) |
+| **`apikey.source: Missing required field`** in the wizard, or **dry-run rejected** naming `apikey` | `apikey.source` is missing from the config | See [Settings worth extra attention](#settings-worth-extra-attention) |
 
 (A dry-run is a test deploy that checks the configuration without changing
 anything live.)
@@ -209,17 +209,15 @@ Do not use it when:
 
 ## Settings worth extra attention
 
-**`apikey` with `source` is required, whatever the schema says.** The published
-schema (the plugin's list of fields) marks it as optional. The plugin's own check
-does not. A dry-run rejects the config without it:
+**`apikey` with `source` is required.** There is no default value. The
+Configure plugin wizard shows `apikey.source: Missing required field` and won't
+let you continue without it. A spec or an agent-written config without it is
+refused at the dry-run:
 
 ```text
 property "apikey" with "source" is required when mode is validate
 and validate_auth_type is key-auth
 ```
-
-That is the dry-run catching a real error before deploy. It is working as
-intended. Don't expect a default value.
 
 **`secret_validation` is not a second check.** From the plugin's own schema:
 
@@ -227,10 +225,16 @@ intended. Don't expect a default value.
 > **alternative** credential if the api key is absent.*
 
 It **widens** what is accepted. Someone might turn it on hoping the device must
-then send both the key and the secret. It does the opposite: a caller that has
-only the secret is let in too. This package leaves it off. The behaviour above is
-quoted from the schema; this package does not ship or run that variant. If you
-want two separate checks, use [solution 06](../06-hmac-auth/).
+then send both the key and the secret. It does the opposite. With it on:
+
+- the app's secret on its own, with no key, gets 200;
+- another app's secret on its own also gets 200;
+- a wrong secret gets 401;
+- a wrong key together with a good secret gets 401. The key is checked first,
+  and a bad key never falls back to the secret.
+
+This package leaves it off. If you want two separate checks, use
+[solution 06](../06-hmac-auth/).
 
 **Header, not query string.** `apikey.source` accepts `header` or `query` (the
 part of the URL after `?`). Choose `header`. A key in a URL is copied into every
@@ -247,6 +251,11 @@ an API for devices would give browser pages a way in that the devices never need
 - **The key is sent with every request.** Anything that can see a request can
   reuse it: a proxy, a network device that decrypts traffic, or a log that records
   headers. Quick switch-off reduces the damage. It doesn't prevent it.
+- **The key reaches your backend.** The gateway passes `X-Device-Key` on
+  unchanged, and adds `X-Consumer-Username` and `X-Credential-Identifier` (the
+  app's id, not its name). `helix-auth` has no setting to hide the key. To keep
+  it out of your backend and its logs, remove the header with the route's
+  `proxy-rewrite`: see [Variations](guides.md#variations).
 - **A key never expires.** It works until somebody removes the app. Nothing
   cleans up after you the way a token's lifetime does. Review the live apps
   regularly instead.
@@ -254,10 +263,13 @@ an API for devices would give browser pages a way in that the devices never need
   key proves which app is calling, not what it is allowed to do.
 - **The identity is always an app, never a person.** There is no consent step
   and no acting on someone's behalf.
-- **Switch-off is not instant to the millisecond.** The gateway keeps a short-term
+- **Switch-off takes seconds, not milliseconds.** The gateway keeps a short-term
   copy of credential details (a cache). Measure that delay in your own environment
   and publish *that* as the time it takes to switch a caller off. Don't quote a
   number from here.
+- **Deleting an app deletes its history.** The delete dialog warns that the app's
+  usage history and analytics go with it. To switch a caller off and keep its
+  history, use **Generate New Credentials** on the app instead.
 - **Giving one app a new key cuts over at once.** The old key stops working the
   moment the new one is live. If your devices update over several weeks, run two
   apps, and delete the old one once every device has the new key.

@@ -23,8 +23,8 @@ rename my routes to match the backend.
 
 Protect both with helix-auth, mode validate, validate_auth_type key-auth, reading
 the key from the HEADER X-Device-Key. key-auth is a validate_auth_type here, not a
-standalone plugin. apikey with source is required in practice — the dry-run rejects
-the config without it, although the published schema marks it optional.
+standalone plugin. apikey with source is required — the dry-run rejects the config
+without it.
 
 No secret goes in the spec: the key lives on the app credential and the route only
 names the header it arrives in. Don't set secret_validation — despite the name it
@@ -45,9 +45,9 @@ which plugins actually landed. Wait before deploying.
 ### Step 2 — issue a credential and test it
 
 ```text
-Create a product containing this API with a generous quota, deploy it to test,
-then create a developer "{{developer_name}}" with one app subscribed to it and
-give me the app's API key.
+Deploy the revision to test. Then create a product containing this API with a
+generous quota, deploy it to test, then create a developer "{{developer_name}}"
+with one app subscribed to it and give me the app's API key.
 
 Then curl commands showing, in order: no key → 401; the key in X-Device-Key → 200;
 an unknown key → 401; the right key in an "apikey" header → 401; and the right key

@@ -27,8 +27,8 @@ Then, for everyone: [See it work](#see-it-work) · [Variations](#variations) ·
 ## Build it with the Helix Agent
 
 Works on a **new org**. [`helix-agent-prompt.md`](helix-agent-prompt.md) has two
-steps: Step 1 creates and protects the API, Step 2 creates a key and gives you the
-calls that test it. **Paste one step at a time and confirm between them**, in the
+steps: Step 1 creates and protects the API, Step 2 deploys it, creates a key and
+gives you the calls that test it. **Paste one step at a time and confirm between them**, in the
 same chat.
 
 See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the ground rules these prompts
@@ -71,6 +71,10 @@ Pick one of the two ways below. Both give you the same thing: an API called
    [`example/api-spec-basic.yaml`](example/api-spec-basic.yaml): the same two
    routes, no plugins. Then click **Import**.
 
+If an API with the same name already exists in your org, the import fails with
+*API with name '<name>' already exists*. Type another name in the form's
+**Display name** field, which overrides the name in the spec, and import again.
+
 > **A spec can carry the plugins too.** Add an `x-helix-gateway` block that
 > lists them. At the top level of the file it covers every route; under one
 > path and method it covers that route only:
@@ -97,8 +101,8 @@ That comes in step 3.
 **2. Add the plugins**
 
 Two plugins go on each route: one checks the caller's key, the other points the
-route at the right path on your backend. Add them **before** you deploy: a live
-revision can't be changed.
+route at the right path on your backend. A third, optional one gives every
+request an id. Add them **before** you deploy: a live revision can't be changed.
 
 On the API's page, open **Configuration → Plugins** and click **Configure
 plugin**. A short wizard opens:
@@ -110,8 +114,9 @@ plugin**. A short wizard opens:
    Paste the JSON below, or fill in the fields. Then **Next**.
 4. **Review** — shows the configuration before and after. Click **Apply**.
 
-Every plugin below goes on **Specific endpoint**, so run the wizard once per
-plugin per route: four times in all, picking the route named below each time.
+The first two plugins go on **Specific endpoint**, so run the wizard once per
+plugin per route: four times, picking the route named below each time. The
+third goes on **Entire Revision**, once.
 
 1. **`helix-auth` — checks the caller's key.** It reads the key from the
    `X-Device-Key` header and looks up which app it belongs to. No key, or a key
@@ -130,8 +135,8 @@ plugin per route: four times in all, picking the route named below each time.
    {"mode":"validate","validate_auth_type":"key-auth","apikey":{"source":"header","key":"X-Device-Key"}}
    ```
 
-   Fill in **apikey → source** even if the Properties list shows it as
-   optional. Without it the deploy is refused.
+   **apikey → source** is required. Until it is filled in, the wizard shows
+   `apikey.source: Missing required field` and won't let you continue.
 
    There is **no key to type in here**. The keys live on the apps you create in
    step 7.
@@ -158,11 +163,24 @@ plugin per route: four times in all, picking the route named below each time.
    ```
 
    These paths suit the example backend, `jsonplaceholder.typicode.com`. With
-   your own backend, use its paths instead.
+   your own backend, use its paths instead. The key in `X-Device-Key` is passed
+   on to your backend as sent; to remove it, see
+   [Keep the key away from your backend](#variations).
 
-Repeat until both routes carry both plugins. What every field means, and the
-optional extra (`request-id`) the full spec adds:
-[Configuration reference](#configuration-reference).
+3. **`request-id` (optional) — gives every request an id.** Add it once, with
+   **Entire Revision**. It adds an `X-Request-Id` header to every response, so
+   you can match the gateway's record of a call with your backend's. The
+   solution works without it and `verify.sh` doesn't check for it, but the
+   expected result for a valid key,
+   [`tests/expected/valid-200.json`](tests/expected/valid-200.json), lists its
+   header.
+
+   ```json
+   {"algorithm":"uuid","header_name":"X-Request-Id"}
+   ```
+
+Repeat until both routes carry both of the first two plugins. What every field
+means: [Configuration reference](#configuration-reference).
 
 **3. Give it an upstream, then deploy it**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick environment
@@ -181,13 +199,15 @@ optional extra (`request-id`) the full spec adds:
 **Changing it later.** A change to the upstream (host, port, scheme) applies to
 the live API straight away, with no new deploy. A change to routes or plugins
 does need one, because a live revision can't be edited: use **Clone Revision**,
-make your change on the copy, then **Force Deploy** it. The same steps roll you
-back: clone the older revision and force-deploy that.
+make your change on the copy, then **Force Deploy** it. Rolling back needs no
+copy: click **Deploy**, pick the older revision (for example `r1`), and click
+**Force Deploy**.
 
 **4. Create a product**
 1. Go to **API Distribution → API Products**, click **Add API Product**.
 2. Under **Basic Information**, set a **Display Name**, for example `Terminal API`.
-3. Under **APIs**, click **Add API**, select your API, then **Continue**.
+3. Under **APIs**, click **Add API**. In the **Add APIs** dialog, tick your API,
+   then click **Add (1)**.
 4. Under **Authentication Methods**, leave it blank. It defaults to `helix-auth`,
    which is what this solution uses.
 5. Under **Quota**, make sure **Enable request quota** is on. It is by default,
@@ -200,17 +220,21 @@ back: clone the older revision and force-deploy that.
 **5. Deploy the product**
 On the product's page, click **Deploy**, pick `test`, then **Deploy** again. This
 is a different deploy from step 3. The product needs its own; creating it is
-not enough.
+not enough. Do it before step 7: an app can only pick products that are already
+deployed to its environment.
 
 **6. Create a developer**
 Go to **API Distribution → Developers**, click **Add Developer**, fill in the
 name and email, then **Add**.
 
 **7. Create one app per caller**
-Go to **API Distribution → Apps**, click **Add App**. Pick the **Environment**
-and the **Developer**, add the product, pick an authentication method and let
-credentials auto-generate, then **Create App**. Repeat for every device or
-partner job: **one app each**, so each can be switched off on its own.
+Go to **API Distribution → Apps**, click **Add App**. Fill in **Display Name**,
+for example `terminal-3312`. Pick the **Environment** and the **Developer**, add
+the product, pick an authentication method and let credentials auto-generate,
+then **Create App**. If the product list says **No products found.**, the
+product isn't deployed to that environment yet: go back to step 5. Repeat for
+every device or partner job: **one app each**, so each can be switched off on
+its own.
 
 **8. Get each app's key**
 On each app's **Overview** tab, find the **Authentication** card. It shows
@@ -219,14 +243,25 @@ button. Copy the **key**: that's the value the caller sends in the
 `X-Device-Key` header. It is the credential **key**, not the app's id and not
 its secret. **Generate New Credentials**, in the same card, creates a new pair.
 
+**Switching a caller off.** There are two ways, and both stop the old key
+within seconds:
+
+- **Keep the app's history: Generate New Credentials** on the app's
+  **Overview** tab, in the **Authentication** card. The old key stops working,
+  and the app's usage history and analytics stay.
+- **Remove the app completely: Delete.** The delete dialog warns that it also
+  deletes all usage history and analytics for that app.
+
 ## Install it directly
 
-If you'd rather script it against the control plane:
+If you'd rather script it against the control plane. `BASE` is the API address
+the portal calls (it usually starts with `api-`), not the portal page and not
+the gateway's address:
 
 ```bash
 export ORG=<ORG_ID>
 export TOKEN=<control-plane bearer token>      # short-lived
-export BASE=https://<YOUR_GATEWAY_HOST>/api
+export BASE=https://<YOUR_CONTROL_PLANE_API>/api
 H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
 
 # 1. Import the spec. Nothing to fill in: it contains no key and no secret.
@@ -301,6 +336,10 @@ curl -s -o /dev/null -w "%{http_code}\n" \
 # 401  <- the right key, in the wrong place
 ```
 
+The 401 messages are JSON, but they come back with the content type
+`text/plain`. If your client only reads a JSON body when the content type says
+JSON, parse the body yourself.
+
 To run all seven checks as a script:
 
 ```bash
@@ -315,8 +354,33 @@ can't run for you (switching a caller off, and changing a key): [Tests](tests.md
 
 ## Variations
 
-Each of these is a follow-up prompt to paste into the same Helix Agent session
-after the build.
+Most of these are follow-up prompts to paste into the same Helix Agent session
+after the build. The first and the last are changes you make yourself.
+
+**Keep the key away from your backend.** The gateway passes `X-Device-Key` on
+to your backend exactly as the caller sent it, so the key can end up in your
+backend's logs. It also adds two headers of its own: `X-Consumer-Username` and
+`X-Credential-Identifier` (the app's id, not its name). `helix-auth` has no
+setting to hide the key. To remove it, add a `headers.remove` list to the
+`proxy-rewrite` that each route already has. Don't add a second
+`proxy-rewrite`. The key is checked before `proxy-rewrite` runs, so the check
+still works.
+
+On `GET /fleet/price-list`:
+
+```json
+{"uri":"/todos/1","headers":{"remove":["X-Device-Key"]}}
+```
+
+On `POST /fleet/takings`:
+
+```json
+{"uri":"/posts","headers":{"remove":["X-Device-Key"]}}
+```
+
+On an API that's already live, use **Clone Revision**, change `proxy-rewrite`
+on both routes with the Configure plugin wizard (**Specific endpoint**), then
+**Force Deploy** the copy.
 
 **Your callers can only put the key in the query string.**
 
@@ -359,8 +423,9 @@ leave the device API on key-auth. Don't mix the two on one route.
 
 **Change a key without interrupting the caller.** Create a second app for the
 same caller. Give the caller the new key and check it returns 200. Then delete the
-first app. Giving one app a new key in place cuts over at once: the old key stops
-working straight away.
+first app (this also deletes that app's usage history and analytics). Giving one
+app a new key in place, with **Generate New Credentials**, cuts over at once: the
+old key stops working straight away.
 
 ## Configuration reference
 
@@ -382,9 +447,9 @@ helix-auth:
 |---|---|---|---|
 | `helix-auth` | `mode` | `validate` | Check a credential the caller already has. (`generate`, which creates tokens, is not used here.) |
 | `helix-auth` | `validate_auth_type` | `key-auth` | A setting of `helix-auth`, not a separate plugin. Finds the app the key belongs to. |
-| `helix-auth` | `apikey.source` | `header` | Where the key is read from. **Required in practice**, although the schema (the plugin's list of fields) marks it optional. `query` (the URL) is allowed, but is a bad idea. |
+| `helix-auth` | `apikey.source` | `header` | Where the key is read from. **Required.** `query` (the URL) is allowed, but is a bad idea. |
 | `helix-auth` | `apikey.key` | `X-Device-Key` | The header name. Any name works. Callers must use exactly this name, so treat it as fixed once you publish it. |
-| `proxy-rewrite` | `uri` | `/todos/1` on `GET /fleet/price-list` · `/posts` on `POST /fleet/takings` | Changes the path callers use into the path on the upstream (your backend). Change these values when you use your own backend. |
+| `proxy-rewrite` | `uri` | `/todos/1` on `GET /fleet/price-list` · `/posts` on `POST /fleet/takings` | Changes the path callers use into the path on the upstream (your backend). Change these values when you use your own backend. It doesn't remove `X-Device-Key`, so the key reaches your backend; see [Variations](#variations) to remove it. |
 | `request-id` | `algorithm` / `header_name` | `uuid` / `X-Request-Id` | On the whole API. Gives each request an id, so you can match the gateway's log of a refused call with your backend's log of the calls that got through. |
 
 **Notice what that block does not contain.** There is no key and no secret. The
@@ -405,17 +470,18 @@ others.
 
 Placeholders in this package: `<ORG_ID>`, `<TEST_ENV_ID>`, `<API_ID>`,
 `<REVISION_ID>`, `<UPSTREAM_ID>`, `<PRODUCT_ID>`, `<DEVELOPER_ID>`,
-`<GENEROUS_LIMIT>`, `<DEVICE_API_KEY>`, `<APP_SECRET>`, `<YOUR_GATEWAY_HOST>`.
+`<GENEROUS_LIMIT>`, `<DEVICE_API_KEY>`, `<APP_SECRET>`, `<YOUR_CONTROL_PLANE_API>`,
+`<YOUR_GATEWAY_HOST>`.
 The spec itself has none.
 
 Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digitalapi.ai/api-gateway).
 
 ## Troubleshooting
 
-- **The dry-run rejects the config, naming `apikey`.** (A dry-run is a test
-  deploy that checks the configuration without changing anything live.)
-  `apikey.source` is missing. It is required on both routes, even though the
-  schema says it's optional.
+- **The wizard shows `apikey.source: Missing required field`, or the dry-run
+  rejects the config naming `apikey`.** (A dry-run is a test deploy that checks
+  the configuration without changing anything live.) `apikey.source` is
+  missing. Set it to `header` on both routes.
 - **Every request gets *Missing API key in request*.** The header in the request
   is not the one named in `apikey.key`. Or the key is in the query string while
   `source` is `header`.
@@ -435,7 +501,14 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
   short-term copy of credential details (a cache). That delay is how long it
   really takes to switch a caller off. Measure it.
 - **Turning on `secret_validation` lets a caller in with only the secret.** That
-  is what it does. It is not a second check. Turn it off.
+  is what it does, and any app's secret works, not only the caller's own. It is
+  not a second check. Turn it off.
+- **Your client can't read the 401 message.** The body is JSON, but the
+  content type is `text/plain`. Parse the body as JSON yourself.
+- **The product can't be undeployed.** Apps still subscribe to it. Remove the
+  product from those apps, or delete the apps, then undeploy.
+- **Your backend logs show device keys.** The gateway passes `X-Device-Key` on
+  as sent. Remove it with `proxy-rewrite`: see [Variations](#variations).
 - **You want to limit how often each app calls.** Don't add `limit-count` keyed
   on the caller. Usage limits for each caller come from the product quota, counted
   per app. See [solution 01](../01-api-products/).
@@ -452,6 +525,12 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
   Use a name that isn't taken.
 - **You ask the agent to run `validate_route`.** It always fails on this
   platform, whatever the route says. Ask for `dry_run_deploy` instead.
+- **The agent shows green ticks, but nothing was created.** It can run two
+  create steps at once and report both as done when neither stored anything.
+  Read the revision back, and if it's empty, paste the step again.
+- **The agent panel stops responding after it creates the product.** The
+  product exists but isn't deployed. Deploy it yourself, as in
+  [step 5 of Build it in the UI](#build-it-in-the-ui), then carry on.
 - **Use the trace inspector to see each step.** On the API's page, open the
   **Observability** tab and click **Start trace session**. It shows the headers
   each plugin changes and the request body at every stage, which is the fastest

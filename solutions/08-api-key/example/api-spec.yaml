@@ -32,14 +32,18 @@
 #   on the app credential, which the control plane provisions. There is nothing in
 #   this file to fill in and nothing to leak.
 #
-# TWO THINGS THE SCHEMA DOES NOT TELL YOU, BOTH VERIFIED AGAINST A GATEWAY
-#   1. `apikey` with `source` is MANDATORY here. The published JSON schema marks it
-#      optional, but the plugin's own check rejects the config at dry-run:
+# THREE THINGS WORTH KNOWING
+#   1. `apikey` with `source` is REQUIRED. There is no default. The plugin's own
+#      check rejects the config at dry-run without it:
 #      'property "apikey" with "source" is required when mode is validate and
 #      validate_auth_type is key-auth'.
 #   2. `secret_validation: true` is NOT a second factor. It makes the credential's
 #      SECRET an ALTERNATIVE credential accepted when the key is absent — it widens
 #      what is accepted rather than requiring more. It is deliberately absent below.
+#   3. The key is FORWARDED. X-Device-Key reaches the upstream unchanged, and the
+#      gateway adds X-Consumer-Username and X-Credential-Identifier (the app's id).
+#      helix-auth has no setting to hide it; to strip it, add
+#      headers: { remove: [X-Device-Key] } to each route's proxy-rewrite below.
 #
 # EXECUTION IS PRIORITY/PHASE-ORDERED, NOT DOCUMENT-ORDERED. Both plugins run in
 # the rewrite phase, so priority decides: helix-auth validate (2450) runs first,
@@ -83,7 +87,7 @@ paths:
         plugins:
           # Identity, rewrite phase, runs first. Rejects anything whose X-Device-Key does not
           # resolve to an app credential, before the upstream is contacted.
-          # apikey.source is mandatory in practice — see the header comment.
+          # apikey.source is required — see the header comment.
           helix-auth:
             mode: validate
             validate_auth_type: key-auth
