@@ -53,9 +53,10 @@ cases:
       returns; assert the status and that the body is your backend's normal one.
     expected_status: 200
     notes: >-
-      A 403 means authentication passed and authorization did not: the app's
-      product does not cover this API. Add the API to the product, or subscribe the
-      app to a product that has it.
+      There is no 403 in this setup. helix-auth alone does not check the app's
+      product, so a key from any app in the environment gets 200, even an app on
+      a product without this API. A 403 means another plugin, such as
+      api-product-enforcer, is on the route.
 
   - id: unknown-key
     type: negative

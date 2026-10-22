@@ -19,8 +19,13 @@ Your backend does not change. It never sees a request without a valid key.
 **This solution identifies callers. It does not limit them.** It uses the same
 `helix-auth` key check as [solution 01](../01-api-products/). It does not use
 01's `api-product-enforcer`, so no usage limit is applied. Every app still needs a
-product, because signing up to a product is how an app gets its key. Add 01's
-limit check when you want limits.
+product, because signing up to a product is how an app gets its key.
+
+**This setup doesn't check which product an app is on.** The key check only
+confirms the key belongs to an app in this environment. A key from any app is
+accepted, even one whose product doesn't include this API. To let in only the
+apps on a product that includes this API, add 01's `api-product-enforcer`; it
+also applies the product's usage limit.
 
 For the full list of fields on every plugin, see
 [docs.digitalapi.ai/api-gateway](https://docs.digitalapi.ai/api-gateway).
@@ -31,7 +36,7 @@ For the full list of fields on every plugin, see
 |---|---|---|
 | **Developer** | The company or team that owns the callers | a Consumer |
 | **App** | One caller: one terminal, or one partner's scheduled job. It has its own key and secret. | a Credential |
-| **Product** | A set of APIs an app signs up to. Here it is how the app gets access. Its quota (usage limit) is not enforced. | a product document |
+| **Product** | A set of APIs an app signs up to. Here it is how the app gets its key. Which product the app is on isn't checked, and its quota (usage limit) is not enforced. | a product document |
 | **Key** | The value the caller sends in `X-Device-Key`. It is the app's credential *key*, not its id and not its secret. | the credential key |
 | **Control plane** | The part of the platform where you manage APIs, products, developers and apps. | — |
 | **Upstream** | Your backend service. The gateway forwards requests that pass to it. | — |
@@ -103,11 +108,13 @@ the paths the devices call never have to follow the backend.
 |---|---|---|
 | **401** *Missing API key in request* | Nothing arrived in `X-Device-Key` | The header name in the request, or the key was sent in the URL instead |
 | **401** *Invalid API key in request* | Something arrived, but it belongs to no app | Usually the app's id or secret was sent instead of its key, or the app was deleted |
-| **403** | HTTP 403 (forbidden). The key belongs to an app, but the app's product does not include this API | Add the API to the app's product. A product problem, not a key problem. |
 | **Dry-run rejected**, naming `apikey` | `apikey.source` is missing from the config | See [Settings worth extra attention](#settings-worth-extra-attention) |
 
 (A dry-run is a test deploy that checks the configuration without changing
 anything live.)
+
+There is no HTTP 403 (forbidden) in this setup: a key from any app in the
+environment gets through, whatever product that app is on.
 
 In [solution 02](../02-oauth-jwt/), both kinds of 401 give the same message.
 Here the two messages are different. That helps a genuine caller work out what

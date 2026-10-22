@@ -41,8 +41,9 @@ for everyone else.
 key check. It also sets a usage limit for each app. This solution does only the
 first part: it finds out who the caller is. Each app still needs a **product** (a
 bundle of APIs that apps sign up to), because signing up to a product is how an
-app gets its key. But no usage limit is applied. You can add 01's limit check
-later if you need one.
+app gets its key. But no usage limit is applied, and the key check doesn't look
+at which product the app is on: a key from any app in the environment is
+accepted. You can add 01's check later if you need either.
 
 ## The use case
 

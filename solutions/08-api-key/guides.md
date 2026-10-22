@@ -341,7 +341,9 @@ a caller sees when it goes over.
 ```
 
 That is [solution 01](../01-api-products/): add `api-product-enforcer` to the
-routes, and the product's quota (usage limit) is then enforced for each app.
+routes, and the product's quota (usage limit) is then enforced for each app. It
+also means only apps on a product that includes this API get in; a key from any
+other app gets HTTP 403 (forbidden).
 
 **Move to tokens for the callers that can manage it.**
 
@@ -416,9 +418,12 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
 - **Every request gets *Invalid API key in request*.** The value is not a
   credential key. Usually the app's id or the app's secret was sent instead. This
   is the most common cause of "401 with a key I'm certain is right".
-- **A valid key returns 403, not 200.** (HTTP 403 means forbidden.) The key was
-  recognised, but the app's product doesn't include this API. Add the API to the
-  product. It is a product problem, not a key problem.
+- **A key from an app on a different product still gets in.** That's how this
+  setup works: the key check only confirms the key belongs to an app in this
+  environment, not which product the app is on. To let in only the apps on a
+  product that includes this API, add `api-product-enforcer`
+  ([solution 01](../01-api-products/)). Until then there is no HTTP 403
+  (forbidden) here.
 - **An unknown key returns 200.** This is the most serious failure. The route
   isn't checking keys at all. It lets everything through while looking set up.
   Read the deployed revision back.
