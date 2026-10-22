@@ -58,7 +58,8 @@ Screen and button names below are the real ones. The API lives under
 **1. Create the API**
 
 Pick one of the two ways below. Both give you the same thing: an API called
-`Posts API` with two routes and no plugins yet.
+`Posts API` with two routes and no plugins yet. Plugins are optional for
+tracing; step 2 adds three that make a trace more useful to read.
 
 *Option A — from scratch*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
@@ -97,10 +98,17 @@ Pick one of the two ways below. Both give you the same thing: an API called
 Either way, the API is not live yet: it has no upstream and isn't deployed.
 That comes in step 3.
 
-**2. Add the plugins**
+**2. Add the plugins (optional)**
 
-Three plugins give a trace something to show. Add them **before** you deploy: a
-live revision can't be changed.
+**Tracing doesn't need any plugin.** It works on any deployed API, with or
+without them. The three plugins below are here so your first trace has
+something to show: a call the gateway turns away on its own, and a header the
+gateway changes on the way to your backend. With them, you can see in a trace
+how to tell a problem caused by the gateway from one caused by your backend.
+You can skip this step, or use your own API instead.
+
+If you do add them, add them **before** you deploy: a live revision can't be
+changed.
 
 On the API's page, open **Configuration → Plugins** and click **Configure
 plugin**. A short wizard opens:

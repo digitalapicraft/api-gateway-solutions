@@ -65,7 +65,9 @@ costs a round-trip:
 ## Example
 
 The sample API in this package has three routes that fail or behave in three
-different ways. One trace session shows all three:
+different ways. One trace session shows all three. The sample carries a few
+plugins so these differences show up; tracing itself works on any API, with or
+without plugins.
 
 | Call | What the caller sees | What the trace says |
 |---|---|---|
