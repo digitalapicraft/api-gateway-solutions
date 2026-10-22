@@ -50,8 +50,8 @@ This is the question a trace exists to settle. Two fields answer it:
 
 | What the record shows | Who answered | What to do |
 |---|---|---|
-| Outcome **short circuit**, naming a plugin | **The gateway.** That plugin returned the response, and the backend was never called. | Look at that plugin's config and the request it received. |
-| A **backend status** in the Upstream section, no short circuit | **Your backend.** The gateway passed its answer through. | Look at the **request as sent upstream**: headers, path and body after every plugin changed them. |
+| Outcome **Upstream not called** (`short_circuit` in the raw data), naming a plugin | **The gateway.** That plugin returned the response, and the backend was never called. | Look at that plugin's config and the request it received. |
+| A **backend status** in the Upstream section, and the backend was called | **Your backend.** The gateway passed its answer through. | Look at the **request as sent upstream**: headers, path and body after every plugin changed them. |
 | Outcome **ok** | Nobody refused it. | Use the timings, if the complaint is speed. |
 
 Every outcome the gateway records:
@@ -89,7 +89,7 @@ actually ran:
 rewrite → access → before proxy → upstream → header filter → body filter → log
 ```
 
-A plugin that short-circuits stops the request moving forward. In the sample
+A plugin that answers the request itself stops it moving forward. In the sample
 API's 400, `request-validation` answers in the **rewrite** stage, so there is
 no access stage, no upstream stage, and no backend status in the record. That
 absence is the proof the backend was never called.
