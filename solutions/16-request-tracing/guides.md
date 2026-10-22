@@ -76,9 +76,10 @@ tracing; step 2 adds three that make a trace more useful to read.
 *Option B — from an OpenAPI spec*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
 2. Set **Method** to **Import an OpenAPI spec**.
-3. Drag in your own OpenAPI 3.0 file, or use our example,
+3. Drag in or browse to your own OpenAPI 3.0 file, or use our example,
    [`example/api-spec-basic.yaml`](example/api-spec-basic.yaml): the same two
-   routes, no plugins. Then click **Import**.
+   routes, no plugins. There is no option to paste the spec as text. Then click
+   **Import**.
 
 > **A spec can carry the plugins too.** Add an `x-helix-gateway` block that
 > lists them. At the top level of the file it covers every route; under one
@@ -151,9 +152,13 @@ Do this once for each plugin below.
    ```
 
 3. **`request-id` — puts an id on every response.** Scope: **Entire Revision**.
-   This one is optional: tracing works without it. It adds an `X-Request-Id`
-   header with a new id to every response, so the id a partner quotes in their
-   report can be matched to a trace record.
+   This one is optional: tracing works without it. It makes sure every response
+   carries an `X-Request-Id` header, an id a partner can quote in their report.
+   The platform already sets that header before this plugin runs, so the plugin
+   keeps the platform's id: 32 letters and digits (0–9 and a–f), not the dashed
+   UUID format that `uuid` suggests. The caller receives it, but a trace
+   record's response headers don't show it, so find the partner's call in a
+   trace by its time and path.
 
    | Field | Value |
    |---|---|
@@ -177,7 +182,9 @@ means: [Configuration reference](#configuration-reference).
    `jsonplaceholder.typicode.com`.
 3. Click **Next** through the remaining tabs, then **Add Upstream**.
 4. Back on the API's page, click **Deploy** on the revision. The dialog asks you
-   to map an upstream for `test`. Pick the one you just created, then **Deploy**.
+   to map an upstream for `test`. Pick the one you just created, then click
+   **Map & Deploy**. (The button reads **Map & Deploy** while no upstream is
+   mapped yet, and **Deploy** once one is.)
 
 Until you deploy, there is nothing to trace. Once it is deployed, continue at
 [Start a trace session](#start-a-trace-session).
@@ -203,8 +210,10 @@ curl -s -H "authorization: Bearer $TOKEN" -F "file=@example/api-spec.yaml" \
 
 # 2. Create an upstream, bind it to the revision, deploy the revision.
 curl -s "${H[@]}" -X POST "$CP/api/orgs/$ORG/envs/<ENV_ID>/upstreams" \
-  -d '{"name":"posts-upstream","specification":{"scheme":"https","nodes":[{"host":"jsonplaceholder.typicode.com","port":443,"weight":1}]}}'
+  -d '{"name":"posts-upstream","specification":{"scheme":"https","pass_host":"rewrite","upstream_host":"jsonplaceholder.typicode.com","nodes":[{"host":"jsonplaceholder.typicode.com","port":443,"weight":1}]}}'
 # → {"id":"<UPSTREAM_ID>", ...}
+# Keep pass_host and upstream_host. Without them the backend receives your
+# gateway's host name instead of its own, and every call returns 502.
 curl -s "${H[@]}" -X PATCH "$CP/api/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/upstream-bindings/add" \
   -d '{"environmentUpstreams":[{"environmentId":"<ENV_ID>","upstreamId":"<UPSTREAM_ID>"}]}'
 curl -s "${H[@]}" -X POST "$CP/api/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/deploy" \
@@ -265,11 +274,15 @@ The **Start tracing session** dialog opens:
    filter skips don't count toward the 10. See
    [Record only what you need](#record-only-what-you-need).
 5. Click **Start tracing**. You land straight on the session's page, marked
-   **Active**.
+   **Active**. The time left is shown only in the sessions list
+   (**Observability → Traces**), not on the session's page.
 
-If a session is already running on this API, **Start tracing** stays greyed
-out and the dialog says so. There can be only one at a time: stop that one
-first.
+Only one session can be open per API per environment. If one is already open
+and hasn't recorded its 10 requests yet, starting again gives you **that**
+session back, with its original duration and filter, even though the message
+says **Tracing session started**. To change the duration or filter, stop the
+open session first. A session that is already full doesn't stop you starting
+a new one.
 
 Now make the failing call happen: send it yourself, or ask the partner to retry.
 For the sample API:
@@ -316,6 +329,17 @@ nothing when clicked. The record opens:
 | **Response** | The response body (the first few KB). |
 | **Raw JSON** | The full record. Copy this into a ticket. |
 
+Two things to know when you read these tabs:
+
+- **The Response tab can show unreadable characters.** That happens when the
+  caller asked for a compressed response, which browsers always do (the
+  `Accept-Encoding: gzip` header). The record holds the compressed bytes. To
+  read the body, send the same call with `curl`, which doesn't ask for
+  compression unless you tell it to.
+- **The Upstream tab's Total is connect time plus response time.** So it can
+  be larger than the total time shown at the top of the record. Compare the
+  response time, not this Total, with the request's total.
+
 > **Warning: a record shows secrets in plain text.** The **Inspector** shows API
 > keys and cookies exactly as the caller sent them. Don't share your screen
 > while it is open, and remove keys and cookies before you paste a record into a
@@ -326,18 +350,20 @@ Then answer one question: **who answered?**
 - **The `POST /posts` 400.** The **Outcome** badge reads **Upstream not
   called**. In **Request chain**, `request-validation` in the rewrite phase is
   marked **Upstream not called** too: it answered with a 400 response itself.
-  There is no backend status. **The gateway said no**, and the backend never saw the call. The
-  response body says why: `property "title" is required`. In **Raw JSON**, this
-  outcome is `short_circuit`.
-- **The `GET /posts/1` 200.** The **Outcome** badge reads **OK**. In
-  **Request chain**, `proxy-rewrite` in the rewrite phase lists one change: the
-  header `x-partner-channel` added with the value `api`. The caller's response
-  doesn't carry that header. Only the backend received it, and this record is
-  the only place that shows it. The **Phase timeline** shows the backend call
-  takes most of the total time.
-- **The `GET /posts/999999` 404.** The **Outcome** badge reads **Client error**,
-  and no plugin answered. The **Upstream** tab shows status `404`. **The backend
-  said no.** The gateway did its job and passed the answer through.
+  There is no backend status. **The gateway said no**, and the backend never
+  saw the call. The response body says why: `property "title" is required`. In
+  **Raw JSON**, this outcome is `short_circuit`.
+- **The `GET /posts/1` 200.** The **Outcome** badge reads **OK** (`ok` in
+  **Raw JSON**). In **Request chain**, `proxy-rewrite` in the rewrite phase
+  lists two changes: the header `x-partner-channel` added with the value `api`,
+  and the variable `upstream_uri`, the path it sends on to the backend. The
+  caller's response doesn't carry that header. Only the backend received it,
+  and this record is the only place that shows it. The **Phase timeline** shows
+  the backend call takes most of the total time.
+- **The `GET /posts/999999` 404.** The **Outcome** badge reads **Client error**
+  (`client_error` in **Raw JSON**), and no plugin answered. The **Upstream** tab
+  shows status `404`. **The backend said no.** The gateway did its job and
+  passed the answer through.
 
 The full reading guide, including every outcome, is in
 [Architecture](architecture.md#reading-a-record-who-answered).
@@ -387,12 +413,20 @@ is filtered as `http_x_debug_trace`: lowercase, with dashes turned into
 underscores. It isn't in the dialog's list of variables, so type it and pick
 **Use "http_x_debug_trace"**.
 
+Values are case-sensitive: a filter for `me` doesn't match a request that sends
+`ME`.
+
 A session with a filter is marked **Filtered** on its page. It can show no
 records at all, if nothing matched yet.
 
+Check the variable name before you start. A name the gateway doesn't know (a
+typo, for example) is accepted without any error, and then nothing is ever
+recorded.
+
 Some variables can't be used in a filter (for example `route_id`), because the
-session already belongs to one API. The dialog marks them **Not allowed in
-filters**, and the API answers `400` with the variable's name.
+session already belongs to one API. They aren't in the dialog's list. If you
+type one, the dialog shows **Not allowed in filters**, and the API answers
+`400` with the variable's name.
 
 ### Other variations
 
@@ -411,10 +445,14 @@ backend.
 **Capture more variables.** **Advanced: variables to capture**, in the start
 dialog, adds more of the gateway's request variables to each record. Pick them
 from the list, use a wildcard such as `upstream_*`, or pick **All resolved
-variables**. Under **Plugin context variables**, pick `helix` to record every
-value the gateway's plugins stored for the request. That's how you see a value
-a plugin worked out, such as a field a
-[service callout](../11-service-callout/) fetched.
+variables**. Picking `http_*` records every request header, and that includes
+cookies, in plain text, just as the **Inspector** warning above describes.
+Under **Plugin context variables**, pick `helix` to record every value the
+gateway's plugins stored for the request. That's how you see a value a plugin
+worked out, such as a field a [service callout](../11-service-callout/)
+fetched. Only top-level names such as `helix` work here. A longer name with
+dots, such as `helix.<namespace>.<key>`, is refused with **Dotted paths are not
+supported**.
 
 **Open a saved record.** **Upload trace file** on the Traces page opens `.json`
 or `.ndjson` trace files (a record copied from **Raw JSON**, for example) in
@@ -429,11 +467,12 @@ control plane and takes four fields, all optional:
 |---|---|---|
 | `ttl_seconds` | `300` | How long the session stays open. The UI allows 60 to 3,600. |
 | `filter` | none | Only matching requests are recorded and counted. An array of `[variable, operator, value]` conditions. |
-| `trace_vars` | the gateway's core set | Extra request variables to record. `upstream_*` and `http_*` wildcards work. |
-| `trace_ctx_vars` | none | Plugin values to record, as `helix.<namespace>.<key>`. |
+| `trace_vars` | the gateway's core set | Extra request variables to record. `upstream_*` and `http_*` wildcards work; `http_*` includes cookies. |
+| `trace_ctx_vars` | none | Plugin values to record. Top-level context field names only, such as `helix`. The UI refuses a dotted name such as `helix.<namespace>.<key>`. |
 
 Set by the gateway operator, not per session: the recorded-request cap (10 by
-default) and the response-body capture size (about 4 KB by default).
+default) and the body capture size (about 4 KB by default, for request and
+response bodies alike).
 
 Source of truth: [`example/api-spec.yaml`](example/api-spec.yaml) for the
 sample API's routes and plugins.
@@ -469,23 +508,28 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
 ## Troubleshooting
 
 - **The session is Active but no rows appear.** The list doesn't update by
-  itself: wait a few seconds, then click **Refresh**. If a minute passes, check that your calls reached **this** API in **this**
-  environment: the right host, a deployed revision, and a path that matches a
-  route. A `404 Route Not Found` never reaches the API, so it is never recorded.
+  itself: wait a few seconds, then click **Refresh**. If **Refresh** still
+  shows nothing, reload the page in your browser. If a minute passes, check
+  that your calls reached **this** API in **this** environment: the right host,
+  a deployed revision, and a path that matches a route. A
+  `404 Route Not Found` never reaches the API, so it is never recorded.
 - **It recorded a few requests, then nothing.** It hit the 10-request cap. It
-  can still show as active until its duration runs out. Stop it, add a filter,
-  and start a new one.
-- **Start tracing is greyed out, or the API gave me an old session.** Only one
-  session can run per API per environment. The dialog won't start a second one.
-  Through the API, starting again returns the open one, with its original
-  duration and filter. Stop it first.
-- **Stop session does nothing.** Wait for the first row to load, then click
-  again. On a session that has recorded nothing yet, or one opened from a link,
-  the button may not respond. Ending the session through the API always works.
+  can still show as active until its duration runs out. Add a filter and start
+  again: a full session doesn't block a new one. The sessions list may then
+  show two **Active** sessions for the same API.
+- **Starting again gave me the old session.** Only one session can be open per
+  API per environment. If one is open and not yet full, starting again returns
+  it, with its original duration and filter, even though the message says
+  **Tracing session started**. Stop it first.
+- **Stop session does nothing.** **Stop session** only works on the page you
+  land on right after **Start tracing**. If you opened the session from the
+  sessions list or a link (the page shows no **Environment**), the button does
+  nothing. Let the session run out, or end it through the API (see
+  [API reference](api-reference.md)).
 - **The filter was rejected.** The message names the variable. Variables that
   identify the route or service (`route_id`, `service_id`) are not allowed.
-- **A body says it was not captured.** Response bodies are cut at about 4 KB,
-  and large request bodies are skipped. The record says which happened.
+- **A body says it was not captured.** Request and response bodies are both
+  cut at about 4 KB. The record says when that happened.
 - **I can see someone's API key in a trace.** That is expected: headers are not
   redacted. Use a test app's key, filter on a test header, and restrict who
   holds the gateway admin role.
