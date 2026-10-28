@@ -35,7 +35,8 @@ set -uo pipefail
 
 GATEWAY="${GATEWAY:?set GATEWAY to the gateway base URL, e.g. https://<YOUR_GATEWAY_HOST>}"
 API_PATH="${API_PATH:-/locations}"
-REQ_BODY="${REQ_BODY:-\{\}}"
+REQ_BODY="${REQ_BODY:-}"
+[ -n "$REQ_BODY" ] || REQ_BODY='{}'   # not ${REQ_BODY:-\{\}}: bash 3.2 keeps the backslashes
 read -r -a CURL_EXTRA <<< "${CURL_OPTS:-}"
 
 API_URL="${GATEWAY%/}${API_PATH}"
@@ -66,7 +67,7 @@ echo
 
 # --- 1: the call succeeds and comes back as JSON -----------------------------
 status="$(curl -s -o "$BODY_FILE" -D "$HDR_FILE" -w '%{http_code}' -X POST "$API_URL" \
-  "${CURL_EXTRA[@]}" \
+  ${CURL_EXTRA[@]+"${CURL_EXTRA[@]}"} \
   -H 'content-type: application/json' -H 'accept: application/json' -d "$REQ_BODY")"
 case "$status" in
   000) fail "could not reach $API_URL at all — curl got no HTTP response. Check

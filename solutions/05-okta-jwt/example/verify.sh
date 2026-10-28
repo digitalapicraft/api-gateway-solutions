@@ -124,7 +124,7 @@ if [[ -z "$ACCESS_TOKEN" ]]; then
   status="$(curl -s -o "$BODY_FILE" -w '%{http_code}' -X POST "$OKTA_TOKEN_URL" \
     -u "${OKTA_CLIENT_ID}:${OKTA_CLIENT_SECRET}" \
     -H 'content-type: application/x-www-form-urlencoded' \
-    --data-urlencode 'grant_type=client_credentials' "${extra[@]}")"
+    --data-urlencode 'grant_type=client_credentials' ${extra[@]+"${extra[@]}"})"
   [[ "$status" == "$EXP_TOKEN" ]] \
     || fail "token request → ${status} (expected 200). Body: $(tr -d '\n' < "$BODY_FILE")
      This is the IdP refusing, not the gateway. Common causes: the app is not
