@@ -132,8 +132,16 @@ placeholders for you to fill in: the gateway reads them as each request arrives.
 `$request.headers.x-partner-id` is the caller's partner id, and
 `$ctx.helix.key_value_map.tier` is the value just stored or looked up. Write the
 second kind with a bare `$` and no braces: `${...}` around it always comes out
-empty. A hyphen ends that kind of reference, so keep the names in it to letters,
-digits and underscores.
+empty.
+
+**JSON editor or Properties fields: the quotes differ.** In the JSON blocks below,
+the quotes inside `response_example` are written `\"`, because that value is text
+inside JSON. That is right for the JSON editor only. If you fill in the
+**Properties** fields instead, type the value with plain quotes and no
+backslashes, as in the registration route's table. Copy the `\"` form into a
+Properties field and the backslashes are saved as part of the value: the reply is
+then invalid JSON, yet the registration route still answers 202. The simplest way
+is to paste each JSON block into the JSON editor.
 
 On the **`POST /sandbox/partners`** route (Scope: **Specific endpoint**, that
 route):
@@ -171,7 +179,8 @@ route):
    ```
 
 2. **`mocking` — answers with that partner's profile.** It also puts the tier in
-   an `X-Partner-Tier` response header.
+   an `X-Partner-Tier` response header. For a partner with no stored tier, the
+   header is left out, not sent empty.
 
    ```json
    {"content_type":"application/json","response_headers":{"X-Partner-Tier":"$ctx.helix.key_value_map.tier"},"response_example":"{\"partner\":\"$http_x_partner_id\",\"tier\":\"$ctx.helix.key_value_map.tier\",\"settlement\":\"$ctx.helix.key_value_map.settlement\"}"}
@@ -211,23 +220,35 @@ spec adds: [Configuration reference](#configuration-reference).
    **Map & Deploy**. (The button reads **Map & Deploy** while no upstream is
    mapped yet, and **Deploy** once one is.)
 
-**Changing it later.** A change to the upstream (host, port, scheme) applies to
-the live API straight away, with no new deploy. A change to routes or plugins
-does need one, because a live revision can't be edited: use **Clone Revision**,
-make your change on the copy, then **Force Deploy** it. Rolling back needs no
-copy: click **Deploy**, pick the older revision (for example `r1`), and click
-**Force Deploy**.
+**Changing it later.** A change to the upstream's host or port applies to the
+live API straight away, with no new deploy. A change to its scheme does not:
+undeploy the revision and deploy it again. A change to routes or plugins does
+need one, because a live revision can't be edited: use **Clone Revision**, make
+your change on the copy, then **Force Deploy** it. Rolling back needs no copy:
+click **Deploy**, pick the older revision (for example `r1`), and click **Force
+Deploy**. Stored partner values are not part of a revision: they survive a
+redeploy and a rollback, and stay until they expire or are registered again.
 
 **4. Register partners**
 
 There is no screen for sandbox values, and no control-plane API either: on this
 build, the registration route is the only way to write an entry. Send the requests
-in [See it work](#see-it-work).
+in [See it work](#see-it-work). Send all three headers every time: without
+`x-partner-id` the values are saved with no partner id and shared by every caller
+who sends none, and without `x-tier` and `x-settlement-account` nothing is stored
+(see [Troubleshooting](#troubleshooting)).
 
 **5. Before you expose it**
 
-Protect `/sandbox/partners` ([solution 08](../08-api-key/)) and drop
-`/sandbox/diagnostics`, which shows the store's contents to any caller.
+- **Protect `/sandbox/partners`** ([solution 08](../08-api-key/)). Anyone who can
+  reach it can change any partner's values.
+- **Don't let untrusted callers register.** Header values are copied into the
+  reply as they are, with no escaping. A partner registered with
+  `x-tier: gold","admin":"true` gets a profile with an extra `"admin":"true"`
+  field in it. Only let trusted operators call the registration route, and check
+  the values before they reach the gateway (letters, digits and hyphens only, for
+  example).
+- **Drop `/sandbox/diagnostics`**, which shows the store's contents to any caller.
 
 ## Install it directly
 
@@ -279,11 +300,16 @@ curl -X POST "$GW/sandbox/partners" \
   -H 'x-partner-id: globex-7' -H 'x-tier: bronze' -H 'x-settlement-account: GB29-SANDBOX-0002'
 
 # each one reads its own
-curl "$GW/sandbox/profile" -H 'x-partner-id: acme-42'
+curl -i "$GW/sandbox/profile" -H 'x-partner-id: acme-42'
+# HTTP 200, with the header X-Partner-Tier: gold
 # {"partner":"acme-42","tier":"gold","settlement":"GB29-SANDBOX-0001"}
 
 curl "$GW/sandbox/profile" -H 'x-partner-id: globex-7'
 # {"partner":"globex-7","tier":"bronze","settlement":"GB29-SANDBOX-0002"}
+
+# a partner nobody registered: 200, empty values, and no X-Partner-Tier header
+curl -i "$GW/sandbox/profile" -H 'x-partner-id: nobody-9'
+# {"partner":"nobody-9","tier":"","settlement":""}
 
 # change one, with no deploy
 curl -X POST "$GW/sandbox/partners" \
@@ -297,6 +323,11 @@ curl "$GW/sandbox/diagnostics" -H 'x-partner-id: acme-42'
 # brace_form  =
 # namespace   = {"tier":"platinum"}
 ```
+
+The `stored` part of the registration reply comes back with its keys in no fixed
+order: `settlement:acme-42` may come before `tier:acme-42`. Compare it as JSON,
+not as text. The profile reply always has the same order, because its template
+fixes it.
 
 To run all six checks as a script:
 
@@ -331,7 +362,10 @@ you need to tell them apart.
 
 **Reject malformed requests too.** This changes what the sandbox answers, not what
 it accepts. Add `request-validation` by spec import if the sandbox should also
-reject bad requests.
+reject bad requests. On the registration route, the first thing to require is all
+three headers: a registration without `x-partner-id` saves its values for every
+caller who sends no id, and one without `x-tier` and `x-settlement-account`
+stores nothing yet still answers 202.
 
 ## Configuration reference
 
@@ -404,27 +438,60 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
 
 ## Troubleshooting
 
-Each of these returns a 200, which is what makes them hard to spot.
-
-| Symptom | Cause |
-|---|---|
-| Values come back as empty strings, 200, nothing logged | The braces. `${ctx.helix...}` reads a different table that `key-value-map` never writes to. Use the bare `$ctx.` form. |
-| The reference resolves partly, leaving a literal tail | A hyphen in a `$ctx` path segment ends the reference. Segments are letters, digits and underscores only. |
-| A header value renders as mangled text like `-partner-id` | `$request.headers.<name>` is `key-value-map`'s syntax and does not work inside `mocking`. Use `$http_x_partner_id`. |
-| The response is invalid JSON but still returns 200 | A `$ctx` reference to a table expands to a JSON object. Don't wrap it in quotes. |
-| A lookup never finds anything | The key used a dotted suffix (`$request.headers.x-partner-id.tier`), which looks up a header named `x-partner-id.tier`. Put the label in front: `tier:$request.headers.x-partner-id`. |
-| Every partner sees the same value | The `alias` is missing, or the key template lost its per-caller reference. |
-| A partner's values vanished | They expired. Values are stored with a 24-hour TTL. |
-| The registration said 202 but nothing was stored | The 202 confirms the insert was configured, not written. Fetch the profile to check. |
-| Deploy fails: `Only INACTIVE revisions can be updated` | Clone the revision or undeploy, then apply. |
-
-If you built it with the agent:
-
-| Symptom | Cause |
-|---|---|
-| The route deploys with plugins you never asked for | The plugin-name level was dropped. Read the revision back and ask for a `plugins` object keyed by plugin name. |
-| `stream closed with reason: error`, nothing written | The structure was too deep for one write. Split the step, or use spec import. |
-
+- **You can't tell a mocked reply from a backend one.** Every reply the mock builds
+  carries an `x-mock-by` response header, such as `x-mock-by: HELIX/dev` (the
+  part after `HELIX/` names the gateway's version, so yours may differ). Look for
+  it to tell a mocked reply from one a backend sent.
+- **Values come back as empty strings, with a 200 and nothing logged.** Check the
+  braces. `${ctx.helix...}` reads a different table that `key-value-map` never
+  writes to. Use the bare `$ctx.` form.
+- **Every partner gets empty values, even registered ones.** The `alias` is
+  missing from the lookup. Without it, the looked-up value is filed under its full
+  key (`tier:acme-42`), so `$ctx.helix.key_value_map.tier` finds nothing.
+  Add `alias: tier` (and `alias: settlement`) to the `fetch` keys.
+- **Every partner sees the same value.** The key template lost its per-caller
+  part, so every partner reads the same entry. Keep
+  `$request.headers.x-partner-id` in every key, on both routes.
+- **A lookup finds nothing, or another caller's data.** The key used a dotted
+  suffix, such as `tier:$request.headers.x-partner-id.tier`. That reads a header
+  called `x-partner-id.tier`, which doesn't exist, so the key becomes just
+  `tier:`. The lookup then finds nothing, or whatever a caller with no partner id
+  stored. Put the label in front only: `tier:$request.headers.x-partner-id`.
+- **Callers with no partner id all see the same values.** A registration was sent
+  without `x-partner-id`, so its values were saved under `tier:` and
+  `settlement:`, with no id. Every caller who sends no id reads them. Always send
+  `x-partner-id` when you register, and protect the registration route.
+- **Registration answers 202 with `{"registered":true,"stored":}`.** That reply is
+  invalid JSON, and it means nothing was stored: the `x-tier` and
+  `x-settlement-account` headers were missing. Send them and register again.
+- **The registration said 202 but nothing was stored.** The 202 only confirms the
+  store step was set up, not that a value was written. Fetch the profile to check.
+- **A reply is invalid JSON with backslashes in it.** The `\"` form of a JSON
+  block was typed into a **Properties** field, so the backslashes were saved as
+  part of the value. Paste the JSON into the JSON editor instead, or type the
+  value with plain quotes.
+- **The profile has fields you never set, such as `"admin":"true"`.** Someone
+  registered a value with quotes in it (`x-tier: gold","admin":"true`). Header
+  values are copied into the reply with no escaping. Register the partner again
+  with a clean value, and see step 5, *Before you expose it*, in
+  [Build it in the UI](#build-it-in-the-ui).
+- **The response is invalid JSON but still returns 200.** A `$ctx` reference to a
+  table expands to a JSON object. Don't wrap it in quotes.
+- **A header value shows up as mangled text like `-partner-id`.**
+  `$request.headers.<name>` is `key-value-map`'s syntax and does not work inside
+  `mocking`. Use `$http_x_partner_id`.
+- **There is no `X-Partner-Tier` header.** The partner has no stored tier, so the
+  header is left out, not sent empty.
+- **A partner's values vanished.** They expired. Values are stored for 24 hours
+  (86400 seconds). A redeploy or a rollback does not remove them.
+- **Deploy fails: `Only INACTIVE revisions can be updated`.** Clone the revision
+  or undeploy, then apply.
+- **Built with the agent: the route deploys with plugins you never asked for.**
+  The plugin-name level was dropped. Read the revision back and ask for a
+  `plugins` object keyed by plugin name.
+- **Built with the agent: `stream closed with reason: error`, and nothing was
+  written.** The structure was too deep for one write. Split the step, or use
+  spec import.
 - **Use the trace inspector to see each step.** On the API's page, open the
   **Observability** tab and click **Start trace session**. It shows the headers
   each plugin changes and the request body at every stage, which is the fastest
@@ -436,7 +503,10 @@ If you built it with the agent:
   removing them. A compressed response, which browsers always ask for, is
   unreadable in the **Response** tab, so call the API with curl to read it. The
   **Upstream** tab's **Total** adds connect time to response time, so it can be
-  larger than the request's own total.
+  larger than the request's own total. In a trace of this API, the store's work
+  shows up as a list called `kvm_ops`, one entry per store operation with its
+  operation, key and value. Look there, not under the
+  `helix.key_value_map` names the templates use.
 - **See what changed, and when, in Audit Logs.** **Observability → Audit Logs**
   lists every clone, plugin change and deploy. Its times are in your local time,
   while analytics uses UTC. Anything done with your token, including scripts and

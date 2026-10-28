@@ -1,9 +1,11 @@
 # Test plan — a per-caller sandbox served from the key-value store, with no
 # backend behind it.
 #
-# All six cases are executed in order by ../example/verify.sh, which exits 0 only
-# if every one of them holds. The fixtures under requests/ and expected/ document
-# each case independently so you can run one by hand.
+# Cases 1-6 are executed in order by ../example/verify.sh, which exits 0 only
+# if every one of them holds. Cases 7-9 are manual: they show what goes wrong
+# when a registration is malformed, which the script does not send. The fixtures
+# under requests/ and expected/ document each case independently so you can run
+# one by hand.
 #
 # Substitute your own values:
 #   {{gateway}}   gateway base URL, e.g. https://<YOUR_GATEWAY_HOST>
@@ -17,8 +19,9 @@ meta:
   version: 1.0.0
   executor: example/verify.sh
   note: >-
-    Every case is automated; none requires waiting or mutating environment
-    configuration. Case 6 asserts a negative about syntax rather than about
+    Cases 1-6 are automated; none requires waiting or mutating environment
+    configuration. Cases 7-9 are manual and write deliberately bad entries, so
+    run them with throwaway partner ids. Case 6 asserts a negative about syntax rather than about
     policy, which is unusual for this library — it is here because the failure it
     guards against is silent, returning 200 with empty strings and no error.
 
@@ -85,6 +88,9 @@ cases:
       cannot know whether the value mattered, so NOTHING here fails closed. If an
       empty tier must not be served, the check belongs downstream of this route —
       `fail_action: close` on key-value-map governs store ERRORS, not misses.
+      The X-Partner-Tier response header is left out entirely on a miss, not sent
+      empty; `null` in the fixture means "not present". verify.sh checks the
+      body, not the header.
     notes: >-
       An unregistered partner is indistinguishable from a registered one whose
       value is the empty string. If that distinction matters to you, store a
@@ -120,8 +126,67 @@ cases:
       production. It exists because the failure mode it demonstrates is silent:
       the wrong grammar returns 200 with an empty string and logs nothing.
 
+  - id: register-without-partner-id
+    type: negative
+    type_of_execution: manual
+    intent: >-
+      A registration with no x-partner-id header is not rejected. Its values are
+      saved under keys with no id (`tier:` and `settlement:`) and are then read by
+      every caller who sends no partner id.
+    request: requests/register-no-partner-id.http
+    procedure: >-
+      1) Send the request (no x-partner-id). 2) GET /sandbox/profile with no
+      x-partner-id header. 3) Repeat step 2 from another client, still with no id.
+    expected_status: 202
+    expected_outcome: >-
+      202 on the registration. Both id-less profile calls return 200 with
+      "tier":"gold" and "settlement":"GB29-SANDBOX-0001".
+    notes: >-
+      Run it in a throwaway environment, or register an empty tier the same way
+      afterwards: the id-less entry is shared and lasts 24 hours. It is also what a
+      key template with a dotted suffix (tier:$request.headers.x-partner-id.tier)
+      ends up reading, because that header never exists.
+
+  - id: register-missing-values
+    type: negative
+    type_of_execution: manual
+    intent: >-
+      A registration without x-tier and x-settlement-account still answers 202,
+      but its body is invalid JSON and nothing is stored.
+    request: requests/register-missing-values.http
+    procedure: >-
+      1) Send the request (x-partner-id only). 2) GET /sandbox/profile with
+      x-partner-id: initech-3.
+    expected_status: 202
+    expected_outcome: >-
+      The registration body is {"registered":true,"stored":} — invalid JSON. The
+      profile call returns 200 with empty tier and settlement, the same as an
+      unregistered partner.
+    notes: >-
+      A client that parses the 202 as JSON fails here; one that checks only the
+      status does not notice. Read the profile back after every registration.
+
+  - id: header-injection
+    type: negative
+    type_of_execution: manual
+    intent: >-
+      Header values are copied into the reply with no escaping, so a value that
+      contains quotes can add fields to a partner's profile JSON.
+    request: requests/register-injected-tier.http
+    procedure: >-
+      1) Send the request, whose x-tier is gold","admin":"true. 2) GET
+      /sandbox/profile with x-partner-id: hooli-5.
+    expected_status: 200
+    expected_outcome: >-
+      The profile body carries an extra "admin":"true" field next to
+      "tier":"gold". The gateway does not reject or escape the value.
+    notes: >-
+      This is why the registration route must be protected and its callers
+      trusted. Check values before they reach the gateway; nothing in this
+      package does. Register hooli-5 again with a clean tier when done.
+
 coverage:
   positive: register, profile-registered, profile-other-partner
-  negative: profile-unregistered
+  negative: profile-unregistered, register-without-partner-id, register-missing-values, header-injection
   boundary: change-without-deploy
   failure: grammar-guard

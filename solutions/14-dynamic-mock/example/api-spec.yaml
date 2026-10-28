@@ -25,23 +25,18 @@
 #
 # `mocking` is the only plugin on this build that resolves the second form, in
 # `response_example` AND `response_headers`. That is why this solution is shaped
-# around `mocking` and not around `proxy-rewrite`. (Verified live 2026-09-22 —
-# on one route, one request, `response-rewrite` dropped the same reference that
-# `mocking` resolved.)
+# around `mocking` and not around `proxy-rewrite`. (On the same route and
+# request, `response-rewrite` drops the reference that `mocking` resolves.)
 #
 # THE GRAMMARS ARE NOT INTERCHANGEABLE ACROSS PLUGINS. `$request.headers.<name>`
 # is `key-value-map`'s own key/value grammar. `mocking` does not know it — put it
-# in a `response_example` and you get mangled output, not an error (it emitted
-# `"-partner-id"` in testing). Inside `mocking` the two things that DO resolve are
+# in a `response_example` and you get mangled output such as `"-partner-id"`,
+# not an error. Inside `mocking` the two things that DO resolve are
 # `$ctx.<path>` and ordinary gateway variables such as `$http_x_partner_id`.
 #
 # A TABLE JSON-ENCODES. `$ctx.helix.key_value_map.inserted` expands to a JSON
 # object, so it must NOT sit inside quotes in a JSON body — quoting it produces
 # invalid JSON that still returns 200.
-#
-# Segment characters are [A-Za-z0-9_] ONLY. A hyphen silently ENDS the
-# reference and the remainder passes through as a literal — so a key named
-# `partner-tier` can be stored but can never be referenced. Underscores only.
 #
 # WHERE VALUES LAND:
 #   fetched  ->  ctx.helix.<ctx_namespace>.<key>            (flat)
@@ -56,8 +51,9 @@
 #   up a header literally called `x-partner-id.tier` and resolves to nothing.
 #   You cannot suffix a reference with a dot. Put the discriminator in FRONT,
 #   or separate it with a character outside [A-Za-z0-9_-] such as `:`.
-#   Note this class DIFFERS from the ctx_template one above: hyphens are part
-#   of a reference here, and terminate one there.
+#   With `tier:$request.headers.x-partner-id.tier` the header is missing, so the
+#   key becomes just `tier:` — the same key a registration with no
+#   x-partner-id writes to. The lookup then finds nothing, or that entry.
 #
 # WHY `alias` IS LOAD-BEARING, NOT COSMETIC:
 #   The fetch key here is DYNAMIC — `$request.headers.x-partner-id` — so the
@@ -66,9 +62,13 @@
 #   you choose, which is the only thing that makes a per-caller value
 #   referenceable. With `alias: tier`, the value is at `.tier`; without it, it
 #   would be at `.tier:acme-42` — a field name containing a colon, which no
-#   template can address.
+#   template can address — and `.tier` would be EMPTY for every caller.
 #
-# EXECUTION ORDER (priorities confirmed against the live catalogue 2026-09-22):
+# HEADER VALUES ARE NOT ESCAPED. A stored value is copied into the reply as is,
+#   so `x-tier: gold","admin":"true` adds an `admin` field to the profile JSON.
+#   Protect the registration route and check values before they reach it.
+#
+# EXECUTION ORDER (priorities from the plugin catalogue):
 #   key-value-map (3001)  access phase — fetch/insert, publishes into ctx.helix
 #   mocking       (1999)  access phase — reads ctx.helix, then SHORT-CIRCUITS
 # The store outranks the mock, so the mock reads what the store just published.

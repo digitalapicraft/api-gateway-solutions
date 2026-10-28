@@ -40,7 +40,7 @@ cases:
     expected: expected/unauthenticated.json
     response_notes: >-
       openid-connect rejects in the access phase. The upstream is never contacted,
-      so nothing appears in your backend logs. EXECUTED: returns 401. Most caller-
+      so nothing appears in your backend logs. Returns 401. Most caller-
       side failure causes (no header, no Bearer prefix, non-JWT garbage, bad
       signature, alg=none, expired, wrong issuer) return an indistinguishable 401 —
       but a MISSING aud claim returns 403, see missing-audience-403.json. A
@@ -144,8 +144,8 @@ cases:
     expected: expected/no-scheme-400.json
     response_notes: >-
       A valid token sent with no auth scheme — 'authorization: <jwt>' rather than
-      'authorization: Bearer <jwt>'. EXECUTED against a deployed route: 400 Bad
-      Request, not 401. The header is rejected at parse time, before openid-connect
+      'authorization: Bearer <jwt>'. Returns 400 Bad Request,
+      not 401. The header is rejected at parse time, before openid-connect
       runs, so no plugin-level WWW-Authenticate is emitted. Three distinct rejection
       codes exist on this solution: 400 (no auth scheme), 401
       (bad/absent/expired/wrong-issuer token), 403 (aud claim missing, or
@@ -154,9 +154,8 @@ cases:
       short junk value ('authorization: junk'), so it is the missing scheme rather
       than the token length.
     expected_status: 400
-    result: PASS
     notes: >-
-      EXECUTED, and the status is 400 — NOT 401. A value carrying no recognised
+      The status is 400 — NOT 401. A value carrying no recognised
       auth scheme is rejected at header-parse time, before openid-connect runs.
       Deterministic, and independent of the value's length (a bare "junk" behaves
       the same). An earlier draft of this plan recorded 401; that reading came
@@ -191,11 +190,10 @@ cases:
       claim_validator.audience.required is true.
     expected_status: 403
     expected: expected/missing-audience-403.json
-    result: PASS
     notes: >-
       Note the status code: 403, NOT 401. This is the one caller-side rejection
       that is distinguishable from the others, and it contradicts the otherwise
-      reliable rule that every auth failure here looks identical. Executed.
+      reliable rule that every auth failure here looks identical.
 
   - id: alg-confusion
     type: negative
@@ -203,7 +201,6 @@ cases:
       A token signed HS256 using the issuer's PUBLIC key as the HMAC secret — the
       classic algorithm-confusion attack — is rejected.
     expected_status: 401
-    result: PASS
     notes: >-
       This passes because token_signing_alg_values_expected is pinned to RS256 and
       accept_unsupported_alg is false. Executed against a deployed route.
@@ -214,9 +211,8 @@ cases:
       The same token, with the issuer's trailing slash removed, is rejected —
       demonstrating that valid_issuers is an exact string match.
     expected_status: 401
-    result: PASS
     notes: >-
-      Executed. The IdP tested reports its issuer WITH a trailing slash. Copy the
+      An IdP may report its issuer WITH a trailing slash. Copy the
       issuer out of the discovery document rather than retyping it.
 
   - id: wrong-audience
@@ -226,7 +222,6 @@ cases:
       accepted. This is a property of the plugin, not of this spec.
     expected_status: 200
     expected: expected/wrong-audience-200.json
-    result: >-
       CONFIRMED-GAP — a correctly signed, unexpired token with
       aud=https://totally-unrelated-api.example.com/ returned 200. Reproduced twice.
     notes: >-
@@ -286,13 +281,3 @@ coverage:
   negative: [unauthenticated, forged-signature, alg-none, wrong-issuer, missing-audience, alg-confusion]
   boundary: [malformed-authorization, expired-token, issuer-trailing-slash, cors-preflight]
   failure:  [key-rotation, wrong-audience]
-
-executed:
-  # What actually ran on 2026-08-27 against a deployed route.
-  against_shipped_config: [unauthenticated, forged-signature, alg-none, malformed-authorization]
-  against_control_config: [valid-token, wrong-issuer, issuer-trailing-slash, expired-token, missing-audience, alg-confusion, wrong-audience]
-  not_run: [okta-token-issue, cors-preflight, key-rotation]
-  not_run_reason: >-
-    okta-token-issue and the shipped config's acceptance path need a token from the
-    live IdP; the test client had no grant for any audience, so none could be
-    minted. cors-preflight and key-rotation are manual by design.

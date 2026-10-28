@@ -91,12 +91,8 @@ namespace   = {"tier":"platinum"}
 `example/verify.sh` checks that the brace form stays empty. If it ever starts
 working, this page's explanation is wrong and the guidance should change.
 
-Three more rules about the bare form:
+Two more rules about the bare form:
 
-- **Segments are letters, digits and underscores only.** A hyphen **ends the
-  reference**, and the rest passes through as literal text. So a value stored as
-  `partner-tier` can never be referred to. `key-value-map`'s own key syntax *does*
-  accept hyphens, so the two are not interchangeable. Use underscores.
 - **A reference to a table becomes a JSON object**, not a string. Inside a JSON
   body, write it without quotes.
 - **`$request.headers.<name>` does not work inside `mocking`.** That is
@@ -119,7 +115,8 @@ made.
 The fetch key is built from the caller — `tier:$request.headers.x-partner-id` — so
 without an alias the value would be published under a field named after whatever
 the caller sent (`tier:acme-42`). That name changes with every caller, and no fixed
-template can refer to it.
+template can refer to it: `$ctx.helix.key_value_map.tier` comes back empty for
+every partner.
 
 `alias: tier` renames the published field to `tier`. One template then serves every
 caller. That single line is the difference between a per-partner sandbox and a
@@ -132,18 +129,25 @@ front**.
 
 The obvious alternative, `$request.headers.x-partner-id.tier`, does not work.
 Everything after `headers.` is taken as the header name, dots included, so it looks
-up a header literally called `x-partner-id.tier` and finds nothing. Put the label
-in front, separated by a character outside letters, digits, `_` and `-` (here a
-colon). This assumes partner ids contain no colon.
+up a header literally called `x-partner-id.tier`. No such header exists, so the
+partner id drops out of the key: `tier:$request.headers.x-partner-id.tier` becomes
+just `tier:`. The lookup then finds nothing, or whatever a caller with no partner
+id stored. Put the label in front, separated by a character outside letters,
+digits, `_` and `-` (here a colon). This assumes partner ids contain no colon.
+
+The same thing happens when a registration arrives with no `x-partner-id` header:
+its values are saved under `tier:` and `settlement:`, and every caller who sends no
+id reads them.
 
 ## Reading a response
 
 | Situation | What happens |
 |---|---|
 | Registered partner | 200 with their values, and an `X-Partner-Tier` response header. |
-| Unregistered partner | 200 with empty values. A miss is not an error to the store. |
+| Unregistered partner | 200 with empty values and no `X-Partner-Tier` header (it is left out, not sent empty). A miss is not an error to the store. |
 | Value past its expiry (TTL) | The same as unregistered. No signal. |
-| Registration | 202 with the stored values echoed. It confirms the insert was configured, not that a value was written — read it back. |
+| Registration | 202 with the stored values echoed, keys in no fixed order. It confirms the insert was configured, not that a value was written — read it back. |
+| Registration without `x-tier` and `x-settlement-account` | 202 with `{"registered":true,"stored":}`, which is invalid JSON. Nothing is stored. |
 | Store unreachable | `fail_action: close` applies to store *errors*. Not simulated in this package; check it on your own store before relying on it. |
 | Wrong syntax in a template | 200, empty string, nothing logged. This is why the diagnostics route exists. |
 
@@ -194,13 +198,18 @@ Do not use it when:
 
 - **The registration route ships unauthenticated.** Anyone who can reach it can
   rewrite any partner's values. Protect it before exposing it.
+- **Stored values are not escaped.** They are copied into the reply as they are.
+  A value with quotes in it, such as `x-tier: gold","admin":"true`, adds fields to
+  that partner's profile. Only let trusted operators register, and check values
+  before they reach the gateway.
 - **A miss and a stored empty string look the same** — both come back as `""`.
   Store a marker value if you need to tell them apart.
 - **Nothing fails closed on an unknown partner.** `fail_action: close` covers store
   errors, not misses.
 - **The 202 is not proof of a write.** Read the value back to confirm one.
 - **Values expire.** They are stored with a 24-hour TTL (86400 seconds); a partner
-  left alone past it silently reverts to the unregistered response.
+  left alone past it silently reverts to the unregistered response. A redeploy or
+  a rollback does not clear them: the store is separate from the API's revisions.
 - **It does not check what partners send.** It changes what the sandbox *answers*,
   not what it accepts. Pair it with `request-validation` if you need that.
 - **No schema, no versioning, no audit trail** of who changed a value.

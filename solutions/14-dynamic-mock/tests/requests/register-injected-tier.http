@@ -1,0 +1,4 @@
+POST {{gateway}}/sandbox/partners
+x-partner-id: hooli-5
+x-tier: gold","admin":"true
+x-settlement-account: GB29-SANDBOX-0005

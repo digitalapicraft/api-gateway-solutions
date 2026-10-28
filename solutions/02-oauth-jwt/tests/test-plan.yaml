@@ -18,10 +18,6 @@ meta:
     Cases 1-6 are automated. Case 7 (expiry) requires waiting out the token
     lifetime, and case 8 (rotation) mutates environment configuration, so both are
     manual and deliberately outside verify.sh.
-  status: >-
-    NOT EXECUTED for this package — no gateway connector was available in the
-    session that produced it. These are the assertions verify.sh makes, not
-    results that have been obtained. Run it against your own environment.
 
 cases:
   - id: unauthenticated

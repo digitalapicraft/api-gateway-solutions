@@ -177,12 +177,13 @@ extras (`request-id`, `cors`) the full spec adds across the API:
    **Map & Deploy**. (The button reads **Map & Deploy** while no upstream is
    mapped yet, and **Deploy** once one is.)
 
-**Changing it later.** A change to the upstream (host, port, scheme) applies to
-the live API straight away, with no new deploy. A change to routes or plugins
-does need one, because a live revision can't be edited: use **Clone Revision**,
-make your change on the copy, then **Force Deploy** it. Rolling back needs no
-copy: click **Deploy**, pick the older revision (for example `r1`), and click
-**Force Deploy**.
+**Changing it later.** A change to the upstream's host or port applies to the
+live API straight away, with no new deploy. A change to its scheme does not:
+undeploy the revision and deploy it again. A change to routes or plugins does
+need one, because a live revision can't be edited: use **Clone Revision**, make
+your change on the copy, then **Force Deploy** it. Rolling back needs no copy:
+click **Deploy**, pick the older revision (for example `r1`), and click **Force
+Deploy**.
 
 That's the whole build: there are no products or apps, because this package has no
 sign-in. When you add [solution 02](../02-oauth-jwt/), its guide covers the
@@ -204,8 +205,8 @@ H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
 #    for get_plugin_config, or query the control plane's plugin-schema endpoint.
 #    Do not assume the field names in this spec.
 
-# 2. Replace <SOAP_HANDLER_PATH> in the spec, then import it. Keep both ids the
-#    response returns.
+# 2. Replace <SOAP_HANDLER_PATH> and <SERVICE_NS> in the spec, then import it.
+#    Keep both ids the response returns.
 curl -s -H "authorization: Bearer $TOKEN" -F "file=@example/api-spec.yaml" \
   "$BASE/orgs/$ORG/apis/from-spec"
 # → {"api":{"id":"<API_ID>", ...}, "revision":{"id":"<REVISION_ID>", ...}}
@@ -224,8 +225,11 @@ curl -s "${H[@]}" -X PATCH "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID
 curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/deploy" \
   -d '{"environmentId":"<TEST_ENV_ID>","force":false}'
 
-# 4. Prove it — including that the body is really converted, not just relabelled
-GATEWAY=https://<YOUR_GATEWAY_HOST> ./example/verify.sh
+# 4. Prove it — including that the body is really converted, not just relabelled.
+#    REQ_BODY is a real envelope for your service, written as JSON.
+GATEWAY=https://<YOUR_GATEWAY_HOST> \
+REQ_BODY='{"soap:Envelope":{"soap:Body":{"m:<Operation>":{"m:<param>":"<value>"}}}}' \
+./example/verify.sh
 ```
 
 > Revisions must be **INACTIVE** to accept a change — otherwise you get `Only

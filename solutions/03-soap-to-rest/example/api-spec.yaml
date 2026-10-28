@@ -38,9 +38,9 @@
 # it BEFORE xml-to-json and relabel the JSON body so it is never converted. At 900
 # it runs AFTER the conversion, so the body is already XML when the content type is
 # set. Without that header a SOAP 1.1 service (.asmx and similar) rejects the
-# call with 415, because the converter sends application/xml. Tested on a live
-# gateway, 2026-10-21. When you add identity (solution 02) it lands in the access
-# phase, ahead of both — so an unauthenticated request costs no transform work.
+# call with 415, because the converter sends application/xml. When you add
+# identity (solution 02), helix-auth runs first, in the rewrite phase (priority
+# 2450), ahead of both — so an unauthenticated request costs no transform work.
 #
 # PLUGIN SCHEMA NOTE
 #   xml-to-json's fields vary by build; confirm with get_plugin_config in YOUR

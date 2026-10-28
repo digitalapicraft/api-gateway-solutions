@@ -189,9 +189,10 @@ adds.
    **Map & Deploy**. (The button reads **Map & Deploy** while no upstream is
    mapped yet, and **Deploy** once one is.)
 
-**Changing it later.** A change to the upstream (host, port, scheme) applies to
-the live API straight away, with no new deploy. A change to routes or plugins
-does need a new deploy, because a live revision can't be edited. Use **Clone
+**Changing it later.** A change to the upstream's host or port applies to the
+live API straight away, with no new deploy. A change to its scheme does not:
+undeploy the revision and deploy it again. A change to routes or plugins does
+need a new deploy, because a live revision can't be edited. Use **Clone
 Revision**, make your change on the copy, then **Force Deploy** it. Rolling back
 needs no copy: click **Deploy**, pick the older revision (for example `r1`), and
 click **Force Deploy**.

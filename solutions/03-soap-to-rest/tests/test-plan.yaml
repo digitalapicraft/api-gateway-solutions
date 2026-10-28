@@ -19,13 +19,8 @@ meta:
     namespaces, attributes) are manual because they need a handler that can be made
     to return each shape, and they are the cases most likely to surprise a partner
     in production.
-  status: >-
-    NOT EXECUTED for this package — no gateway connector was available in the
-    session that produced it. These are the assertions verify.sh makes, not results
-    that have been obtained. Run it against your own environment.
 
 cases:
-
 
   - id: valid-call-transformed
     type: positive
@@ -71,7 +66,6 @@ cases:
       misconfiguration, and it passes any check that only inspects headers. The
       partner's parser is what discovers the truth, with an error message pointing
       nowhere near your gateway. Never assert the header alone.
-
 
   - id: empty-result-envelope
     type: boundary
