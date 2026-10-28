@@ -25,7 +25,7 @@ registration route already protected, as
 | Create the operators product | `POST /api/orgs/{orgId}/products` | `{"name","displayName","apiIds":["<API_ID>"],"quota":{"limit","interval","interval_unit"}}` | Every product needs a quota object. Add this API to no other product: an app on any product that includes it gets through the registration route. |
 | Deploy the product | `POST /api/orgs/{orgId}/envs/{envId}/products/{productId}/deploy` | — | A separate deploy from the API's. An app can only subscribe to a product deployed to its environment. |
 | Create a developer | `POST /api/orgs/{orgId}/developers` | `{"firstName","lastName","email"}` | Returns the developer's id. |
-| Create an operator app | `POST /api/orgs/{orgId}/developers/{developerId}/envs/{envId}/apps` | `{"name","products":{"<PRODUCT_ID>":1},"plugins":{"helix-auth":{}}}` | One per operator. `products` is a `{productId: rank}` map; the empty `helix-auth` object asks the control plane to create the key and secret. The operator sends the key in `X-Admin-Key`. |
+| Create an operator app | `POST /api/orgs/{orgId}/developers/{developerId}/envs/{envId}/apps` | `{"name","displayName","products":{"<PRODUCT_ID>":1},"plugins":{"helix-auth":{}}}` | One per operator. `displayName` is required: without it the call is refused with 400 `Display name is required`. `products` is a `{productId: rank}` map; the empty `helix-auth` object asks the control plane to create the key and secret. The operator sends the key in `X-Admin-Key`. |
 | List APIs (to get `<API_ID>`) | `GET /api/orgs/{orgId}/apis` | — | Find the id of the imported "Partner Documents API" here, if you didn't keep it from the import response. |
 
 **There is no control-plane call for key-value entries** on this build. Entries are

@@ -137,9 +137,14 @@ paths:
             fail_action: close
             fetch:
               keys:
+                # The alias names the fetched value, so the key is published at
+                # ctx.helix.key_value_map.partner_public_key whatever the partner id is.
                 - key: "$request.headers.x-partner-id"
+                  alias: partner_public_key
 
-          # Resolves the SAME reference against the namespace key-value-map wrote.
+          # Reads the key key-value-map just fetched, by its alias. pgp-crypto accepts
+          # only $consumer.<field>, $user.<field> or $ctx.helix.<path> here; a
+          # $request.headers reference is refused when the revision is deployed.
           # keys_ctx_namespace must match key-value-map's ctx_namespace; both are
           # left at the default here so they agree by construction.
           pgp-crypto:
@@ -147,7 +152,7 @@ paths:
             encrypt:
               target: response
               source: body
-              public_key: "$request.headers.x-partner-id"
+              public_key: "$ctx.helix.key_value_map.partner_public_key"
               # No key, no document. fail-open would return the backend's response
               # in the clear to a caller who was supposed to receive ciphertext.
               fail_policy: fail-close

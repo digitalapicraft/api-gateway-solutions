@@ -14,22 +14,25 @@ walkthrough of what it checks and why.
 
 ```bash
 GATEWAY=https://<YOUR_GATEWAY_HOST> \
+ADMIN_KEY=<OPERATOR_KEY> \
 PUBLIC_KEY_FILE=./partner-a-public.asc GNUPGHOME=~/.gnupg-partner-a \
 SECOND_PUBLIC_KEY_FILE=./partner-a-rotated.asc SECOND_GNUPGHOME=~/.gnupg-partner-a2 \
 ./example/verify.sh
 ```
 
-Only `GATEWAY` and `PUBLIC_KEY_FILE` are required. Checks 1–4 need nothing but
+Only `GATEWAY` and `PUBLIC_KEY_FILE` are required by the script itself; on a
+protected build, set `ADMIN_KEY` too (below). Checks 1–4 need nothing but
 bash, curl, base64 and a public key, so they can run in a pipeline that holds no
 private key material. Check 5 runs when `gpg` and `GNUPGHOME` (holding the matching
 private key) are available; check 6 when the `SECOND_*` pair is set too. A skipped
 check is announced, not silently passed.
 
-**The script sends no operator key with its registration requests.** Every build
-in [Guides](guides.md) protects the registration route before it is deployed, so
-there check 2 gets HTTP 401 (not signed in) and the run stops. On a protected
-deployment, make the same calls by hand with the operator's key, as in
-[Guides → See it work](guides.md#see-it-work).
+**Set `ADMIN_KEY` to an operator app's key.** Every build in
+[Guides](guides.md) protects the registration route before it is deployed. The
+script sends `ADMIN_KEY` in `X-Admin-Key` on its registration calls; if you
+renamed that header, set `ADMIN_HEADER` too. Without it, a protected build
+answers the registration check (check 2) with HTTP 401 (not signed in) and the
+run stops.
 
 Exit code 0 means all of these held:
 
@@ -54,7 +57,7 @@ Case 5 is the only check that the *right* key was stored. Storing the wrong key
 produces a response that passes every other case and that the partner cannot read.
 
 Override the defaults with `REGISTER_PATH`, `DOCUMENT_PATH`, `PARTNER_ID`,
-`ABSENT_ID` and `ID_HEADER` if your routes differ.
+`ABSENT_ID`, `ID_HEADER` and `ADMIN_HEADER` if your routes differ.
 
 Raw fixtures, if you want to run one case by hand instead of the whole script:
 [`tests/requests/`](tests/requests/) (the HTTP requests) and

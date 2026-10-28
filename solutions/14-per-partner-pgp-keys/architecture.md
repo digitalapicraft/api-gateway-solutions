@@ -33,6 +33,7 @@ For the full list of fields on every plugin mentioned here, see
 | **Entry** | One stored value, under one key. Here: one partner's armored public key. |
 | **Reference** | A template such as `$request.headers.x-partner-id` that the gateway fills in from the request at the moment it runs. |
 | **Namespace** | Where fetched values are kept for the rest of the request: `ctx.helix.key_value_map` by default. |
+| **Alias** | A fixed name for a fetched value. Here `partner_public_key`, so the partner's key is at `ctx.helix.key_value_map.partner_public_key` whatever the partner id is. |
 | **Operator** | Whoever registers partners' keys. They call the registration route with their app's key in the `X-Admin-Key` header. |
 | **Operators product** | A product that includes this API and that only operator apps subscribe to. It is what turns away every other app's key on the registration route. |
 
@@ -55,28 +56,35 @@ sequenceDiagram
 
     Note over P,UP: Every document request
     P->>GW: GET /partners/documents<br/>X-Partner-Id: acme-bank
-    Note over GW: key-value-map fetch (priority 3001)
+    Note over GW: key-value-map fetch (priority 3001)<br/>key: $request.headers.x-partner-id<br/>alias: partner_public_key
     GW->>KV: read acme-bank
     alt a key is stored
         KV-->>GW: the partner's public key
         GW->>UP: GET /json
         UP-->>GW: 200 plaintext document
-        Note over GW: pgp-crypto (priority 898)<br/>resolves the SAME reference
+        Note over GW: pgp-crypto (priority 898)<br/>reads ctx.helix.key_value_map.partner_public_key
         GW-->>P: 200 text/plain, base64( armored PGP )
     else nothing stored
         GW--xP: 500 — no document, in any form
     end
 ```
 
-**The two plugins agree because they use the identical reference.** On the
-document route, `$request.headers.x-partner-id` appears twice: once to tell
-`key-value-map` which entry to fetch, and once to tell `pgp-crypto` which entry to
-read. That shared string is the whole connection between them, and it is also the
-thing that breaks with no error if one copy is edited.
+**The two plugins agree through the alias.** On the document route,
+`key-value-map` uses `$request.headers.x-partner-id` to pick which entry to fetch,
+and publishes it under the alias `partner_public_key`. `pgp-crypto` then reads it
+from `$ctx.helix.key_value_map.partner_public_key`. It can't read the header
+itself: `pgp-crypto` accepts only a `$ctx.helix.<path>`, `$consumer.<field>` or
+`$user.<field>` reference as its key, and refuses `$request.headers.x-partner-id`
+when the revision is deployed. The alias is the whole connection between the two
+plugins, and it is also the thing that breaks with no error if one side is edited
+without the other.
 
 ## The reference grammar
 
-References are filled in from the request (or response) at run time:
+These are the references `key-value-map` takes for the keys and values it stores
+and fetches. They are filled in from the request (or response) at run time.
+`pgp-crypto`'s `public_key` takes a narrower set, which is why it reads the
+fetched key by its alias ([below](#where-stored-values-land)).
 
 | Reference | Resolves to |
 |---|---|
@@ -101,16 +109,26 @@ When `key-value-map` runs, it publishes values into the namespace for later
 plugins to read:
 
 ```
-fetched   ->  ctx.helix.<ctx_namespace>.<key>            flat
-inserted  ->  ctx.helix.<ctx_namespace>.inserted.<key>   one level down
+fetched   ->  ctx.helix.<ctx_namespace>.<alias, or key>   flat
+inserted  ->  ctx.helix.<ctx_namespace>.inserted.<key>    one level down
 ```
 
-`alias` on a fetched key renames the published field, which is how a value fetched
-under a changing key (a partner id) gets a fixed name a template can refer to.
-[Solution 12](../12-key-value-store/) relies on that. This package's spec does not
-need it, because `pgp-crypto` resolves the same reference itself. A build that
-does name an alias on the fetch, and points `pgp-crypto`'s `public_key` at
-`$ctx.helix.key_value_map.<alias>`, works too.
+`alias` on a fetched key renames the published field: with
+`alias: partner_public_key` the key is at
+`ctx.helix.key_value_map.partner_public_key`. That is how a value fetched under a
+changing key (a partner id) gets a fixed name another plugin can refer to.
+
+This package depends on it. `pgp-crypto`'s `public_key` accepts only a
+`$ctx.helix.<path>`, `$consumer.<field>` or `$user.<field>` reference. So the
+document route's fetch names an alias, and `pgp-crypto` reads
+`$ctx.helix.key_value_map.partner_public_key`. A `$request.headers.x-partner-id`
+in `public_key` is refused at deploy with:
+
+```
+encrypt.public_key: key material reference must be $consumer.<field>, $user.<field>, or $ctx.helix.<path> (got '$request.headers.x-partner-id')
+```
+
+[Solution 12](../12-key-value-store/) uses an alias the same way.
 
 ## Reading a response
 
@@ -150,15 +168,16 @@ plugin in the access phase.
 | 1 | `helix-auth` (rewrite phase, 2450) | registration, added by the protection step | Checks the key in `X-Admin-Key` belongs to an app. No key, or an unknown one: 401. |
 | 2 | `api-product-enforcer` (access phase, raised to 3100) | registration, added by the protection step | Lets through only apps on a product that includes this API: anything else gets 403. Each call uses one request of that product's quota. |
 | 3 | `key-value-map` (access phase, 3001) | both | Registration: writes the key from the request body. Document: fetches the partner's key into the namespace. |
-| 4 | `pgp-crypto` (898) | document | Resolves the same reference against the namespace and encrypts the response to that key. |
+| 4 | `pgp-crypto` (898) | document | Reads the fetched key from `ctx.helix.key_value_map.partner_public_key` and encrypts the response to it. |
 | — | `proxy-rewrite` | both | Rewrites the path to the backend's (`/post`, `/json`). |
 | — | `request-id` | API-wide | Adds `X-Request-Id`, the handle for a disputed failure, since crypto errors are deliberately vague. |
 
 **Why the enforcer's priority is raised.** At its own priority, 2399, the enforcer
-runs in the access phase *after* `key-value-map` (3001). An app that isn't on the
-operators product would then get its 403 only after its key had already been
-stored. Setting `_meta.priority` to `3100` on the enforcer makes the check come
-first. `helix-auth` needs no change: it runs in the earlier rewrite phase.
+runs in the access phase *after* `key-value-map` (3001). Without the raise, an app
+that isn't on the operators product still gets its 403, but its key has already
+been stored, in place of the partner's. So the raise is required, not optional.
+Setting `_meta.priority` to `3100` on the enforcer makes the check come first.
+`helix-auth` needs no change: it runs in the earlier rewrite phase.
 
 ## Where a missing value is decided
 

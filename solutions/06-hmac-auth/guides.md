@@ -300,7 +300,7 @@ curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/developers" \
   | jq -r '.id'                                              # → <DEVELOPER_ID>
 
 curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/developers/<DEVELOPER_ID>/envs/<TEST_ENV_ID>/apps" \
-  -d '{"name":"settlement-partner","products":{"<PRODUCT_ID>":1},"plugins":{"hmac-auth":{}}}'
+  -d '{"name":"settlement-partner","displayName":"Settlement partner","products":{"<PRODUCT_ID>":1},"plugins":{"hmac-auth":{}}}'
 ```
 
 To match a secret a partner already holds, put your own `key_id` and `secret_key`

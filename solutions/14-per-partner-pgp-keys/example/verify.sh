@@ -30,6 +30,10 @@
 #   PARTNER_ID     default verify-partner-a
 #   ABSENT_ID      default verify-partner-absent
 #   ID_HEADER      default X-Partner-Id
+#   ADMIN_KEY      an operator app's key, sent on registration calls. Set it once
+#                  the registration route is protected, as it must be before you
+#                  deploy for real; leave it unset for the route as shipped.
+#   ADMIN_HEADER   default X-Admin-Key
 
 set -uo pipefail
 
@@ -40,6 +44,11 @@ DOCUMENT_PATH="${DOCUMENT_PATH:-/partners/documents}"
 PARTNER_ID="${PARTNER_ID:-verify-partner-a}"
 ABSENT_ID="${ABSENT_ID:-verify-partner-absent}"
 ID_HEADER="${ID_HEADER:-X-Partner-Id}"
+ADMIN_KEY="${ADMIN_KEY:-}"
+ADMIN_HEADER="${ADMIN_HEADER:-X-Admin-Key}"
+# Sent on registration calls only, and only when set. Not an array: bash 3.2.
+ADMIN_HDR="${ADMIN_HEADER}: ${ADMIN_KEY}"
+[ -n "$ADMIN_KEY" ] || ADMIN_HDR="X-No-Admin-Key: 1"
 SECOND_PUBLIC_KEY_FILE="${SECOND_PUBLIC_KEY_FILE:-}"
 SECOND_GNUPGHOME="${SECOND_GNUPGHOME:-}"
 
@@ -90,7 +99,7 @@ fi
 # --- 2: register -------------------------------------------------------------
 echo
 reg_body "$PUBLIC_KEY_FILE" > "$WORK/reg.json"
-status="$(curl -s -o "$WORK/out" -w '%{http_code}' -X POST "$REGISTER_URL" \
+status="$(curl -s -o "$WORK/out" -w '%{http_code}' -X POST "$REGISTER_URL" -H "$ADMIN_HDR" \
   -H "${ID_HEADER}: ${PARTNER_ID}" -H 'content-type: application/json' --data-binary "@$WORK/reg.json")"
 [[ "$status" == "$EXP_REG" ]] \
   && pass "registered a public key for '${PARTNER_ID}'" \
@@ -142,7 +151,7 @@ if [[ -z "$SECOND_PUBLIC_KEY_FILE" || -z "$SECOND_GNUPGHOME" ]]; then
   echo; printf '\033[32mAll runnable checks passed.\033[0m\n'; exit 0
 fi
 reg_body "$SECOND_PUBLIC_KEY_FILE" > "$WORK/reg2.json"
-status="$(curl -s -o /dev/null -w '%{http_code}' -X POST "$REGISTER_URL" \
+status="$(curl -s -o /dev/null -w '%{http_code}' -X POST "$REGISTER_URL" -H "$ADMIN_HDR" \
   -H "${ID_HEADER}: ${PARTNER_ID}" -H 'content-type: application/json' --data-binary "@$WORK/reg2.json")"
 [[ "$status" == "$EXP_REG" ]] || fail "re-registration → ${status} (expected ${EXP_REG})."
 curl -s -o "$WORK/doc2.b64" "$DOCUMENT_URL" -H "${ID_HEADER}: ${PARTNER_ID}"

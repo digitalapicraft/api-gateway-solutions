@@ -25,7 +25,7 @@ can only exist under a product. Creating the app is what creates the `key_id` an
 | Create the product | `POST /api/orgs/{orgId}/products` | The product object in [`example/products.json`](example/products.json): `{"name","displayName","description","apiIds","authMethods":["hmac-auth"],"quota":{"limit","interval","interval_unit"}}` | `authMethods` **must** name `hmac-auth`; it defaults to `["helix-auth"]`. A product with no `quota` is rejected when you create it. |
 | Deploy the product to an environment | `POST /api/orgs/{orgId}/envs/{envId}/products/{productId}/deploy` | — | A separate deploy from the revision's. |
 | Create a developer | `POST /api/orgs/{orgId}/developers` | `{"firstName","lastName","email"}` | Returns the developer's `id`. |
-| Create an app | `POST /api/orgs/{orgId}/developers/{developerId}/envs/{envId}/apps` | `{"name","products":{"<productId>":<rank>},"plugins":{"hmac-auth":{}}}` | An **empty** `{"hmac-auth": {}}` creates `key_id` and `secret_key`. They are returned **once**, in this response. To match a secret a partner already holds, put your own values in that object. One app per integration. |
+| Create an app | `POST /api/orgs/{orgId}/developers/{developerId}/envs/{envId}/apps` | `{"name","displayName","products":{"<productId>":<rank>},"plugins":{"hmac-auth":{}}}` | An **empty** `{"hmac-auth": {}}` creates `key_id` and `secret_key`. They are returned **once**, in this response. To match a secret a partner already holds, put your own values in that object. One app per integration. |
 
 Not fully pinned down here, so check against your org's live schema before you
 script this for real: an upstream's `specification` has many more optional fields

@@ -274,9 +274,9 @@ curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/developers" \
   | jq -r '.id'                                              # → <DEVELOPER_ID>
 
 curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/developers/<DEVELOPER_ID>/envs/<TEST_ENV_ID>/apps" \
-  -d '{"name":"<FREE_APP_NAME>","products":{"<PRODUCT_ID_FREE>":1},"plugins":{"helix-auth":{}}}'
+  -d '{"name":"<FREE_APP_NAME>","displayName":"<FREE_APP_DISPLAY_NAME>","products":{"<PRODUCT_ID_FREE>":1},"plugins":{"helix-auth":{}}}'
 curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/developers/<DEVELOPER_ID>/envs/<TEST_ENV_ID>/apps" \
-  -d '{"name":"<PRO_APP_NAME>","products":{"<PRODUCT_ID_PRO>":1},"plugins":{"helix-auth":{}}}'
+  -d '{"name":"<PRO_APP_NAME>","displayName":"<PRO_APP_DISPLAY_NAME>","products":{"<PRODUCT_ID_PRO>":1},"plugins":{"helix-auth":{}}}'
 
 # 5. More than one gateway node? Set quota_policy to redis in
 #    plugin_attr.api-product-enforcer in the gateway's config.yaml.

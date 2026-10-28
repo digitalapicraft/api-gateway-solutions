@@ -22,7 +22,7 @@ upstream, and the API needs that upstream bound and its revision deployed
 | Create a product | `POST /api/orgs/{orgId}/products` | `{"name","displayName","apiIds","quota":{"limit","interval","interval_unit"}}` | Every product needs a quota object, but this package doesn't enforce it: no route carries `api-product-enforcer`, so the product only gives the app its key. To cap streams per app, add that plugin to each route; it counts each stream as one request. |
 | Deploy the product | `POST /api/orgs/{orgId}/envs/{envId}/products/{productId}/deploy` | — | A different deploy from the revision's. |
 | Create a developer | `POST /api/orgs/{orgId}/developers` | `{"firstName","lastName","email"}` | Returns the developer's `id`. |
-| Create an app | `POST /api/orgs/{orgId}/developers/{developerId}/envs/{envId}/apps` | `{"name","products":{"<productId>":<rank>},"plugins":{"helix-auth":{}}}` | `products` is a `{productId: rank}` map, not an array. The response carries the key clients send as `X-Unit-Key`. |
+| Create an app | `POST /api/orgs/{orgId}/developers/{developerId}/envs/{envId}/apps` | `{"name","displayName","products":{"<productId>":<rank>},"plugins":{"helix-auth":{}}}` | `products` is a `{productId: rank}` map, not an array. The response carries the key clients send as `X-Unit-Key`. |
 | Count connections | `POST /api/orgs/{orgId}/analytics/metrics/requests-count` | `{"dimensions":["api_path"],"filters":[{"column":"api_name","operator":"EQ","value":["<your api>"]}],"excludeTimeUnit":true}` | One row per stream. Use `["app_name"]` to group by caller. |
 | Time connections | `POST /api/orgs/{orgId}/analytics/metrics/response-time` | the same, with aggregation `MAX` | The stream's lifetime in milliseconds, recorded when it closes. |
 

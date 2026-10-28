@@ -39,9 +39,13 @@ When it finishes, read the revision back. Before you trust it, check:
   plural, and never as a fixed value;
 - the registration route stores `$request.body.public_key` under that id, and the
   document route fetches the same id;
-- `pgp-crypto`'s settings sit under `encrypt`, with `fail_policy: fail-close`, and
-  its `public_key` is that same reference, or `$ctx.helix.key_value_map.<alias>`
-  when the fetch names an alias;
+- the document route's fetch names an alias, and `pgp-crypto`'s `public_key` is
+  `$ctx.helix.key_value_map.<that alias>`. If the agent wrote
+  `$request.headers.x-partner-id` there, the deploy fails with
+  `encrypt.public_key: key material reference must be $consumer.<field>, $user.<field>, or $ctx.helix.<path> (got '$request.headers.x-partner-id')`.
+  Change it to the alias form: `alias: partner_public_key` on the fetch, and
+  `public_key: "$ctx.helix.key_value_map.partner_public_key"`;
+- `pgp-crypto`'s settings sit under `encrypt`, with `fail_policy: fail-close`;
 - a partner with no stored key gets HTTP 500 (server error), not the document. The
   message may be the plugin's default, `failed to encrypt response`; that's fine.
 
@@ -111,12 +115,13 @@ If an API with the same name already exists in your org, the import fails with
 >           fetch:
 >             keys:
 >               - key: "$request.headers.x-partner-id"
+>                 alias: partner_public_key
 >         pgp-crypto:
 >           keys_ctx_namespace: key_value_map
 >           encrypt:
 >             target: response
 >             source: body
->             public_key: "$request.headers.x-partner-id"
+>             public_key: "$ctx.helix.key_value_map.partner_public_key"
 >             fail_policy: fail-close
 >             fail_close_status: 500
 >             fail_close_message: "no usable key is registered for this partner"
@@ -181,19 +186,22 @@ On the **`GET /partners/documents`** route (Scope: **Specific endpoint**, that
 route):
 
 1. **`key-value-map` — looks up the calling partner's key.** It fetches the
-   entry stored under the partner id, ready for the next plugin to use.
+   entry stored under the partner id and gives it a fixed name, the alias
+   `partner_public_key`, ready for the next plugin to use whatever the partner id
+   was.
 
    ```json
-   {"fail_action":"close","fetch":{"keys":[{"key":"$request.headers.x-partner-id"}]}}
+   {"fail_action":"close","fetch":{"keys":[{"key":"$request.headers.x-partner-id","alias":"partner_public_key"}]}}
    ```
 
-2. **`pgp-crypto` — encrypts the document to that key.** It uses the same `$`
-   reference as the lookup, so it reads the same partner's key. A partner with no
-   key registered gets HTTP 500 (a server-side error) with a short message, never
-   the document in readable form.
+2. **`pgp-crypto` — encrypts the document to that key.** It reads the key the
+   lookup just fetched, by its alias. It can't read the partner id header itself:
+   its `public_key` takes only a `$ctx.helix.<path>`, `$consumer.<field>` or
+   `$user.<field>` reference. A partner with no key registered gets HTTP 500 (a
+   server-side error) with a short message, never the document in readable form.
 
    ```json
-   {"keys_ctx_namespace":"key_value_map","encrypt":{"target":"response","source":"body","public_key":"$request.headers.x-partner-id","fail_policy":"fail-close","fail_close_status":500,"fail_close_message":"no usable key is registered for this partner"},"max_body_size":1048576}
+   {"keys_ctx_namespace":"key_value_map","encrypt":{"target":"response","source":"body","public_key":"$ctx.helix.key_value_map.partner_public_key","fail_policy":"fail-close","fail_close_status":500,"fail_close_message":"no usable key is registered for this partner"},"max_body_size":1048576}
    ```
 
 3. **`proxy-rewrite` — sends the request to the right backend path.**
@@ -246,10 +254,11 @@ The document route stays as it is.
    {"error_policy":"fail_close","_meta":{"priority":3100}}
    ```
 
-   Keep both settings. With `fail_open` instead of `fail_close`, the plugin would
-   let a refused app through. The priority makes the check run before
-   `key-value-map` writes the key; at its own priority it runs after, so a refused
-   app's key would already be stored by the time it got its 403. Details:
+   Keep both settings; neither is optional. With `fail_open` instead of
+   `fail_close`, the plugin would let a refused app through. The priority makes the
+   check run before `key-value-map` writes the key. Without it the check runs
+   after, so an app that gets 403 still has its key stored, in place of the
+   partner's. Details:
    [Architecture → Execution order](architecture.md#execution-order).
 
 Until step 6 gives an operator a key, every registration is turned away. That is
@@ -401,16 +410,17 @@ curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/developers" \
   | jq -r '.id'                                              # → <DEVELOPER_ID>
 
 curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/developers/<DEVELOPER_ID>/envs/<TEST_ENV_ID>/apps" \
-  -d '{"name":"<OPERATOR_APP_NAME>","products":{"<PRODUCT_ID>":1},"plugins":{"helix-auth":{}}}'
+  -d '{"name":"<OPERATOR_APP_NAME>","displayName":"<OPERATOR_APP_DISPLAY_NAME>","products":{"<PRODUCT_ID>":1},"plugins":{"helix-auth":{}}}'
 
 # 5. Register keys with the operator app's key in X-Admin-Key, and prove it:
 #    see "See it work".
 ```
 
-On an app, `plugins` names the way the app proves who it is. An empty
-`{"helix-auth":{}}` asks the control plane to create the key and secret, like the
-UI's auto-generate option. Check the shape your org's version of the gateway
-expects before you script this for real.
+An app needs a `displayName`: a body without one is refused with HTTP 400 and
+`Display name is required`. On an app, `plugins` names the way the app proves who
+it is. An empty `{"helix-auth":{}}` asks the control plane to create the key and
+secret, like the UI's auto-generate option. Check the shape your org's version of
+the gateway expects before you script this for real.
 
 > Revisions must be **INACTIVE** to accept a spec change. If it's live, undeploy
 > first, or clone the revision so you keep a rollback target.
@@ -496,6 +506,7 @@ To run every check as a script, including rotation:
 
 ```bash
 GATEWAY=https://<YOUR_GATEWAY_HOST> \
+ADMIN_KEY=<OPERATOR_KEY> \
 PUBLIC_KEY_FILE=./partner-a-public.asc GNUPGHOME=~/.gnupg-partner-a \
 SECOND_PUBLIC_KEY_FILE=./partner-a-rotated.asc SECOND_GNUPGHOME=~/.gnupg-partner-a2 \
 ./example/verify.sh
@@ -503,10 +514,11 @@ SECOND_PUBLIC_KEY_FILE=./partner-a-rotated.asc SECOND_GNUPGHOME=~/.gnupg-partner
 
 Exit code 0 means an unregistered partner is refused, a registered one gets
 ciphertext, entries are kept per partner, and re-registering changes the key with
-no deploy. **The script sends no operator key**, so on a protected registration
-route, which every build here has, its registration check gets HTTP 401 and the
-run stops there. Make the calls above by hand instead. What each check proves:
-[Tests](tests.md).
+no deploy. **Set `ADMIN_KEY` to an operator app's key.** The script sends it in
+`X-Admin-Key` on its registration calls; if you renamed that header, set
+`ADMIN_HEADER` too. Without it, a protected build, which every build here is,
+answers the registration check with HTTP 401 and the run stops there. What each
+check proves: [Tests](tests.md).
 
 ## Variations
 
@@ -522,11 +534,12 @@ before `proxy-rewrite` runs, so the check still works:
 
 **Key entries on the authenticated caller.** Put `helix-auth` in front of the
 document route and use `$consumer.<suffix>` instead of
-`$request.headers.x-partner-id` in **both** places on that route. The entry is
-then picked by who the caller is, not by a header they choose. Partners then need
-apps of their own, so move the registration route into an API of its own first:
-an app on any product that includes the API gets through the registration
-route's check.
+`$request.headers.x-partner-id` as that route's fetch key. Keep the alias:
+`pgp-crypto` still reads `$ctx.helix.key_value_map.partner_public_key`, so it needs
+no change. The entry is then picked by who the caller is, not by a header they
+choose. Partners then need apps of their own, so move the registration route into
+an API of its own first: an app on any product that includes the API gets through
+the registration route's check.
 
 **Use a different injecting consumer.** On an organisation that is not on a free
 trial, `lua-callout` can read a stored value and inject it into a proxied call
@@ -574,7 +587,7 @@ api-product-enforcer:
     priority: 3100
 ```
 
-Use — fetch, then let the encryption plugin resolve the same reference:
+Use — fetch the partner's key under an alias, then encrypt to it by that alias:
 
 ```yaml
 key-value-map:
@@ -582,13 +595,14 @@ key-value-map:
   fetch:
     keys:
       - key: "$request.headers.x-partner-id"
+        alias: partner_public_key
 
 pgp-crypto:
   keys_ctx_namespace: key_value_map
   encrypt:
     target: response
     source: body
-    public_key: "$request.headers.x-partner-id"
+    public_key: "$ctx.helix.key_value_map.partner_public_key"
     fail_policy: fail-close
     fail_close_status: 500
     fail_close_message: "no usable key is registered for this partner"
@@ -600,9 +614,10 @@ pgp-crypto:
 | `key-value-map` | `fail_action` | `close` | If the store cannot be reached or written, fail the request. It does not cover a missing key. |
 | `key-value-map` | `inserts[].key` / `.value` | `$request.headers.x-partner-id` / `$request.body.public_key` | Store the body's `public_key` under the partner id. Writing the same id again replaces the value. |
 | `key-value-map` | `fetch.keys[].key` | `$request.headers.x-partner-id` | Fetch the calling partner's entry into the namespace. |
+| `key-value-map` | `fetch.keys[].alias` | `partner_public_key` | Publish the fetched key at `ctx.helix.key_value_map.partner_public_key`, a fixed name whatever the partner id is. Without it `pgp-crypto` has no fixed name to read. |
 | `pgp-crypto` | `keys_ctx_namespace` | `key_value_map` | Where to look up a key reference. Must match `key-value-map`'s `ctx_namespace`; both are left at the default so they agree. |
 | `pgp-crypto` | `encrypt.target` / `encrypt.source` | `response` / `body` | Encrypt the whole response body. |
-| `pgp-crypto` | `encrypt.public_key` | `$request.headers.x-partner-id` | A reference, not a literal key — the same string the fetch used. |
+| `pgp-crypto` | `encrypt.public_key` | `$ctx.helix.key_value_map.partner_public_key` | A reference, not a literal key: the key the fetch published under its alias. Only `$ctx.helix.<path>`, `$consumer.<field>` or `$user.<field>` is accepted here; a `$request.headers` reference is refused at deploy. |
 | `pgp-crypto` | `encrypt.fail_policy` | `fail-close` | No usable key, no document. `fail-open` would return it unencrypted. |
 | `pgp-crypto` | `encrypt.fail_close_status` / `fail_close_message` | `500` / `no usable key is registered for this partner` | What an unregistered partner receives. |
 | `pgp-crypto` | `max_body_size` | `1048576` | The encryption buffers the whole body; larger bodies are rejected. |
@@ -618,18 +633,24 @@ into the configuration document, which is what this package exists to avoid.
 
 Placeholders in this package: `<ORG_ID>`, `<TEST_ENV_ID>`, `<API_ID>`,
 `<REVISION_ID>`, `<UPSTREAM_ID>`, `<PRODUCT_ID>`, `<DEVELOPER_ID>`, `<FIRST_NAME>`,
-`<LAST_NAME>`, `<EMAIL>`, `<OPERATOR_APP_NAME>`, `<OPERATOR_KEY>`,
-`<YOUR_CONTROL_PLANE_API>`, `<YOUR_GATEWAY_HOST>`. Replace all of them before you
-run anything.
+`<LAST_NAME>`, `<EMAIL>`, `<OPERATOR_APP_NAME>`, `<OPERATOR_APP_DISPLAY_NAME>`,
+`<OPERATOR_KEY>`, `<YOUR_CONTROL_PLANE_API>`, `<YOUR_GATEWAY_HOST>`. Replace all
+of them before you run anything.
 
 Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digitalapi.ai/api-gateway).
 
 ## Troubleshooting
 
+- **Deploy or dry-run fails: `encrypt.public_key: key material reference must be $consumer.<field>, $user.<field>, or $ctx.helix.<path> (got '$request.headers.x-partner-id')`.**
+  `pgp-crypto` can't take the partner id header as its key. Give the document
+  route's fetch `alias: partner_public_key`, and set `pgp-crypto`'s `public_key` to
+  `$ctx.helix.key_value_map.partner_public_key`. The agent can write the header
+  there, because the prompt asks for the partner id to be written that way
+  everywhere it appears.
 - **Every partner gets the error.** The reference resolves to nothing. Check
   `headers` is plural, that the client sends the `X-Partner-Id` header, and that
-  `pgp-crypto` points at what the fetch stored: the same reference, or the
-  fetch's alias.
+  `pgp-crypto`'s `public_key` names the fetch's alias:
+  `$ctx.helix.key_value_map.partner_public_key` with `alias: partner_public_key`.
 - **One partner works and the rest fail.** A fixed string was written where a
   reference belongs.
 - **A registered partner gets 200 with the error message in the body.** The
@@ -648,7 +669,8 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
   deployed to the environment.
 - **An app that isn't an operator's gets 403, yet its key was stored.**
   `api-product-enforcer` is at its own priority, so it runs after `key-value-map`
-  has written. Set its `_meta.priority` to `3100`.
+  has written, and the partner's key is overwritten. Set its `_meta.priority` to
+  `3100`.
 - **Anyone can register a key.** The protection isn't on the deployed revision.
   Clone the revision, add the two plugins from
   [step 3 of Build it in the UI](#build-it-in-the-ui), and **Force Deploy** it.
@@ -662,8 +684,9 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
   created a second entry instead of replacing one.
 - **It worked, then stopped after an edit.** `ctx_namespace` and
   `keys_ctx_namespace` no longer match.
-- **`verify.sh` stops at the registration check with 401.** The script sends no
-  operator key. See [See it work](#see-it-work).
+- **`verify.sh` stops at the registration check with 401.** `ADMIN_KEY` isn't set,
+  or isn't an operator app's key. Set it, and set `ADMIN_HEADER` if you renamed the
+  `X-Admin-Key` header. See [See it work](#see-it-work).
 - **Deploy fails: `Only INACTIVE revisions can be updated`.** Clone the revision
   or undeploy, then apply.
 - **`stream closed with reason: error` after an agent route write.** The agent's

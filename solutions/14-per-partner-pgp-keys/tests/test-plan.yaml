@@ -153,10 +153,10 @@ cases:
     expected_outcome: >-
       The reference resolves to nothing, key-value-map fetches nothing, and
       pgp-crypto fails closed — which looks identical to "no key registered". The
-      lookup and the crypto must use the same template; a typo in either is invisible.
+      fetch must use the same template as the registration's insert, and pgp-crypto
+      must read the alias the fetch names; a typo in either is invisible.
     notes: >-
-      Reproduce it once so the symptom is familiar. It is the difference between ten
-      minutes and an afternoon.
+      Reproduce it once so the symptom is familiar.
 
   - id: unauthenticated-registration
     type: failure

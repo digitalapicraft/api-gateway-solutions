@@ -25,7 +25,7 @@ skip them, nothing gives you a clear error.
 | Create a product | `POST /api/orgs/{orgId}/products` | `{"name","displayName","apiIds","quota":{"limit","interval","interval_unit"}}` | Every app needs a product to get its key. Which product isn't checked: a key from any app in the environment is accepted. Every product needs a `quota` (usage limit); this solution does not enforce it. |
 | Deploy a product to an environment | `POST /api/orgs/{orgId}/envs/{envId}/products/{productId}/deploy` | — | This is a separate deploy from the revision's. Creating a product isn't enough. |
 | Create a developer | `POST /api/orgs/{orgId}/developers` | `{"firstName","lastName","email"}` | Returns the developer's `id`. |
-| Create an app | `POST /api/orgs/{orgId}/developers/{developerId}/envs/{envId}/apps` | `{"name","products":{"<productId>":<rank>},"plugins":{"helix-auth":{}}}` | `developerId` and the environment go **in the URL path**, not in the body. An empty `{"helix-auth":{}}` asks the control plane to create the credentials (the app's key and secret). The key is what the caller sends in `X-Device-Key`. **One app per caller.** |
+| Create an app | `POST /api/orgs/{orgId}/developers/{developerId}/envs/{envId}/apps` | `{"name","displayName","products":{"<productId>":<rank>},"plugins":{"helix-auth":{}}}` | `developerId` and the environment go **in the URL path**, not in the body. An empty `{"helix-auth":{}}` asks the control plane to create the credentials (the app's key and secret). The key is what the caller sends in `X-Device-Key`. **One app per caller.** |
 
 Two things are not fully confirmed here. Check them against your org's live
 schema before you script this for real:
