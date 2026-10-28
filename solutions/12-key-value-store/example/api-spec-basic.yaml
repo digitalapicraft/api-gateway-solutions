@@ -1,4 +1,4 @@
-# Solution 14 — per-caller sandbox: the basic example spec.
+# Solution 12 — per-caller sandbox: the basic example spec.
 #
 # Three routes and nothing else: no plugins. Import this when you want to add the
 # plugins yourself in the UI, so you see what each one does. The walkthrough is

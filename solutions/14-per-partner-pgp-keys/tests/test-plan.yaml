@@ -9,7 +9,7 @@
 #   {{UNREGISTERED_PARTNER_ID}}     any id with no key stored
 
 meta:
-  solution: 12-key-value-map
+  solution: 14-per-partner-pgp-keys
   version: 1.0.0
   executor: example/verify.sh
   note: >-

@@ -1,4 +1,4 @@
-# Solution 12 — one route, many partners: fetch the key material per request
+# Solution 14 — one route, many partners: fetch the key material per request
 # instead of writing it into the configuration.
 #
 # This is the importable artifact: an OpenAPI 3.0.3 document carrying

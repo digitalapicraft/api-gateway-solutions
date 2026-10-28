@@ -1,4 +1,4 @@
-# Solution 12 — Key-value map: keep each partner's key as data, not configuration
+# Solution 14 — Per-partner PGP keys: keep each partner's key as data, not configuration
 
 > **Overview** · [Business need](business-need.md) · [Architecture](architecture.md) · [Guides](guides.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [API reference](api-reference.md)
 
@@ -102,7 +102,7 @@ the registration route.
 
 - **[13 — PGP encryption](../13-pgp-encryption/)** — the same encryption with the
   key written into the route. Simpler if you have exactly one partner.
-- **[14 — Dynamic mock](../14-dynamic-mock/)** — the quickest way to see the store
+- **[12 — Key-value store](../12-key-value-store/)** — the quickest way to see the store
   work: it reads stored values back with no encryption at all.
 - **[11 — Service callout](../11-service-callout/)** — when the per-request value
   comes from another service rather than a store.

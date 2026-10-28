@@ -1,4 +1,4 @@
-# Solution 14 — Dynamic mock: a sandbox that answers each partner with their own data
+# Solution 12 — Key-value store: a sandbox that answers each partner with their own data
 
 > **Overview** · [Business need](business-need.md) · [Architecture](architecture.md) · [Guides](guides.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [API reference](api-reference.md)
 
@@ -102,7 +102,7 @@ protect the registration route.
 
 ## Related solutions
 
-- **[12 — Key-value map](../12-key-value-map/)** — the same store, used on a real
+- **[14 — Per-partner PGP keys](../14-per-partner-pgp-keys/)** — the same store, used on a real
   proxied response. Go there when a stored value has to reach your backend, which
   a mock can never do.
 - **[08 — API keys](../08-api-key/)** — what belongs in front of the registration

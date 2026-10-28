@@ -106,7 +106,7 @@ and deploy it.
 
 ## Related solutions
 
-- **[12 — Key-value map](../12-key-value-map/)** — the same encryption with each
+- **[14 — Per-partner PGP keys](../14-per-partner-pgp-keys/)** — the same encryption with each
   partner's key fetched per request. Go there the moment you have a second partner.
 - **[06 — Signed requests](../06-hmac-auth/)** — encryption keeps a message secret;
   it does not prove who sent it. For that you need a signature.

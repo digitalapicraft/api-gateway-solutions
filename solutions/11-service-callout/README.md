@@ -99,7 +99,7 @@ and deploy it.
 
 ## Related solutions
 
-- **[12 — Key-value map](../12-key-value-map/)** — the other way to get
+- **[14 — Per-partner PGP keys](../14-per-partner-pgp-keys/)** — the other way to get
   per-request data into a route, when the value is key material rather than a
   service's answer.
 - **[08 — API keys](../08-api-key/)** — identify the caller first; this package

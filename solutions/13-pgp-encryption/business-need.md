@@ -22,7 +22,7 @@ design:
 
 | | One partner | Many partners |
 |---|---|---|
-| Where the key goes | Written into the route — this package | Fetched per request — [solution 12](../12-key-value-map/) |
+| Where the key goes | Written into the route — this package | Fetched per request — [solution 14](../14-per-partner-pgp-keys/) |
 | Rotating a key | Edit, review, deploy, hard cutover | One request |
 | Keys in configuration documents | One pair | None |
 

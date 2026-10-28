@@ -350,7 +350,7 @@ Copy this, fill in the two blanks, and it is a complete integration brief:
 ## Variations
 
 **More than one partner.** Do not copy this route once per partner with a key pair
-each. Fetch the key per request instead: [solution 12](../12-key-value-map/) does
+each. Fetch the key per request instead: [solution 14](../14-per-partner-pgp-keys/) does
 exactly that and keeps key material out of the spec entirely.
 
 **Put identity in front.** Encrypting to a partner's key does not check who called.
@@ -440,7 +440,7 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
 | The response is a short ciphertext and the rest of the document is gone | `field` was set on the encrypt block. It selects what is returned, not just what is encrypted. |
 | Month-end batch fails, everything else works | The body exceeded `max_body_size`. Raise it deliberately, with the memory cost in mind. |
 | The statement came back readable | `fail_policy` is `fail-open` and encryption failed. |
-| Messages encrypted to the old key fail after a key change | Rotation on a route is a hard cutover. Agree the switch with the partner, or move the key to a store — [solution 12](../12-key-value-map/). |
+| Messages encrypted to the old key fail after a key change | Rotation on a route is a hard cutover. Agree the switch with the partner, or move the key to a store — [solution 14](../14-per-partner-pgp-keys/). |
 | Deploy fails: `Only INACTIVE revisions can be updated` | Clone the revision or undeploy, then apply. |
 
 If you built it with the agent:

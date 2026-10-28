@@ -15,7 +15,7 @@
 # answered by the previous run's stored values — the store outlives the test.
 
 meta:
-  solution: 14-dynamic-mock
+  solution: 12-key-value-store
   version: 1.0.0
   executor: example/verify.sh
   note: >-
@@ -42,7 +42,7 @@ cases:
       this 202 is NOT: an acknowledgement that the insert was configured, not
       proof of a store write. Read the value back to confirm one.
     notes: >-
-      This route ships unauthenticated, exactly like solution 12's registration
+      This route ships unauthenticated, exactly like solution 14's registration
       route. Protecting it is part of adopting this package, not an optional
       extra — anyone who can reach it can rewrite any partner's sandbox.
 

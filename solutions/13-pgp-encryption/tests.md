@@ -65,7 +65,7 @@ Run these in a **throwaway** environment.
 | **Wrong recipient** | A key mismatch looks like success at the gateway. | Configure the encrypt route with a public key the partner does not hold the private half of. Call it and try to decrypt. Expect a well-formed 200 and a decryption failure at the partner. Case 6 is the only automated defence. |
 | **Mismatched pair** | The two directions behave independently once the fields come from different pairs — which a one-pair demo can never show. | Put a public key in the encrypt block whose private half you do **not** hold, leaving `decrypt.private_key` alone. Fetch a statement and post it straight back to the inbound route. The GET returns a well-formed 200; the POST fails with 400. |
 | **Oversized body** | What happens at `max_body_size` before a real file hits it. | Send an encrypted body larger than 1 MiB. It is rejected rather than processed. Raise the limit deliberately, with the memory cost in mind. |
-| **Key rotation** | The rotation procedure, before a partner's key expires. | Replace the key material in the route and deploy a new revision. It is a hard cutover: messages encrypted to the old key fail after the switch. Agree it with the partner, or move the key to a store — [solution 12](../12-key-value-map/). |
+| **Key rotation** | The rotation procedure, before a partner's key expires. | Replace the key material in the route and deploy a new revision. It is a hard cutover: messages encrypted to the old key fail after the switch. Agree it with the partner, or move the key to a store — [solution 14](../14-per-partner-pgp-keys/). |
 
 Full procedures, plus the exact assertions each one makes:
 [`tests/test-plan.yaml`](tests/test-plan.yaml).

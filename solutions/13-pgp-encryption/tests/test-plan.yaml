@@ -168,9 +168,9 @@ cases:
     expected_outcome: >-
       A hard cutover. Messages encrypted to the old key fail after the switch.
       Coordinate it, or move the key material out of the route entirely — see
-      solution 12, where rotation is a data change rather than a deploy.
+      solution 14, where rotation is a data change rather than a deploy.
     notes: >-
-      This limitation is the entire reason solution 12 exists.
+      This limitation is the entire reason solution 14 exists.
 
 coverage:
   positive: [statement-encrypted, inbound-decrypted, statement-round-trip]

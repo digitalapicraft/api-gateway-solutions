@@ -102,7 +102,7 @@ inserted  ->  ctx.helix.<ctx_namespace>.inserted.<key>   one level down
 
 `alias` on a fetched key renames the published field, which is how a value fetched
 under a changing key (a partner id) gets a fixed name a template can refer to.
-[Solution 14](../14-dynamic-mock/) relies on that; this package does not need it,
+[Solution 12](../12-key-value-store/) relies on that; this package does not need it,
 because `pgp-crypto` resolves the same reference itself.
 
 ## Reading a response
@@ -155,7 +155,7 @@ for exactly that reason.
 Seeing a stored value and using it on a real request are different jobs.
 
 - **To see one**, `mocking` reads `ctx.helix.key_value_map` directly, on any plan,
-  with no encryption. That is [solution 14](../14-dynamic-mock/). But `mocking`
+  with no encryption. That is [solution 12](../12-key-value-store/). But `mocking`
   answers the request itself, so it can never pass a stored value on to your
   backend.
 - **To use one on a proxied call**, the consumers are `pgp-crypto` and

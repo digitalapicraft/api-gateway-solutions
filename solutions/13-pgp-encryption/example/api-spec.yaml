@@ -37,7 +37,7 @@
 #     import, and they still sit in the revision you can read back.
 #
 # If you have more than one counterparty, do NOT copy this route N times with N
-# key pairs. Fetch the key per request instead — see solution 12, which keeps key
+# key pairs. Fetch the key per request instead — see solution 14, which keeps key
 # material out of the spec entirely.
 # ############################################################################
 #

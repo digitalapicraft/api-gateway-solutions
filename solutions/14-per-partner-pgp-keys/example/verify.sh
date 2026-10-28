@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Solution 12 — proof that the key is fetched per request, and that rotation is a
+# Solution 14 — proof that the key is fetched per request, and that rotation is a
 # data change rather than a deploy.
 #
 # Exits 0 only if ALL of the following hold:

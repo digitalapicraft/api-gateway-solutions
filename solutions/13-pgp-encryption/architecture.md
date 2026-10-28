@@ -165,7 +165,7 @@ the in-process path does not cover. It uses the gateway's own CPU, and is bounde
 - **Every key is a literal in a document** that somebody could commit.
 
 For one long-lived partner that is acceptable and simple. Past the first partner it
-is the main cost of the design, which is why [solution 12](../12-key-value-map/)
+is the main cost of the design, which is why [solution 14](../14-per-partner-pgp-keys/)
 exists: the same plugin, with the key fetched from a store per request.
 
 ## No custom code needed
@@ -180,7 +180,7 @@ exists: the same plugin, with the key fetched from a store per request.
 | Per-partner keys | A config file it reads | One key pair per route — see above |
 
 The one place a custom service wins is many partners, because it can look a key up
-per request. That exists here too: [solution 12](../12-key-value-map/).
+per request. That exists here too: [solution 14](../14-per-partner-pgp-keys/).
 
 ## When to use this
 
@@ -200,7 +200,7 @@ Do not use it when:
   management for no gain.
 - **you need to prove who sent it.** That is a signature —
   [solution 06](../06-hmac-auth/).
-- **you have many partners.** Use [solution 12](../12-key-value-map/) rather than
+- **you have many partners.** Use [solution 14](../14-per-partner-pgp-keys/) rather than
   many routes with many key pairs.
 - **the payloads are large.** The crypto buffers the whole body and costs CPU per
   request.

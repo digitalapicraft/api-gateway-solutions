@@ -1,5 +1,5 @@
 # =============================================================================
-# 14-dynamic-mock — a sandbox that answers each caller with that caller's own
+# 12-key-value-store — a sandbox that answers each caller with that caller's own
 # values, with no backend behind it and no deploy to change a value.
 #
 # THE IMPORTABLE ARTIFACT IS THIS DOCUMENT. It is both the OpenAPI description
@@ -76,7 +76,7 @@
 #
 # LIMIT OF THE PATTERN: because `mocking` short-circuits, a stored value can be
 # SHOWN but never handed to an upstream. To use one on a real proxied response
-# you need `pgp-crypto` or `lua-callout` — see solution 12.
+# you need `pgp-crypto` or `lua-callout` — see solution 14.
 #
 # NO SECRETS ARE IN THIS FILE. The values are supplied per request by the
 # caller; nothing here is a credential.
