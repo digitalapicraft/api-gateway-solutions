@@ -1,4 +1,4 @@
-# Guides — a bidirectional gRPC stream, authenticated at the edge
+# Guides — a bidirectional gRPC stream, authenticated at the gateway
 
 > [Overview](README.md) · [Business need](business-need.md) · [Architecture](architecture.md) · **Guides** · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [API reference](api-reference.md)
 
@@ -27,13 +27,34 @@ Then, for everyone: [See it work](#see-it-work) · [Variations](#variations) ·
 
 ## Build it with the Helix Agent
 
-[`helix-agent-prompt.md`](helix-agent-prompt.md) has four steps: the upstream, the
-API, the `Ping` route, then bind, deploy and read it back. **Paste each as its own
-message.** The prompt routes `Ping` only; for the streaming methods and schema
-discovery, import [`example/api-spec.yaml`](example/api-spec.yaml) instead.
+The quickest path, about fifteen minutes. One prompt does the whole build:
+[`helix-agent-prompt.md`](helix-agent-prompt.md) has it as three numbered steps.
+Step 1 creates the API in front of your gRPC service, with its method routes and
+schema discovery; Step 2 makes every route require an app's key; Step 3 creates a
+developer, a product and an app, and gives you the key. **Paste the whole thing as
+one message.** The prompt names no plugin, no upstream setting and no header: it
+says what must be true and lets the agent choose the rest. So before you trust it,
+read the stored revision back and check:
 
-See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the ground rules these prompts
-assume.
+- **Both schema-discovery routes are there**, five routes in all:
+  `/grpc.reflection.v1.ServerReflection/ServerReflectionInfo` and
+  `/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo`. A client tries
+  `v1` first and stops if it gets an HTTP 404 (not found), so `v1alpha` alone
+  breaks discovery. Add a missing one by hand, or ask in Step 1 to *"route both
+  the v1 and v1alpha server reflection methods"*.
+- **The method paths are stored exactly as written**, dot included:
+  `/timing.TimingUnit/Ping`.
+- **The upstream bound to the API has scheme `grpc`** (or `grpcs` for a TLS
+  backend). A scheme change doesn't reach a deployed revision: undeploy it, then
+  deploy it again.
+- **`helix-auth` covers every route, stored under its own plugin name** (not as
+  loose fields). Once for the whole API or on each route: both work.
+- **Which header it reads the key from.** The prompt doesn't name one, so it may
+  not be `X-Unit-Key`. Pass it to the checks as `KEY_HEADER`, or name it in Step
+  2, for example *"in the X-Unit-Key metadata"*.
+
+Then run the checks in [See it work](#see-it-work) with the key it gives you. See
+[AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the ground rules this prompt assumes.
 
 ## Build it in the UI
 
@@ -157,8 +178,9 @@ Repeat for each route. What every field means, and the optional extra (`request-
    guide has not confirmed a scheme choice on that screen. If you don't see one,
    create the upstream with the API call in
    [Install it directly](#install-it-directly), step 2, then carry on here.
-2. **Pass Host** is set to **Rewrite**, which makes **Upstream Host** required.
-   It fills in from the node's host; check it matches your gRPC backend.
+2. **Pass Host** starts on **Rewrite**. For gRPC, change it to **Node**, so the
+   gateway passes on your backend node's own host. That matches `pass_host: node`
+   in the API call under [Install it directly](#install-it-directly).
 3. Click **Next** through the remaining tabs, then **Add Upstream**.
 4. Back on the API's page, click **Deploy** on the revision. The dialog asks you
    to map an upstream for `test`. Pick the gRPC upstream you just created, then
@@ -176,16 +198,18 @@ example `r1`), and click **Force Deploy**.
 **4. Create a product for it**
 1. Go to **API Distribution → API Products**, click **Add API Product**.
 2. Under **Basic Information**, set a **Display Name**.
-3. Under **APIs**, click **Add API**, select this API, then **Continue**.
+3. Under **APIs**, click **Add API**, select this API, then **Add (1)**.
 4. Under **Authentication Methods**, leave the default (`helix-auth`).
-5. Under **Quota**, make sure **Enable request quota** is on. It is by default,
-   set to 1000 per 1 hour, so don't click the switch: that turns the quota off,
-   and every product needs one. Set
-   **Request limit**, **Interval** and **Unit** to the allowance you want; here
-   it counts **streams, not messages**. Check the summary line, for example
-   *"Subscribers can make up to 1000 requests per 1 hour"*.
-6. Leave **Quota scope** on **App level**, so every app gets its own allowance.
-   **Developer level** makes all of a developer's apps share one.
+5. Under **Quota**, leave **Enable request quota** on. It is on by default, set
+   to 1000 per 1 hour. Don't click the switch: that turns the quota off, and
+   every product needs one. **This package doesn't enforce the quota.** No route
+   carries `api-product-enforcer`, the plugin that counts each app's calls
+   against its product's quota, so here the product's only job is to give the
+   app its key. To cap how many streams each app opens, see
+   [Variations](#variations).
+6. Leave **Quota scope** on **App level**. Once a quota is enforced, this gives
+   every app its own allowance; **Developer level** makes all of a developer's
+   apps share one.
 7. Click **Create API Product**, then **Deploy** it to `test`.
 
 **5. Create a developer**
@@ -249,8 +273,9 @@ curl -s "${H[@]}" -X PATCH "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID
 curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/deploy" \
   -d '{"environmentId":"<TEST_ENV_ID>","force":false}'
 
-# 4. A product covering the API, deployed. Every product needs a quota object;
-#    here it counts streams, not messages.
+# 4. A product covering the API, deployed. Every product needs a quota object,
+#    but nothing on these routes enforces it (no api-product-enforcer): here the
+#    product only gives the app its key. To cap streams per app, see Variations.
 curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/products" \
   -d '{"name":"timing-units","displayName":"Timing units","apiIds":["<API_ID>"],"quota":{"limit":<LIMIT>,"interval":1,"interval_unit":"minute"}}'
 # → {"id":"<PRODUCT_ID>", ...}
@@ -303,8 +328,13 @@ To run all six checks as a script:
 ```bash
 GATEWAY=<your-gateway-host> \
 UNIT_KEY=<app credential key> \
+KEY_HEADER=<the header your build reads the key from> \
 ./example/verify.sh
 ```
+
+`KEY_HEADER` defaults to `X-Unit-Key`, the spec's header. A build made with the
+Helix Agent picks its own header unless the prompt names one: use that header
+here and in the `grpcurl` calls above.
 
 No `.proto` file is needed — this package routes reflection, so the schema is
 discovered over the connection. `HOLD_SECONDS` defaults to 20. Raise it past the
@@ -357,9 +387,54 @@ or a protoset, and set `PROTOSET` when you run `verify.sh`. Get one from a backe
 that has reflection enabled:
 `grpcurl -plaintext -protoset-out svc.protoset <backend:port> describe <pkg>.<Service>`.
 
-**Metering.** A product quota on this API counts **streams**, not messages. That
-can be exactly what you want for "how many connections may this unit open"; it
-cannot do per-message billing.
+**Cap how many streams each app opens.** This package enforces no quota. A
+product's quota only takes effect on a route that carries `api-product-enforcer`,
+the plugin that counts each app's calls against its product's quota and refuses
+the ones over it. To cap streams per app, add that plugin to each route with the
+**Configure plugin** wizard ([solution 01](../01-api-products/) shows its
+settings), then set the product's **Request limit** and **Unit** to the allowance
+you want. On an API that's already live, use **Clone Revision**, add the plugin to
+the copy, then **Force Deploy** it. One stream is one request to the gateway:
+every check on a route runs once, when the stream opens. So the enforcer counts
+each stream as one request. That can be exactly what you want for "how many
+connections may this unit open", but a million messages on one stream still count
+once, so it can't do per-message billing. This package's tests don't cover this
+setup: check it with your own calls before you rely on it.
+
+**Follow-ups for the Helix Agent.** Paste one of these in the same session, once
+the agent's build is standing. Like the main prompt, each says what you want to be
+true.
+
+**Count connections per unit**
+```text
+Show me how many streams each app opened over the last {{time_window}}, and how
+long the longest one stayed open.
+```
+How to read the numbers: [Measuring connections](architecture.md#measuring-connections).
+
+**Limit how many streams a unit opens**
+```text
+Each unit may open at most {{streams_per_day}} streams a day. Enforce that per
+app, and tell me what a unit sees when it goes over.
+```
+For this, the agent has to add `api-product-enforcer` to the routes and set the
+product's quota. Read the revision back and check that it did. The quota counts
+streams, not messages.
+
+**The service moves to TLS**
+```text
+Our gRPC service now terminates TLS on port {{tls_port}}. Change the API to match
+and tell me what has to be redeployed for it to take effect.
+```
+A scheme change on the upstream doesn't reach a deployed revision until you
+undeploy the revision and deploy it again.
+
+**Only some units may send commands**
+```text
+Only units in the "controllers" group may call /timing.TimingUnit/Commands. The
+others can still Ping and stream Status. Tell me plainly whether the gateway can
+decide that, and how.
+```
 
 ## Configuration reference
 
@@ -392,6 +467,8 @@ helix-auth:
 
 Deliberately **not** in the spec: any plugin that reads or rewrites a body, and any
 CORS block — a gRPC client is not a browser, and grpc-web is a different solution.
+There is no `api-product-enforcer` either, so the product's quota is not enforced:
+see [Variations](#variations) to add it.
 
 Idle streams are governed by the route-level `timeout.read`, which every upstream
 message restarts. Keep any heartbeat interval shorter than it.
@@ -405,20 +482,48 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
 
 ## Troubleshooting
 
-| Symptom | Cause |
-|---|---|
-| Every call returns 502 | The upstream scheme is `http`, or it was changed without an undeploy and deploy. A scheme edit does not reach a deployed revision. |
-| The route never matches | The gRPC method path was "tidied". Restore the dot and the single slash: `/timing.TimingUnit/Ping`. |
-| `Unauthenticated` with a complaint about content type | Working as designed — a gateway 401 is not a valid gRPC response. Check the HTTP status directly with `curl`. |
-| A client cannot discover the service | Route **both** reflection versions. `v1alpha` alone leaves the `v1` attempt on no route, and the client stops rather than falling back. |
-| The stream delivers every message but ends without a gRPC status | Something on the path is dropping HTTP/2 trailers. Every hop between the client and the gateway must speak HTTP/2. `verify.sh` check 4 catches this. |
-| The stream breaks as soon as it carries data | A body-touching plugin is on the route. Remove it. |
-| An idle stream closes on its own | It exceeded the route's read timeout. Send heartbeats more often than that timeout, or raise it. |
-| A revoked app is still connected | Expected. The key is checked once, when the stream opens. The open stream continues until it ends. |
-| A quota allows far more messages than expected | Expected. It counts streams, not messages. |
-| Deploy fails: `Only INACTIVE revisions can be updated` | Clone the revision or undeploy, then apply. |
-| The product can't be undeployed | Apps still subscribe to it. Remove the product from those apps, or delete the apps, then undeploy. |
-
+- **Every call returns 502, or fails with a transport error even with a valid
+  key.** The upstream's scheme is `http` or `https`, not `grpc`; or the scheme was
+  changed without undeploying the revision and deploying it again. A scheme edit
+  does not reach a deployed revision.
+- **The route never matches, or a method you routed returns HTTP 404.** The gRPC
+  method path was changed: a dropped dot, a changed case, or an added leading
+  segment. Paths are matched exactly. Restore the dot and the single slash:
+  `/timing.TimingUnit/Ping`.
+- **`Unauthenticated` with a complaint about content type.** Working as designed:
+  a gateway 401 is not a valid gRPC response. Check the HTTP status directly with
+  `curl`.
+- **A client can't discover the service.** For example, `grpcurl list` fails with
+  a 502 or an HTTP 404 while calls that use a descriptor file work. Route **both**
+  reflection versions: add
+  `/grpc.reflection.v1.ServerReflection/ServerReflectionInfo` if it's missing.
+  `v1alpha` alone leaves the `v1` attempt on no route, and the client stops rather
+  than falling back.
+- **A stream without a key is accepted.** `helix-auth` is missing: it's on neither
+  that route nor the whole API. Check that it's stored under its own plugin name.
+- **HTTP 403 (forbidden) with a valid key.** That refusal comes from
+  `api-product-enforcer`, which this package's spec doesn't carry, so your build
+  has it. The app's product must include this API and be deployed to the
+  environment.
+- **The stream delivers every message but ends without a gRPC status.** Something
+  on the path is dropping HTTP/2 trailers. Every hop between the client and the
+  gateway must speak HTTP/2. `verify.sh` check 4 catches this.
+- **The stream breaks as soon as it carries data.** A plugin that reads or changes
+  the message body is on the route. Remove it.
+- **An idle stream closes on its own.** It went quiet for longer than the route's
+  read timeout (`timeout.read`); each message from the upstream restarts it. Send
+  heartbeats more often than that timeout, or raise it.
+- **A revoked app is still connected.** Expected. The key is checked once, when
+  the stream opens. The open stream continues until it ends; the app's next
+  connection is refused.
+- **A unit opens as many streams as it likes.** Expected: this package enforces
+  no quota. To cap streams per app, add `api-product-enforcer`
+  ([Variations](#variations)). Even then, a unit can send any number of messages
+  on one stream: the quota counts streams, not messages.
+- **Deploy fails: `Only INACTIVE revisions can be updated`.** Clone the revision
+  or undeploy, then apply.
+- **The product can't be undeployed.** Apps still subscribe to it. Remove the
+  product from those apps, or delete the apps, then undeploy.
 - **Use the trace inspector to see each step.** On the API's page, open the
   **Observability** tab and click **Start trace session**. It shows the headers
   each plugin changes and the request body at every stage, which is the fastest

@@ -1,58 +1,31 @@
-# Agent-mode prompt — front a gRPC stream with the gateway
+# Agent-mode prompt — authenticate gRPC streams at the gateway
 
 > [Overview](README.md) · [Business need](business-need.md) · [Architecture](architecture.md) · [Guides](guides.md) · **Agent prompt** · [Tests](tests.md) · [API reference](api-reference.md)
 
 ---
 
-Paste each step to the Helix Agent as its own message, in order, replacing the
-`{{...}}` values: `{{grpc_upstream_host}}` and `{{grpc_upstream_port}}` are your
-gRPC backend's address, and `{{upstream_id}}` is the id the agent gives you in
-Step 1.
-
-These steps route `Ping` only. For the streaming methods and schema discovery,
-import [`example/api-spec.yaml`](example/api-spec.yaml) instead. Always do the
-read-back in Step 4, and see [Troubleshooting](guides.md#troubleshooting) if
-something looks off.
+Paste this to the Helix Agent as one message, replacing the `{{...}}` values.
+Bring a gRPC service the gateway can reach, with server reflection enabled. The
+method paths below are the example timing service's; replace them with your own
+`/<package>.<Service>/<Method>` paths. Why the prompt is worded this way, what the
+agent decides on its own, and what to check before you trust it are in the
+[Guides](guides.md#build-it-with-the-helix-agent).
 
 ## Prompt
 
-### Step 1 — the upstream (this is not in the spec)
-
 ```text
-Create an upstream in my environment called "timing-grpc" whose specification has
-scheme "grpc", type "roundrobin", pass_host "node", and one node with host
-{{grpc_upstream_host}} and port {{grpc_upstream_port}}. Tell me its id.
-```
+Step 1:
+Create an API called "{{api_name}}" in the {{environment}} environment, in front of
+our gRPC service at {{grpc_upstream_host}}:{{grpc_upstream_port}}. Route the
+service's methods /timing.TimingUnit/Ping, /timing.TimingUnit/Status and
+/timing.TimingUnit/Commands exactly as written, plus server reflection so clients
+can discover the service.
 
-### Step 2 — the API
+Step 2:
+Our units hold these streams open for hours. Update every route so a connection
+is accepted only if it carries an app's API key.
 
-```text
-Create an API called "Timing Unit Stream API". Don't add routes or plugins yet —
-just create it and tell me its id.
-```
-
-### Step 3 — the Ping route
-
-```text
-On the Timing Unit Stream API, add a route POST /timing.TimingUnit/Ping with
-exactly one plugin, keeping the plugin-name level explicit — a "plugins" object
-whose key is "helix-auth":
-
-helix-auth:
-  mode: validate
-  validate_auth_type: key-auth
-  apikey:
-    source: header
-    key: X-Unit-Key
-
-The path contains a dot and a slash and is the gRPC method path — do not
-normalise it, do not strip the dot, and do not add a leading segment.
-```
-
-### Step 4 — bind, deploy, and read it back
-
-```text
-Bind upstream {{upstream_id}} to the current revision of the Timing Unit Stream
-API in my environment, then deploy that revision. Then read the revision back and
-show me the plugins stored on each route.
+Step 3:
+Create a developer "{{developer_name}}", a corresponding product and an app to work
+with the above API. Give me the app's API key.
 ```

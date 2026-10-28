@@ -23,13 +23,14 @@
 #     public half. public_key is THEIRS — you never hold its private half. Two
 #     parties, two pairs, four halves. Filling both from one pair makes the two
 #     routes a loop, which is a handy single-party test and is not how it behaves
-#     in production. See the README, "Which key goes where".
+#     in production. See ../architecture.md, "Two parties, four key halves".
 #
 #     If your counterparty also runs this gateway, their spec is this one mirrored:
 #       their decrypt.private_key  = the pair whose public half you put below
 #       their encrypt.public_key   = the public half of YOUR decrypt key
 #     If they do not — the common case — their side is gpg plus the public key you
-#     publish to them. The README carries a fill-in-the-blanks integration note.
+#     publish to them. ../guides.md, "The note to send your partner", is a
+#     fill-in-the-blanks integration note.
 #   - The gateway does NOT resolve <ENV:...> or ${...} in these fields.
 #   - Keep the filled-in spec out of version control. Ship the placeholders.
 #   - The control plane stores these fields encrypted once supplied (they are in
@@ -41,7 +42,7 @@
 # material out of the spec entirely.
 # ############################################################################
 #
-# WIRE FORMAT — THE THING THAT WILL COST YOU AN AFTERNOON
+# WIRE FORMAT — THE THING MOST LIKELY TO BREAK AN INTEGRATION
 #   Both directions use BASE64 OF THE ASCII-ARMORED MESSAGE, not the armor itself.
 #
 #     encrypt (response) : the body is replaced with base64("-----BEGIN PGP MESSAGE-----...")
@@ -49,9 +50,9 @@
 #     decrypt (request)  : the body must ARRIVE base64-encoded. A raw armored body
 #                          beginning "-----BEGIN PGP MESSAGE-----" is REJECTED.
 #
-#   Every PGP tool on earth emits armor. Your counterparty will send armor. Verified
-#   against a gateway: armor in -> fail-close fired; base64(armor) in -> decrypted
-#   cleanly and the plaintext reached the upstream with content-type application/json.
+#   Every PGP tool on earth emits armor. Your counterparty will send armor.
+#   Armor in -> fail-close fires; base64(armor) in -> decrypts cleanly and the
+#   plaintext reaches the upstream with content-type application/json.
 #   Put the base64 step in the integration guide you give them, in bold.
 #
 # ERROR MESSAGES ARE DELIBERATELY GENERIC. A caller sees "failed to encrypt
@@ -61,7 +62,7 @@
 # a crypto failure.
 #
 # `field` ON AN ENCRYPT BLOCK SELECTS WHAT IS RETURNED, NOT JUST WHAT IS ENCRYPTED.
-# Verified: encrypt with field "slideshow.author" returned ONLY the ciphertext of
+# Encrypting with field "slideshow.author" returns ONLY the ciphertext of
 # that value as the entire response body — not the document with one field replaced.
 # If you want the surrounding document intact, encrypt the whole body.
 
@@ -104,8 +105,9 @@ paths:
               target: request
               source: body            # `field` omitted = the whole body
               private_key: "<PGP_PRIVATE_KEY>"
-              # An unprotected key is one less thing to get wrong; a passphrase is
-              # a second literal in this document if you use one.
+              # Empty for an unprotected key. If your key has a passphrase, put it
+              # here: it is a second literal in this document, so the same rule
+              # applies as for the key. Keep the filled-in file out of version control.
               passphrase: ""
               # fail-close is the only defensible choice on an inbound financial
               # message: forwarding ciphertext the backend cannot read, or silently

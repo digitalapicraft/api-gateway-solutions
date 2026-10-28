@@ -1,37 +1,40 @@
-# PGP file exchange without a keyring script in the middle
+# PGP encryption and decryption at the API gateway
 
 > [Overview](README.md) · **Business need** · [Architecture](architecture.md) · [Guides](guides.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [API reference](api-reference.md)
 
 ---
 
-> A partner's contract requires PGP in both directions, so a script on a server
-> decrypts, forwards and re-encrypts. It holds your private key, it is in no
-> pipeline and no monitoring, and nobody owns it.
+> Our settlement partner is a bank. It only accepts PGP-encrypted files, and
+> everything it sends back is encrypted too. In between sits a Python script on a
+> VM with a keyring, written by someone who left in 2022. It isn't in our pipeline
+> or our monitoring, and it pages us at 2am on the last working day of the month.
 >
-> **The problem is not the encryption. It is where the encryption lives.**
+> **Move the crypto onto the gateway the traffic already passes through; the
+> backend keeps handling plaintext.**
 
-- **The keys move off the server** into the control plane, stored encrypted, under
-  the same access control and audit trail as everything else.
-- **The change becomes a revision**: reviewed, dry-run, deployed and rolled back
-  like any other.
-- **Failures become ordinary gateway failures**, on the dashboards you already
-  watch, with a request id the partner can quote.
+- **Where the private key lives: a home directory on a VM → the gateway's
+  configuration**, encrypted at rest, behind the same access control and audit
+  trail as everything else.
+- **A change to the crypto: a manual edit on a server → a reviewed revision**,
+  dry-run, deployed and rolled back like any other route change.
+- **Backend and partner changes: none.** The backend still handles plaintext, and
+  the partner still sends and receives what the contract says.
 
-Neither your backend nor the partner changes. The one decision that shapes the
-design:
+Two keys are involved, and they are not a pair:
 
-| | One partner | Many partners |
+| Direction | The gateway uses | Whose key |
 |---|---|---|
-| Where the key goes | Written into the route — this package | Fetched per request — [solution 14](../14-per-partner-pgp-keys/) |
-| Rotating a key | Edit, review, deploy, hard cutover | One request |
-| Keys in configuration documents | One pair | None |
+| inbound: the partner sends you an encrypted file | your private key, to decrypt | yours; the partner encrypts to its public half |
+| outbound: you send the partner a document | the partner's public key, to encrypt | theirs; you never hold its private half |
 
-The key material in this package is a **literal in the route configuration**: no
-environment-variable lookup, so keep the filled-in file out of version control.
-That is fine for one long-lived partner and does not scale past a few. This is
-confidentiality only — not authentication and not a signature. What it does not
-protect is covered in [Architecture](architecture.md#what-this-does-not-do).
+It holds one key pair per route, so a second counterparty means a second route,
+and rotation is a release. At more than one partner, see
+[14 — Per-partner PGP keys](../14-per-partner-pgp-keys/). The private key is a
+literal in the route, so keep the filled-in configuration out of version control.
+[Before/after, the wire format, and what this does not buy you are in
+Architecture](architecture.md).
 
-*Also searched as: PGP encryption API gateway · OpenPGP decrypt request · encrypt
-API response with partner key · replace PGP script · bank file encryption API ·
-GPG at the edge · encrypted partner file exchange.*
+*Also searched as: PGP encryption at the API gateway · OpenPGP decrypt request
+body · encrypt API responses with PGP · bank file encryption integration · replace
+a PGP script with the gateway · GPG at the edge · encrypted file exchange with a
+partner.*

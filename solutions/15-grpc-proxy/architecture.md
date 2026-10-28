@@ -77,14 +77,22 @@ closes. Nothing runs in between.
 Three consequences:
 
 1. **Authenticating the connection works**, which is the whole point. There is one
-   decision, at the moment the unit connects.
-2. **A product quota counts streams, not messages.** One connection carrying a
-   million messages uses **one** unit. With a limit of 1, five messages on one
-   stream all went through and the *next* stream was rejected. If your commercial
-   model assumes per-message metering, it does not work here, and no setting
-   changes that.
+   decision, at the moment the unit connects. That single check is also what makes
+   the gateway cheap enough to put in front of a connection that lasts hours.
+2. **Anything that counts requests counts streams, not messages.** One connection
+   carrying a million messages counts **once**. A request limit of 1 shows it:
+   five messages on one stream all went through, and the *next* stream was
+   refused. If your commercial model assumes per-message metering, it does not
+   work here, and no setting changes that. **This package itself enforces no
+   quota.** Its routes carry no `api-product-enforcer`, the plugin that counts each
+   app's calls against its product's quota, so the product only gives the app its
+   key. To cap streams per app, add that plugin to each route; it then counts each
+   stream as one request. See [Guides → Variations](guides.md#variations).
 3. **A credential revoked while a stream is open stays effective until that stream
-   ends.** Nothing re-authenticates mid-stream.
+   ends.** Nothing re-authenticates mid-stream; the app's next connection is
+   refused. For hours-long streams, decide on purpose how a revoked client is cut
+   off: a maximum stream lifetime enforced by the service, or a separate way to
+   disconnect it.
 
 ## Reflection: route both versions
 
@@ -130,7 +138,8 @@ That is why this package's two negative tests are plain `curl` calls.
 There is deliberately nothing else. **No plugin that reads or rewrites a body can
 sit on these routes** — `response-rewrite`, `xml-to-json`, `request-validation`,
 `pgp-crypto` and `mocking` all assume a request that ends, and a stream does not.
-There is no CORS block either: a gRPC client is not a browser.
+There is no CORS block either: a gRPC client is not a browser. And there is no
+`api-product-enforcer`, so no product quota is enforced.
 
 ## Idle streams and timeouts
 
@@ -179,6 +188,16 @@ service and keeps connections invisible to the platform. The trade favours the
 gateway for identity and admission, and the service for anything that must act on
 a connection already open.
 
+Before and after:
+
+| | Key check inside each streaming service | Key check at the gateway |
+|---|---|---|
+| **How many implementations** | One per service, each slightly different | One, on the gateway |
+| **Who is connected** | Whatever each service chose to log | An app per stream, in the analytics you already run |
+| **Cutting off one unit** | A code change in the service | Disable its key; its next connection is refused |
+| **How many connections, and how long each stayed open** | Built per service, if at all | `requests-count` and `response-time`, per app, with no extra setup |
+| **Change to your service** | — | None. The stream stays two-way and stays open |
+
 ## When to use this
 
 Use this solution when:
@@ -191,7 +210,8 @@ Use this solution when:
 
 Do not use it when:
 
-- **you need to meter per message.** Quota counts streams.
+- **you need to meter per message.** A quota, once you add the plugin that
+  enforces it, counts streams.
 - **you must cut off a client mid-stream.** Revocation only reaches the next stream.
 - **you need rules that read the messages inside a stream.** The gateway does not
   look inside, and anything that tried would break the stream.
@@ -219,11 +239,14 @@ Do not use it when:
 | Body-touching plugin on the route | The stream breaks. Do not add one. |
 | Upstream scheme changed | No effect until the revision is undeployed and deployed again. |
 | Only `v1alpha` reflection routed | Schema discovery fails; the `v1` attempt gets an HTTP 404. |
+| One app opens many streams | Nothing stops it: this package enforces no quota. Add `api-product-enforcer` to cap streams per app. |
 
 ## What this does not do
 
 - **The spec is half the configuration.** The gRPC upstream is a separate object.
-- **Quota counts streams, not messages.**
+- **It enforces no quota.** The product only gives the app its key. Add
+  `api-product-enforcer` to each route to cap streams per app; it counts streams,
+  not messages.
 - **Authentication is checked once**, so revocation does not reach an open stream.
 - **Gateway rejections are not valid gRPC responses.**
 - **Schema discovery needs both reflection versions routed.**

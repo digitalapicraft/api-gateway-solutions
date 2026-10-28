@@ -1,36 +1,43 @@
-# A per-partner sandbox without a sandbox service
+# A per-partner sandbox from the gateway's key-value store
 
 > [Overview](README.md) · **Business need** · [Architecture](architecture.md) · [Guides](guides.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [API reference](api-reference.md)
 
 ---
 
-> Every partner gets the same canned response from the sandbox, so the partner
-> with an unusual account shape integrates "successfully" and fails in production.
-> Making it dynamic has always meant building and running a service.
+> Every partner integrating with us hits the sandbox first, and every one gets the
+> same fixture back. The partner on a legacy settlement account and the one on a
+> tier with different limits both integrate fine against it, then fail in
+> production. Making the sandbox dynamic always meant a service: an app, a
+> datastore, a pipeline and a pager, for something that exists so other people can
+> test.
 >
-> **Sandbox data should be data, not code.**
+> **Keep each partner's values in the gateway's store and answer from them; no
+> service behind the endpoint.**
 
-- **Integration bugs surface in the sandbox, not production**, because each
-  partner finally sees their own values.
-- **Onboarding or correcting a partner is one request**, effective on the next
-  call — no change request, no review, no deploy.
-- **No service to operate.** The gateway answers every route itself: no container,
-  no datastore, no patching, no on-call for the sandbox.
+- **What a partner sees: the same fixture as everyone → its own values.**
+  Integration bugs surface in the sandbox, not in production.
+- **Adding or correcting a partner: a code change and a deploy → one request.**
+  It takes effect on the next call.
+- **Services to run for the sandbox: one → none.** The gateway answers every route
+  itself.
 
-The trade-off, stated plainly:
+The store can show a value to the caller, or hand it to your backend, and those
+are different packages:
 
-| | A sandbox service | This |
-|---|---|---|
-| Per-partner answers | Yes | Yes |
-| Something to run and patch | An app, a datastore, a pipeline | Nothing beyond the gateway |
-| Can pass a value on to your real backend | Yes | **No** — the mock answers the request itself |
-| Schema, audit trail, guaranteed persistence | Yours to build | None; values expire after a set time |
+| You need the stored value to | Use |
+|---|---|
+| come back in the response: a sandbox, a demo, a per-consumer test double | this package |
+| reach a real backend call: per-partner keys, per-tenant settings | [14 — Per-partner PGP keys](../14-per-partner-pgp-keys/) |
 
-That is the right trade for sandbox data and the wrong one for anything else.
-Nothing confidential belongs in the store, and the registration route has to be
-protected before it is exposed. The full list is in
-[Architecture](architecture.md#what-this-does-not-do).
+It ships with the registration route unauthenticated, and any stored value is
+readable by anyone who sends the matching partner id, so nothing confidential
+belongs in it. Values expire, and there is no schema or audit trail.
+[Before/after](README.md#what-a-key-value-store-gives-you), [the one thing to get
+right](architecture.md#the-two-template-syntaxes), and [what this does not buy
+you](architecture.md#what-this-does-not-do) are on the Overview and Architecture
+pages.
 
-*Also searched as: dynamic API mock · per-tenant sandbox · partner sandbox
-environment · mock API with stored data · contract test double per consumer ·
-API sandbox without backend · stateful mock at the gateway.*
+*Also searched as: key-value store at the API gateway · per-partner sandbox ·
+dynamic mock responses per caller · mock API that differs per client · partner
+sandbox without a backend · store and read values at the gateway · per-tenant test
+data without a deploy.*

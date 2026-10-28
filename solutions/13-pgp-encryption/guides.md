@@ -7,8 +7,12 @@
 Three ways to build the same thing, then how to see it work. Whichever way you
 pick, the result is one API with two routes: `POST /statements/inbound`, which
 decrypts what the partner sends before your backend sees it, and
-`GET /statements/{statementId}`, which encrypts your backend's statement to the
+`GET /statements/:statementId`, which encrypts your backend's statement to the
 partner's key.
+
+**Every path needs the keys first:** your private key, its passphrase if it has
+one, and your partner's public key. [Get the keys](#get-the-keys) shows how to
+make them.
 
 ## Pick your path
 
@@ -21,13 +25,147 @@ partner's key.
 Then, for everyone: [See it work](#see-it-work) · [Variations](#variations) ·
 [Configuration reference](#configuration-reference) · [Troubleshooting](#troubleshooting)
 
+### Get the keys
+
+You need two keys in the configuration: **your private key** (the inbound route
+decrypts with it) and **your partner's public key** (the outbound route encrypts
+to it). You generate the first. The partner sends you the second, and you send
+them your public half in return. If you only want to try the package, the
+[throwaway pair](#try-it-with-throwaway-keys) below stands in for both sides.
+
+**1. Install GnuPG.**
+
+| Platform | Install |
+|---|---|
+| macOS | `brew install gnupg` |
+| Debian, Ubuntu | `sudo apt install gnupg` |
+| Windows | Gpg4win, then use `gpg` from a terminal |
+
+Check it with `gpg --version`.
+
+**2. Make a passphrase.** It protects the private key wherever the key sits:
+your keyring, the exported file, a backup. Generate a random one and keep it in
+your secrets store, because you need it in steps 3, 5 and 6:
+
+```bash
+openssl rand -base64 24
+```
+
+A passphrase is optional. The gateway works with an unprotected key too; then
+leave `decrypt.passphrase` out in step 6.
+
+**3. Generate your key pair.** Use a name and an address that identify the
+integration, not a person:
+
+```bash
+gpg --quick-generate-key "Acme Statements <statements@acme.example>" default default 2y
+```
+
+It asks for the passphrase from step 2. To generate without the prompt, for
+example in a script, pass it in:
+`gpg --batch --pinentry-mode loopback --passphrase "$PGP_PASSPHRASE" --quick-generate-key …`.
+The two `default`s matter: they create an **encryption subkey** alongside the signing key.
+Name an algorithm in their place, such as `rsa3072`, and you get no encryption
+subkey, so nothing can be encrypted to the key.
+
+**4. Check the encryption subkey.**
+
+```bash
+gpg --list-keys statements@acme.example
+```
+
+You need a `sub` line marked **`[E]`** (E for encryption), such as
+`sub   cv25519 <date> [E]`.
+
+**5. Export both halves as ASCII armor.**
+
+```bash
+gpg --armor --export statements@acme.example > acme-public.asc               # send to the partner
+gpg --armor --export-secret-keys statements@acme.example > acme-private.asc  # goes into the gateway
+```
+
+The second command asks for your passphrase. `acme-private.asc` begins with
+`-----BEGIN PGP PRIVATE KEY BLOCK-----`; never send it to anyone.
+
+**6. Put the keys and the passphrase into the routes.** In the console, open each route's
+`pgp-crypto` configuration:
+
+| Field | Paste |
+|---|---|
+| inbound route, `decrypt.private_key` | the whole of `acme-private.asc`, from `-----BEGIN` to `-----END` |
+| inbound route, `decrypt.passphrase` | the passphrase from step 2; leave it out if your key has none |
+| statement route, `encrypt.public_key` | the whole of the partner's public key file |
+
+If you import the spec file instead, put the same values into your copy of it
+before you import: see [Install it directly](#install-it-directly).
+
+Before you paste the partner's key, check that it has an encryption subkey too:
+`gpg --show-keys partner-public.asc` should show a `sub` line marked `[E]`.
+
+**7. Remove the exported private key file** once it is in the gateway:
+`rm acme-private.asc`. The key also stays in your local keyring. Keep it there,
+or in your secrets store with its passphrase, for rotation and recovery.
+
+The gateway can fall back to running `gpg` itself, so any key `gpg` can use
+works. RSA keys (2048 and 3072) and the ed25519/cv25519 pair the command above
+produces both work, with or without a passphrase. If your partner insists on
+RSA, generate with `rsa3072 sign 2y` in step 3, then add the subkey:
+`gpg --quick-add-key <fingerprint> rsa3072 encr 2y`.
+
+#### Try it with throwaway keys
+
+No partner yet? Make both pairs in a temporary keyring, so nothing touches your
+real one. Your pair is protected by a generated passphrase, as the prompt
+expects; the stand-in partner's has none, so the test can decrypt with it
+unattended. Both expire in a day:
+
+```bash
+export GNUPGHOME="$(mktemp -d)"
+export PGP_PASSPHRASE="$(openssl rand -base64 18)"; echo "$PGP_PASSPHRASE"   # -> decrypt.passphrase
+gpg --batch --pinentry-mode loopback --passphrase "$PGP_PASSPHRASE" \
+    --quick-generate-key "Statements Ours <ours@example.test>" default default 1d
+gpg --batch --passphrase '' --quick-generate-key "Bank Partner <partner@example.test>" default default 1d
+gpg --batch --pinentry-mode loopback --passphrase "$PGP_PASSPHRASE" \
+    --armor --export-secret-keys ours@example.test > ours-private.asc   # -> decrypt.private_key
+gpg --armor --export partner@example.test > partner-public.asc          # -> encrypt.public_key
+```
+
+Paste the two files and the printed passphrase into the routes, as in step 6.
+Then run the full test from the same shell, so it can play the partner:
+
+```bash
+GATEWAY=https://<YOUR_GATEWAY_HOST> RECIPIENT=ours@example.test ./example/verify.sh
+```
+
+When you're done: `gpgconf --kill gpg-agent; rm -rf "$GNUPGHOME" ours-private.asc partner-public.asc; unset PGP_PASSPHRASE`.
+
 ## Build it with the Helix Agent
 
 Works on a **fresh, empty org**. [`helix-agent-prompt.md`](helix-agent-prompt.md)
-has three steps: the inbound (decrypt) route, the outbound (encrypt) route, then a
-note for your partner. **Paste each as its own message.** If a step ends with
-`stream closed with reason: error`, retry it once, then import
-[`example/api-spec.yaml`](example/api-spec.yaml) instead.
+is one prompt in two steps: step 1 creates the API and its two routes, step 2
+adds the decryption and encryption. Paste it as one message and replace the
+`{{...}}` values. **Leave `<PGP_PRIVATE_KEY>`, `<PGP_PASSPHRASE>` and
+`<PGP_PUBLIC_KEY>` as written**, or delete the passphrase sentence if your key
+has none. When the routes exist, replace all three in the console with your real
+keys and passphrase, as in [Get the keys](#get-the-keys). Then deploy, and run
+the checks in [See it work](#see-it-work).
+
+Before you trust it, read the revision (the saved version of the API's
+configuration) back and check:
+
+- **Both routes carry `pgp-crypto`:** a `decrypt` block with
+  `fail_close_status: 400` on `POST /statements/inbound`, and an `encrypt` block
+  with `fail_close_status: 500` and **no `field`** on the statement route.
+- **The statement route's path is `/statements/:statementId`**, not
+  `/statements/{statementId}`. The agent can store the second form even though
+  the prompt writes the first. It matches only the literal text `{statementId}`,
+  so every real id gets `404 Route Not Found`, and the dry-run doesn't catch it.
+- **No `<PGP_` placeholder is left.** Both key fields hold your armored keys.
+- **If your private key has a passphrase, `decrypt.passphrase` holds it.** It
+  belongs with the private key on the inbound route; the `encrypt` block has none.
+
+The agent picks its own failure messages and route names. They can differ from
+the spec's, and they don't change the behaviour.
 
 See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the ground rules these prompts
 assume.
@@ -44,9 +182,10 @@ Screen and button names below are the real ones. The API lives under
   `test` environment, which is all this walkthrough needs.
 - **You can create APIs.** If you don't see an **Add API** button, ask your org
   admin.
-- **You have the keys.** Your own armored private key (for inbound) and your
-  partner's armored public key (for outbound). For a first test, one pair can fill
-  both. Which key goes where: [Architecture](architecture.md#two-parties-four-key-halves).
+- **You have the keys.** Your own armored private key (for inbound), its
+  passphrase if it has one, and your partner's armored public key (for outbound).
+  [Get the keys](#get-the-keys) shows how to make them. For a first test, one pair
+  can fill both. Which key goes where: [Architecture](architecture.md#two-parties-four-key-halves).
 
 **1. Create the API**
 
@@ -99,9 +238,9 @@ If an API with the same name already exists in your org, the import fails with
 >
 > [`example/api-spec.yaml`](example/api-spec.yaml) is this API with all its
 > plugins already in place. To use it, copy it and replace `<PGP_PRIVATE_KEY>`
-> and `<PGP_PUBLIC_KEY>` with your real armored key blocks first, then import
-> your copy and you can skip step 2. **Keep the filled-in copy out of version
-> control.**
+> and `<PGP_PUBLIC_KEY>` with your real armored key blocks first. If your private
+> key has a passphrase, put it in `passphrase`. Then import your copy and you can
+> skip step 2. **Keep the filled-in copy out of version control.**
 
 Either way, the API is not live yet: it has no upstream and isn't deployed.
 That comes in step 3.
@@ -125,13 +264,17 @@ plugin**. A short wizard opens:
 
 Run the wizard once for each plugin on each route: four times in all.
 
-**About the keys.** Replace `<PGP_PRIVATE_KEY>` and `<PGP_PUBLIC_KEY>` with the
-whole armored key block, from `-----BEGIN PGP …-----` to `-----END PGP …-----`.
-The gateway uses the value exactly as written: it does not fill in `<ENV:...>` or
-`${...}`, so a placeholder left in place fails when a request arrives. In the
-JSON editor, each line break inside the key is written as `\n`. The two keys are
-not a pair: the private key is yours, the public key is your partner's.
-[Which key goes where](architecture.md#two-parties-four-key-halves).
+**About the keys.** Before you deploy, replace `<PGP_PRIVATE_KEY>` and
+`<PGP_PUBLIC_KEY>` with the whole armored key block, from `-----BEGIN PGP …-----`
+to `-----END PGP …-----`. `passphrase` is empty, for a key without one. If your
+private key has a passphrase, put it there instead (it is the value the agent
+prompt writes as `<PGP_PASSPHRASE>`). The gateway uses each value exactly as
+written: it does not fill in `<ENV:...>` or `${...}`, so a placeholder left in
+place fails when a request arrives. In the JSON editor, each line break inside
+the key is written as `\n`. The two keys are not a pair: the private key is
+yours, the public key is your partner's.
+[Which key goes where](architecture.md#two-parties-four-key-halves). How to make
+them: [Get the keys](#get-the-keys).
 
 On the **`POST /statements/inbound`** route (Scope: **Specific endpoint**, that
 route):
@@ -181,6 +324,11 @@ Repeat for each plugin and route. What every field means, and the optional extra
 [Configuration reference](#configuration-reference).
 
 **3. Give it an upstream, then deploy it**
+
+Before you deploy, check that no `<PGP_` placeholder is left in either route's
+`pgp-crypto` configuration, and that `passphrase` holds your passphrase if your
+key has one.
+
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick environment
    `test`, and add a node at `httpbin.org`, port `443`, scheme HTTPS. If you
    switch the scheme to HTTP, the port stays at `443`: change it to `80` by
@@ -217,9 +365,12 @@ export TOKEN=<control-plane bearer token>      # short-lived
 export BASE=https://<YOUR_CONTROL_PLANE_API>/api
 H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
 
-# 1. Copy the spec, then replace <PGP_PRIVATE_KEY> and <PGP_PUBLIC_KEY> in the copy
-#    with real armored blocks. Do NOT commit the filled-in file.
+# 1. Copy the spec. In the copy, replace <PGP_PRIVATE_KEY> and <PGP_PUBLIC_KEY>
+#    with real armored blocks, and set decrypt.passphrase if your private key has
+#    one (see "Get the keys"). Do NOT commit the filled-in file.
 cp example/api-spec.yaml statements-api.filled.yaml
+#    After editing the copy, check no placeholder is left. This must print nothing:
+grep -nE '^[^#]*<PGP_' statements-api.filled.yaml
 
 # 2. Import the filled-in copy. Keep both ids the response returns.
 curl -s -H "authorization: Bearer $TOKEN" -F "file=@statements-api.filled.yaml" \
@@ -341,21 +492,54 @@ Copy this, fill in the two blanks, and it is a complete integration brief:
 >
 > **Key requirements:** your key must carry an **encryption subkey**. Check with
 > `gpg --list-keys --with-colons <uid> | awk -F: '/^(pub|sub)/{print $1, $12}'` —
-> you need a `sub` row containing `e`. `gpg --quick-generate-key` does **not**
-> produce one; use `gpg --quick-add-key <fpr> rsa3072 encr never` to add it.
+> you need a `sub` row containing `e`. `gpg --quick-generate-key "<uid>" default
+> default 2y` creates one; naming an algorithm such as `rsa3072` in place of the
+> first `default` does not. Add one with `gpg --quick-add-key <fpr> rsa3072 encr 2y`.
 >
 > **On failure** you will get a 400 with a generic message — the reason is in our
 > logs, not your response. Quote the `X-Request-Id` header and we will look.
 
 ## Variations
 
-**More than one partner.** Do not copy this route once per partner with a key pair
-each. Fetch the key per request instead: [solution 14](../14-per-partner-pgp-keys/) does
-exactly that and keeps key material out of the spec entirely.
+Follow-ups for the same agent session, once the build is standing. Same style as
+the prompt: say what you want to be true.
 
-**Put identity in front.** Encrypting to a partner's key does not check who called.
-Add authentication to both routes, as in [solution 08](../08-api-key/), and keep
-the crypto as it is.
+**Write the note for the partner**
+```text
+Write me the integration note to send our bank partner. Both directions carry
+base64 of the ASCII-armored message, not the armor itself, and a raw armored body
+is refused. Include a worked example of encrypting a file and base64-encoding it
+before the POST.
+```
+Or start from ours: [The note to send your partner](#the-note-to-send-your-partner).
+
+**A second partner**
+```text
+We're adding a second bank, {{second_partner_name}}, with its own key pair. Tell me
+what this design costs at two partners and at twenty, and show me the version that
+picks the key per partner instead.
+```
+Do not copy this route once per partner with a key pair each. Fetch the key per
+request instead: [solution 14](../14-per-partner-pgp-keys/) does exactly that and
+keeps key material out of the spec entirely.
+
+**Rotate our private key**
+```text
+Our private key is being rotated on {{rotation_date}}. Tell me what happens to
+messages the partner encrypted to the old key, and the order to do the change in.
+```
+Changing the key on a route is a hard cutover: messages encrypted to the old key
+fail after the switch, so agree the date with the partner.
+
+**Only callers we know**
+```text
+Require an app's API key in the X-Api-Key header on both routes, and keep the
+crypto exactly as it is. Then create a developer, a product and an app, and give me
+the key.
+```
+Encrypting to a partner's key does not check who called. This puts identity in
+front of both routes, as in [solution 08](../08-api-key/), and keeps the crypto as
+it is.
 
 **Encrypt one field only.** Not available in the way it sounds: `field` on an
 encrypt block returns **only** that field's ciphertext as the whole response body.
@@ -402,7 +586,7 @@ pgp-crypto:
 |---|---|---|---|
 | `pgp-crypto` | `decrypt.target` / `decrypt.source` | `request` / `body` | Decrypt the whole request body before the backend sees it. |
 | `pgp-crypto` | `decrypt.private_key` | `<PGP_PRIVATE_KEY>` | **Your** armored private key, used verbatim. |
-| `pgp-crypto` | `decrypt.passphrase` | `""` | The key is assumed unprotected. A passphrase is a second literal in the document. |
+| `pgp-crypto` | `decrypt.passphrase` | `""` | Empty for an unprotected key. If your key has a passphrase, put it here: it is a second literal in the document, so keep the filled-in file out of version control. A missing or wrong passphrase makes every inbound request fail with 400. |
 | `pgp-crypto` | `decrypt.fail_policy` / `fail_close_status` | `fail-close` / `400` | Refuse a body that cannot be decrypted; the backend is not called. |
 | `pgp-crypto` | `encrypt.target` / `encrypt.source` | `response` / `body` | Encrypt the whole response body. Do not set `field`. |
 | `pgp-crypto` | `encrypt.public_key` | `<PGP_PUBLIC_KEY>` | **Your partner's** armored public key, used verbatim. |
@@ -412,47 +596,76 @@ pgp-crypto:
 | `proxy-rewrite` | `uri` | `/post` (inbound), `/json` (outbound) | The backend's paths. |
 | `request-id` | `algorithm` / `header_name` | `uuid` / `X-Request-Id` | API-wide. Errors are vague; this is what a partner quotes. |
 
-> **`private_key` and `public_key` are used verbatim.** The gateway does not
-> resolve `<ENV:...>` or `${...}`. Replace the placeholders with real armored
-> blocks before deploying, and keep the filled-in spec out of version control. The
-> control plane stores these fields encrypted once supplied, but they still travel
-> in the document you import and still sit in the revision you can read back.
+> **`private_key` and `public_key` are used verbatim, and so is `passphrase`.**
+> The gateway does not resolve `<ENV:...>` or `${...}`. Replace the placeholders
+> with real armored blocks before deploying, and keep the filled-in spec out of
+> version control. The control plane stores these fields encrypted once supplied,
+> but they still travel in the document you import and still sit in the revision
+> you can read back.
 
 This is the same kind of risk as `signing_secret` in
 [solution 02](../02-oauth-jwt/), and worse: a private key outlives a signing secret
 and is usually shared with a partner.
 
-Placeholders in this package: `<PGP_PRIVATE_KEY>`, `<PGP_PUBLIC_KEY>`, `<ORG_ID>`,
-`<TEST_ENV_ID>`, `<API_ID>`, `<REVISION_ID>`, `<UPSTREAM_ID>`,
-`<YOUR_GATEWAY_HOST>`. Replace all of them before you deploy.
+Placeholders in this package: `<PGP_PRIVATE_KEY>`, `<PGP_PUBLIC_KEY>`,
+`<PGP_PASSPHRASE>` (the agent prompt only; the spec ships `passphrase` empty),
+`<ORG_ID>`, `<TEST_ENV_ID>`, `<API_ID>`, `<REVISION_ID>`, `<UPSTREAM_ID>`,
+`<YOUR_CONTROL_PLANE_API>`, `<YOUR_GATEWAY_HOST>`. Replace all of them before you
+deploy.
 
 Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digitalapi.ai/api-gateway).
 
 ## Troubleshooting
 
-| Symptom | Cause |
-|---|---|
-| Every inbound request is rejected, and the partner insists the file is valid | They are sending raw armor. The body must be base64 *of* the armor. The error does not say so. |
-| 400 on inbound, no further detail | Correct: errors are vague on purpose. The reason is in the gateway's telemetry; ask for the `X-Request-Id`. |
-| 500 on the statement route | The response could not be encrypted — usually a public key that cannot be read. |
-| 200 with an error message in the body | A key that is present but unusable — an OpenPGP key with no encryption subkey, which is what `gpg --quick-generate-key` produces. Assert on the body, not the status. |
-| The partner cannot decrypt a response that looks perfect | Encrypted to the wrong public key. Nothing at the gateway shows this; only a round-trip test finds it. |
-| The response is a short ciphertext and the rest of the document is gone | `field` was set on the encrypt block. It selects what is returned, not just what is encrypted. |
-| Month-end batch fails, everything else works | The body exceeded `max_body_size`. Raise it deliberately, with the memory cost in mind. |
-| The statement came back readable | `fail_policy` is `fail-open` and encryption failed. |
-| Messages encrypted to the old key fail after a key change | Rotation on a route is a hard cutover. Agree the switch with the partner, or move the key to a store — [solution 14](../14-per-partner-pgp-keys/). |
-| Deploy fails: `Only INACTIVE revisions can be updated` | Clone the revision or undeploy, then apply. |
-
-If you built it with the agent:
-
-| Symptom | Cause |
-|---|---|
-| `stream closed with reason: error` after a route write | The agent's tool arguments arrived malformed; nothing was written. Retry once, then import the spec for the rest. |
-| The agent writes `pgp-crypto` flat, with no `encrypt`/`decrypt` wrapper | Reply: it's nested — show me the route object as JSON before sending. |
-| The agent offers to generate a key pair | Decline. Use the placeholder; supply the real key yourself. |
-| The agent sets `field` on the encrypt block | Reply: remove it — it returns only that field's ciphertext and throws the document away. |
-| The write succeeds and the routes have no plugins | Nested under `x-helix-gateway`. Read the revision back and rewrite with a top-level `plugins` key. |
-
+- **Every inbound request is refused with 400, even a correctly encrypted one.**
+  The partner is sending raw armor: the body must be base64 *of* the armor, and
+  the error does not say so. Or the placeholder is still in `private_key`. Or the
+  key is passphrase-protected and `decrypt.passphrase` is missing or wrong.
+- **A 400 on inbound, with no further detail.** That is expected: errors are vague
+  on purpose. The reason is in the gateway's telemetry; ask for the
+  `X-Request-Id`.
+- **Every statement request returns 500.** The response could not be encrypted.
+  The placeholder is still in `public_key`, or the public key can't be read.
+- **A 500, or a 200 with an error message in the body.** The public key may have
+  no encryption subkey, which is what `gpg --quick-generate-key` makes when you
+  name an algorithm such as `rsa3072`. Such a key can't be encrypted to, and the
+  failure can come back either way, so check the body, not just the status. [Get the keys](#get-the-keys) shows how to
+  check for the subkey.
+- **The partner cannot decrypt a response that looks perfect.** It was encrypted
+  to the wrong public key. Nothing at the gateway shows this; only a round-trip
+  test finds it.
+- **The response is a short ciphertext and the rest of the document is gone.**
+  `field` was set on the encrypt block. It selects what is returned, not just
+  what is encrypted. Remove it, or ask the agent to.
+- **A statement comes back readable.** `fail_policy` is `fail-open` on the
+  encrypt block, and encryption failed. Set `fail-close`.
+- **The month-end batch fails, and everything else works.** The body exceeded
+  `max_body_size`. Raise it deliberately, with the memory cost in mind.
+- **Messages encrypted to the old key fail after a key change.** Changing the key
+  on a route is a hard cutover. Agree the switch with the partner, or move the
+  key to a store: [solution 14](../14-per-partner-pgp-keys/).
+- **Deploy fails: `Only INACTIVE revisions can be updated`.** Clone the revision
+  or undeploy, then apply.
+- **`GET /statements/<id>` returns `404 Route Not Found`, and the inbound route
+  works.** The agent stored the path as `/statements/{statementId}`. Change it to
+  `/statements/:statementId`.
+- **The agent says the gateway has no PGP plugin, and offers JWE or a backend
+  change.** It didn't look `pgp-crypto` up. Keep the sentence in the prompt that
+  names it, or import the spec.
+- **A route write fails, or the session drops, and no route is stored.** The keys
+  were pasted into the prompt, and the write was too large to send. Use the
+  placeholders.
+- **A route write ends in `stream closed with reason: error`.** The agent's tool
+  arguments arrived malformed, and nothing was written. Retry once, then import
+  the spec.
+- **The agent writes `pgp-crypto` flat, with no `encrypt` or `decrypt` block.**
+  Reply: "it's nested — show me the route object as JSON before sending."
+- **The agent offers to generate a key pair.** Decline. Keep the placeholders,
+  and paste your real keys in the console yourself.
+- **The routes exist with no plugins, though the agent reported success.** The
+  agent wrapped the plugins in `x-helix-gateway` inside the live route object,
+  which a live route silently discards. Read the revision back, and rewrite them
+  under a top-level `plugins` key.
 - **Use the trace inspector to see each step.** On the API's page, open the
   **Observability** tab and click **Start trace session**. It shows the headers
   each plugin changes and the request body at every stage, which is the fastest

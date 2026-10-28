@@ -1,71 +1,32 @@
-# Agent-mode prompt — build the per-caller sandbox
+# Agent-mode prompt — a per-partner sandbox from the key-value store
 
 > [Overview](README.md) · [Business need](business-need.md) · [Architecture](architecture.md) · [Guides](guides.md) · **Agent prompt** · [Tests](tests.md) · [API reference](api-reference.md)
 
 ---
 
-Paste each step to the Helix Agent as its own message, in order: create the API,
-add the registration route, add the read route, then read the revision back. One
-ask per step keeps each write small enough to land.
-
-The last step is not optional: three of the four known agent-mode defects report
-success at every step the agent shows you. See
+Paste this to the Helix Agent as one message, replacing the `{{...}}` values. It
+starts from a fresh, empty org: the gateway answers every route itself, so you need
+no backend. What to check before you trust it is in
+[Guides](guides.md#build-it-with-the-helix-agent). See
 [Troubleshooting](guides.md#troubleshooting) if something looks off.
 
 ## Prompt
 
-### Step 1 — create the API
-
 ```text
-Create an API called "Partner Sandbox API" in my organisation. Don't add any
-routes or plugins yet — just create the API and tell me its id.
-```
+Step 1:
+Create a REST API called "{{api_name}}" in the {{environment}} environment, proxying
+https://httpbin.org. Two routes: POST /sandbox/partners and GET /sandbox/profile.
+The gateway answers both itself; nothing reaches the upstream. Keep my paths.
 
-### Step 2 — the registration route
-
-```text
-On the Partner Sandbox API, add a route POST /sandbox/partners. Give it exactly
-two plugins, and keep the plugin-name level explicit — a "plugins" object whose
-keys are "key-value-map" and "mocking".
-
-key-value-map:
-  fail_action: close
-  inserts:
-    - key: "tier:$request.headers.x-partner-id"
-      value: "$request.headers.x-tier"
-      ttl: 86400
-
-mocking:
-  response_status: 202
-  content_type: application/json
-  response_example: {"registered":true}
-```
-
-### Step 3 — the read route
-
-```text
-On the same API, add a route GET /sandbox/profile with exactly two plugins,
-"key-value-map" and "mocking":
-
-key-value-map:
-  fail_action: close
-  fetch:
-    keys:
-      - key: "tier:$request.headers.x-partner-id"
-        alias: tier
-
-mocking:
-  content_type: application/json
-  response_example: {"tier":"$ctx.helix.key_value_map.tier"}
-
-The $ctx reference is literal text — do not rewrite it, do not add braces around
-it, and do not "correct" it to ${ctx...}. The braces break it.
-```
-
-### Step 4 — read the revision back
-
-```text
-Read back the current revision of the Partner Sandbox API and show me the plugins
-stored on each route, so I can confirm both routes carry key-value-map AND
-mocking under their own plugin names.
+Step 2:
+This is a partner sandbox: each partner gets its own values back, and changing
+them must not need a deploy. Update the routes so that:
+- POST /sandbox/partners stores the X-Tier and X-Settlement-Account header values
+  for the partner named in the X-Partner-Id header, for one day, replacing
+  anything stored for that partner before, and answers 202 with
+  {"registered":true}.
+- GET /sandbox/profile answers 200 with the calling partner's id and its stored
+  values: {"partner": ..., "tier": ..., "settlement": ...}. A partner with nothing
+  stored gets the same shape with empty values.
+- each partner sees only its own values.
 ```

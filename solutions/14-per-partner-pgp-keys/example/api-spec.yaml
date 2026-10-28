@@ -126,7 +126,7 @@ paths:
             text/plain:
               schema:
                 type: string
-        '500': { description: No key for this partner, or the stored key is unusable }
+        '500': { description: "No key stored for this partner. A stored key that cannot encrypt returns 200 with the error in the body." }
       x-helix-gateway:
         plugins:
           # Runs first (priority 3001) and populates ctx.helix.key_value_map.

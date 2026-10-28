@@ -1,10 +1,11 @@
-# Solution 12 — Key-value store: a sandbox that answers each partner with their own data
+# Solution 12 — Key-value store: a sandbox that answers every partner with its own values
 
 > **Overview** · [Business need](business-need.md) · [Architecture](architecture.md) · [Guides](guides.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [API reference](api-reference.md)
 
-**In short:** run a partner sandbox with no backend behind it, where every partner
-gets their own answers, and where adding or changing a partner is a single request
-instead of a deploy.
+**In short:** keep each partner's values in the gateway's key-value store and
+answer from them. You get a partner sandbox with no backend behind it, where every
+partner gets their own answers, and where adding or changing a partner is a single
+request instead of a deploy.
 
 | | |
 |---|---|
@@ -14,19 +15,23 @@ instead of a deploy.
 
 ---
 
-## What is a dynamic mock?
+## What is a key-value store?
 
-A **mock** is a route that answers on its own, without calling a real backend.
-Sandboxes often use one so partners have something to integrate against. A plain
-mock gives everyone the same fixed answer.
+A **key-value store** keeps small values, each saved under a name called its
+**key**, so they can be looked up later. The gateway has one of its own. Here each
+partner's values are saved under keys made from that partner's id, such as
+`tier:acme-42`.
 
-A **dynamic mock** builds its answer per request from stored values. Here the
-gateway keeps a small store of values per partner, and the mock reads the calling
-partner's values when it builds the response.
+The routes in this package answer on their own, without calling a real backend.
+A route like that is called a **mock**, and sandboxes often use one so partners
+have something to integrate against. A plain mock gives everyone the same fixed
+answer. These routes look up the calling partner's values in the store and build
+the answer from them, so every partner gets their own. You may see this called a
+*dynamic mock*.
 
 Think of a hotel's welcome letter. A plain mock is a printed letter that says
-"Dear Guest". A dynamic mock is a mail-merge: the same letter, but each guest's own
-name and room number are filled in from the register.
+"Dear Guest". This is a mail-merge: the same letter, but each guest's own name and
+room number are filled in from the register.
 
 ## The use case
 
@@ -42,7 +47,7 @@ and something else to keep running. For an endpoint that exists only so partners
 can test against it, that is a lot to operate, so most teams keep the canned
 response and absorb the bugs.
 
-## What a dynamic mock gives you
+## What a key-value store gives you
 
 - **Per-partner answers from one route.** The partner id on the request picks the
   values.

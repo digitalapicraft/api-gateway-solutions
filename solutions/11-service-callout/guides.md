@@ -22,10 +22,28 @@ Then, for everyone: [See it work](#see-it-work) · [Variations](#variations) ·
 
 ## Build it with the Helix Agent
 
-Works on a **fresh, empty org**. [`helix-agent-prompt.md`](helix-agent-prompt.md)
-has two steps: Step 1 creates the API, the read route and the lookup, Step 2 adds
-the write route. **Paste Step 1, check the result, then paste Step 2** in the same
-chat.
+Works on a **fresh, empty org**: the backend echoes the headers it receives, and
+a public sample service stands in for your profile service.
+[`helix-agent-prompt.md`](helix-agent-prompt.md) has two steps: Step 1 creates the
+API and both routes, Step 2 adds the profile lookup and the headers to both.
+**Paste the whole prompt as one message**, replacing the `{{...}}` values, then
+run the checks in [See it work](#see-it-work).
+
+**Before you trust it, check** what was stored in the revision, not what the
+agent said:
+
+- Both routes carry `service-callout` with **`phase: rewrite`**. In `access` the
+  lookup finishes too late: the backend gets no headers, and nothing errors.
+- Its `map_response_to_ctx` takes the plan from `body.company.name`, the contact
+  from `body.email`, and the lookup's own `status`. The agent picks its own names
+  for these fields; any names work.
+- `proxy-rewrite` uses **`headers.set`**, not `add`, and each header reads the
+  literal `${ctx.helix.service_callout.<field>}`, dots included, with a `<field>`
+  that `map_response_to_ctx` defines.
+- `GET /storefront/orders` is `fail-open`. `POST /storefront/checkout` is
+  `fail-close` with the message `tenant profile unavailable`.
+- The agent may leave out the 3000 ms `timeout` and the API-wide `request-id`
+  that this package's spec carries. Add them if you want the same result.
 
 See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the ground rules these prompts
 assume.
@@ -340,34 +358,35 @@ wrong-phase cases need a deliberately broken route: [Tests](tests.md).
 
 ## Variations
 
-Each of these is a follow-up you can paste to the agent after step 2.
+Each of these is a follow-up you can paste to the agent in the same chat, once
+the build is working. Like the prompt, each says what you want to be true.
 
 **Point it at my real profile service**
 ```text
-Change the callout uri to {{callout_uri}} and
-forward the caller's authorization header to it with forwarded_headers. Then tell
-me what the profile service now has to handle that it didn't before.
+Fetch the profile from {{callout_uri}} instead, and pass the caller's
+Authorization header through to it. Then tell me what the profile service now has
+to handle that it didn't before.
 ```
 
 **The answer should decide whether the request is allowed**
 ```text
-I don't just want the plan as a header — I want to REJECT callers whose account is
-suspended. Tell me plainly whether service-callout can do that, and if not, show me
-the forward-auth version of this route instead.
+I want to refuse callers whose account is suspended, not just pass the plan on.
+Tell me plainly whether this lookup can do that, and if not, show me the version of
+this route that can.
 ```
 
 **Cut the cost of the callout**
 ```text
-This adds a round trip to every request. Show me what caching the callout response
-would look like, what the invalidation story is, and be honest about whether it's
-worth it at {{requests_per_second}} requests per second.
+This adds a round trip to every request. Show me what caching the lookup would
+look like, what the invalidation story is, and whether it is worth it at
+{{requests_per_second}} requests per second.
 ```
 
 **Identify the caller first** — that's [solution 08](../08-api-key/).
 ```text
-Add API-key authentication to both routes with helix-auth validate,
-validate_auth_type key-auth, reading the key from X-Api-Key, and keep the callout
-exactly as it is.
+Require an app's API key in the X-Api-Key header on both routes, and keep the
+lookup exactly as it is. Then create a developer, a product and an app, and give me
+the key.
 ```
 
 ## Configuration reference
@@ -434,11 +453,26 @@ Every field of every plugin, and the wider product docs:
 
 ## Troubleshooting
 
-- **`phase: access` silently does nothing.** It must be `rewrite`. 200, no
-  headers, no error. Phase beats priority.
-- **The variable name is literal**, dots and all:
-  `${ctx.helix.<ctx_namespace>.<field>}`. Change `ctx_namespace` and every
-  reference changes.
+- **200, but no enrichment headers at the backend.** The lookup is in
+  `phase: access`; it must be `rewrite`. Phase beats priority, and nothing
+  errors. A lookup that failed under `fail-open` looks the same.
+- **200, no enrichment headers, and a caller's own `X-Tenant-Plan` reaches the
+  backend.** Nothing writes the headers: the lookup stores the profile and no
+  plugin reads it. Add `proxy-rewrite` with `headers.set` reading
+  `${ctx.helix.<ctx_namespace>.<field>}`, and put the lookup in `phase: rewrite`.
+- **No headers on reads, 503 on every write, and a `lua-callout` on the
+  routes.** The agent built its own mechanism, and its code reads fields the
+  lookup never stored: the namespace holds only the names in
+  `map_response_to_ctx`. Replace it with this package's design: `service-callout`
+  in `phase: rewrite`, and `proxy-rewrite` with `headers.set`.
+- **The headers are missing or empty though the lookup worked.** The variable
+  name is literal, dots and all: `${ctx.helix.<ctx_namespace>.<field>}`, and
+  `<field>` must be a name `map_response_to_ctx` defines. Change
+  `ctx_namespace` and every reference changes.
+- **The routes exist but carry no plugins.** The agent put them under
+  `x-helix-gateway` inside the live route, which a live route drops without an
+  error. On a live route, plugins go in a top-level `plugins` map, each under
+  its own name.
 - **A mapped path that matches nothing is not an error.** A typo is invisible until
   a backend notices.
 - **`set`, not `add`** — or callers can assert their own values.
@@ -448,8 +482,10 @@ Every field of every plugin, and the wider product docs:
   Choose the number; don't inherit it.
 - **Keep `keepalive` on.** Without it every request pays a fresh TCP and TLS
   handshake to the profile service.
-- **It is per route, not per API.** A route added later gets no enrichment, and
-  the symptom is a missing header rather than an error.
+- **One route works and the other doesn't.** The lookup is set per route, not
+  per API, so check each route has its own `service-callout` and
+  `proxy-rewrite`. A route added later gets no enrichment either, and the
+  symptom is a missing header rather than an error.
 - **This is not an authorization decision.** `service-callout` stores an answer;
   it doesn't act on it. To *reject* based on the answer, use `forward-auth` or
   `opa`.
@@ -458,6 +494,8 @@ Every field of every plugin, and the wider product docs:
 - **503 on every request** under `fail-close` means the profile service can't be
   reached **from the gateway**. Test the URI from the gateway's network, not your
   laptop.
+- **`Only INACTIVE revisions can be updated`.** A live revision can't be
+  changed. Clone the revision or undeploy it, then apply the change.
 - **Confirm `service-callout` exists in your org** before you design around it.
 - **Use the trace inspector to see each step.** On the API's page, open the
   **Observability** tab and click **Start trace session**. It shows the headers

@@ -57,7 +57,7 @@ cases:
       worse.
       DO NOT TREAT THIS STATUS AS EVIDENCE THE VALUE LANDED. key-value-map inserts
       in the access phase, BEFORE proxying, so the status belongs to the upstream
-      echo. Observed during validation: a 502 from the echo with the key stored
+      echo. A 502 from the echo can come back with the key stored
       anyway. Read the value back instead.
 
   - id: document-encrypted
@@ -108,8 +108,8 @@ cases:
       Register key A, fetch a document, decrypt it with A. Register key B under the
       SAME partner id. Fetch again.
     expected_outcome: >-
-      The second document decrypts with B and NOT with A. Verified during this
-      package's validation run. No deploy, no revision, no route change.
+      The second document decrypts with B and NOT with A. No deploy, no revision,
+      no route change.
     notes: >-
       verify.sh automates this when SECOND_PUBLIC_KEY_FILE and SECOND_GNUPGHOME are
       set. Run it once per environment: it is the claim the whole solution rests on.
@@ -124,20 +124,18 @@ cases:
     type_of_execution: manual
     procedure: >-
       1) Generate a key with NO encryption subkey — `gpg --quick-generate-key
-      "$UID" rsa3072` does exactly this, and adding `default never` does not change
+      <uid> rsa3072` does exactly this, and adding `default never` does not change
       it. 2) Register it under a fresh partner id. 3) Fetch a document for that id.
       4) Confirm with
-      `gpg --list-keys --with-colons "$UID" | awk -F: '/^(pub|sub)/{print $1, $12}'`
+      `gpg --list-keys --with-colons <uid> | awk -F: '/^(pub|sub)/{print $1, $12}'`
       that there is no `sub` row carrying `e`.
     expected_outcome: >-
       200, with body {"message":"no usable key is registered for this partner"} —
-      the same body an UNREGISTERED partner gets with a 500. Verified during this
-      package's validation run against freshly generated sign-only and usable keys,
-      and reproduced a third time against a key an operator had registered by hand.
+      the same body an UNREGISTERED partner gets with a 500.
     notes: >-
-      This is the likely real-world trigger, not an edge case: gpg's quick-generate
-      path yields a signing key, so a partner following the obvious instructions
-      sends you one. Repair with
+      This is the likely real-world trigger, not an edge case: naming an algorithm
+      (`gpg --quick-generate-key <uid> rsa3072`) yields a signing-only key, so a
+      partner following common instructions can send you one. Repair with
       `gpg --quick-add-key <fpr> rsa3072 encr never` and RE-REGISTER — the stored
       copy stays broken until overwritten.
       Assert on the BODY in every test on this route. The automated fetch case above

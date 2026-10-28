@@ -140,7 +140,7 @@ cases:
       Worth running once, because it is the only way to see the two directions
       behave independently. While a single pair fills both fields the two can never
       disagree, so the round trip passes by construction and proves less than it
-      appears to. See the README, "Which key goes where".
+      appears to. See architecture.md, "Two parties, four key halves".
 
   - id: oversized-body
     type: boundary

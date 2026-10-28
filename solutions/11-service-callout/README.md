@@ -63,6 +63,8 @@ contract moves, and that many times the traffic on the profile service.
 - **Less load on the profile service**: one call per request, not one per service
   per request.
 
+None of these are measured savings: this package claims no figures.
+
 ## Example
 
 A client calls `GET /storefront/orders`. The gateway calls the profile service

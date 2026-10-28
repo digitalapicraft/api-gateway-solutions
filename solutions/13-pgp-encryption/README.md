@@ -10,7 +10,7 @@ partner has to change, and no script on a server holds your keys.
 |---|---|
 | **Time to try it** | About 20 minutes |
 | **Difficulty** | 🟡 Intermediate — you supply a key pair |
-| **What you'll need** | A free test account (its default `test` environment) and an OpenPGP key pair. The upstream echoes requests, so you can see the decrypted text without a backend of your own. |
+| **What you'll need** | A free test account (its default `test` environment) and an OpenPGP key pair ([how to make one](guides.md#get-the-keys)). The upstream echoes requests, so you can see the decrypted text without a backend of your own. |
 
 ---
 
@@ -86,10 +86,11 @@ One format detail catches everyone: the file travels as **base64 of the
 ASCII-armored message**, not the armored message itself, in both directions. Tell
 your partner that up front. [How →](guides.md#the-note-to-send-your-partner)
 
-**Setting this up in the gateway's UI takes three short steps:** create the API
-(from scratch, or from an OpenAPI spec), add the plugins that decrypt what
-arrives and encrypt what leaves, with your keys in them, then give it an upstream
-and deploy it.
+**Setting this up in the gateway's UI takes three short steps,** once you
+[have the keys](guides.md#get-the-keys): create the API (from scratch, or from an
+OpenAPI spec), add the plugins that decrypt what arrives and encrypt what leaves,
+with your keys (and your private key's passphrase, if it has one) in them, then
+give it an upstream and deploy it.
 [Full click-by-click walkthrough →](guides.md#build-it-in-the-ui)
 
 [Build it any of three ways, then see it work →](guides.md)

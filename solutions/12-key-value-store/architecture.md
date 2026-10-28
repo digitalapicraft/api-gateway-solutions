@@ -1,4 +1,4 @@
-# Architecture — per-caller values composed at the edge
+# Architecture — per-caller values composed at the gateway
 
 > [Overview](README.md) · [Business need](business-need.md) · **Architecture** · [Guides](guides.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [API reference](api-reference.md)
 

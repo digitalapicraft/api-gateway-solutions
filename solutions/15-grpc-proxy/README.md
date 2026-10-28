@@ -60,7 +60,8 @@ stream open for hours — is a connection your platform cannot see:
   each service.
 - **One check instead of many.** The check that admits a unit is the same one that
   admits any API caller, against the same credentials.
-- **Cutting off a misbehaving client is an admin action**, not a deploy.
+- **Cutting off a misbehaving client is an admin action**, not a deploy: disable
+  its key and its next connection is refused.
 - **Long-lived connections become visible**: how many, and how long each stayed
   open, attributed to the app that opened it.
 
@@ -80,9 +81,14 @@ Afterwards, the analytics show one request per stream, and a response time equal
 how long the stream stayed open.
 
 Two things to know before you build on this: **one stream counts as one request**,
-so a quota counts connections, not messages; and **a refusal is a plain HTTP
-response**, which gRPC clients report as a confusing transport error.
-[Why →](architecture.md#one-stream-is-one-request)
+so anything that counts requests counts connections, not messages; and **a refusal
+is a plain HTTP response**, which gRPC clients report as a confusing transport
+error. [Why →](architecture.md#one-stream-is-one-request)
+
+This package checks keys but **enforces no quota**: the product only gives each
+app its key. To cap how many streams an app opens, add `api-product-enforcer` to
+each route, and it counts each stream as one request.
+[How →](guides.md#variations)
 
 **Setting this up in the gateway's UI takes seven short steps:** create the API
 (from scratch, or from an OpenAPI spec), add the plugin that checks each caller's
@@ -108,6 +114,7 @@ create a product, a developer and an app, and copy the app's key.
 - **[08 — API keys](../08-api-key/)** — the same `helix-auth` key check on ordinary
   HTTP routes.
 - **[01 — API Products](../01-api-products/)** — the product, developer and app
-  model the key comes from, and what a quota counts.
+  model the key comes from, and `api-product-enforcer`, the plugin that enforces
+  a product's quota.
 - **[04 — Analytics](../04-analytics/)** — the analytics that report stream counts
   and durations here.

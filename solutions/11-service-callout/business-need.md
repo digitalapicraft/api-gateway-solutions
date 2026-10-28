@@ -1,36 +1,39 @@
-# API request enrichment with a gateway service callout
+# Enrich requests from a lookup service, at the API gateway
 
 > [Overview](README.md) · **Business need** · [Architecture](architecture.md) · [Guides](guides.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [API reference](api-reference.md)
 
 ---
 
-> Every service starts the same way: call the customer-profile service to find
-> the caller's plan and account status. One caches it for five minutes, one for an
-> hour, one not at all. One retries, one carries on, one fails the request. When
-> the profile service changes a field name, the seventh copy of the call is found
-> by an incident, not by the search.
+> Every service starts the same way: call the customer-profile service, find out
+> what plan the tenant is on, then do the actual work. Orders caches it for five
+> minutes, billing for an hour, and notifications not at all, which is why profile
+> gets paged. When the field name changed last quarter, the seventh copy of that
+> call turned up in a service nobody had touched since 2023.
 >
-> **It isn't one lookup written several times. It's several different systems
-> that happen to call the same endpoint.**
+> **Make the call once, before the request is proxied, and hand the answer to the
+> backend as headers.**
 
-- **One call, one cache, one timeout**, configured where the traffic is, instead
-  of inherited from whoever wrote each service.
-- **One failure policy per route, chosen on purpose.** A read can carry on without
-  the answer; a write shouldn't. Those are business decisions, now visible in one
-  file.
-- **New services start with the answer.** They read a header instead of building
-  the lookup first — the part that pays for the work.
+- **Copies of the lookup: one per service → one, in configuration.** A new service
+  reads a header instead of building the call first.
+- **Failure behaviour: whatever each team chose → one policy per route, written
+  down.** Reads can proceed without the answer; writes can refuse.
+- **Calls on the profile service: one per service per request → one per request.**
 
-| Before | After |
-|---|---|
-| The lookup is built into every service | Once, in configuration |
-| Failure behaviour varies and is undocumented | Fail-open on reads, fail-close on writes |
-| The profile service takes one call per service per request | One call per request |
+The policy is the decision that matters, and it is made per route:
 
-No figures here are measured savings; they are the reasoning. It isn't an
-authorization decision, and it consolidates the dependency rather than removing
-it. [What it does not do is in Architecture](architecture.md#what-it-does-not-do).
+| If the lookup fails on… | Choose | The caller gets |
+|---|---|---|
+| a read, where acting without the answer is survivable | fail-open | a 200, and the backend gets no enrichment headers |
+| a write, where acting without it is worse than failing | fail-close | a 503, and the backend is never called |
 
-*Also searched as: API request enrichment · gateway service callout · add
-headers from external service · call another API before proxying · tenant
-context header · API gateway lookup · upstream header injection.*
+It fetches an answer; it doesn't decide whether a caller is allowed. The
+dependency is consolidated, not removed: one synchronous call stays in the request
+path, and nothing is cached unless you add it. [Before/after](README.md#benefits),
+[the two settings that make it work](architecture.md#the-two-settings-that-make-this-work),
+and [what this does not buy you](architecture.md#what-it-does-not-do) are on the
+Overview and Architecture pages.
+
+*Also searched as: service callout at the API gateway · enrich requests with data
+from another service · inject headers from a lookup · request enrichment before
+proxying · call an external service in the gateway · tenant context headers ·
+remove a shared lookup from every microservice.*

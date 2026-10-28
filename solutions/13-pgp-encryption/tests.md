@@ -28,6 +28,10 @@ the round trip is skipped and announced, not silently passed. Override the paths
 with `READ_PATH` (default `/statements/2024-Q1`) and `WRITE_PATH` (default
 `/statements/inbound`).
 
+If you made the [throwaway keys](guides.md#try-it-with-throwaway-keys), run it
+from the same shell with `RECIPIENT=ours@example.test`: that shell already points
+`GNUPGHOME` at the temporary keyring, which holds both sides.
+
 Exit code 0 means all of these held:
 
 | # | Case | Expected |

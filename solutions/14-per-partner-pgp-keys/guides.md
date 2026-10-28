@@ -9,6 +9,13 @@ pick, the result is one API with two routes: `POST /partners/keys`, which stores
 partner's public key, and `GET /partners/documents`, which encrypts the backend's
 response to whichever partner is asking.
 
+**Every path includes one step you must not skip: protect the registration route
+before you deploy.** The spec and the agent prompt leave `POST /partners/keys`
+open. Anyone who can reach an open one can register their own key under any
+partner's id, and that partner's documents are then encrypted to them. The step
+puts two plugins on that one route, `helix-auth` and `api-product-enforcer`, and an
+operators-only product behind them, so only your operators' apps get through.
+
 ## Pick your path
 
 | | Choose this if you… | Go to |
@@ -23,8 +30,26 @@ Then, for everyone: [See it work](#see-it-work) · [Variations](#variations) ·
 ## Build it with the Helix Agent
 
 Works on a **fresh, empty org**. [`helix-agent-prompt.md`](helix-agent-prompt.md)
-has two steps: the registration route first, then the document route. **Paste each
-as its own message.**
+has the whole build as one prompt with two steps: the routes, then the store and
+the encryption. Paste it as one message and replace the `{{...}}` values.
+
+When it finishes, read the revision back. Before you trust it, check:
+
+- both routes write the partner id as `$request.headers.x-partner-id`, `headers`
+  plural, and never as a fixed value;
+- the registration route stores `$request.body.public_key` under that id, and the
+  document route fetches the same id;
+- `pgp-crypto`'s settings sit under `encrypt`, with `fail_policy: fail-close`, and
+  its `public_key` is that same reference, or `$ctx.helix.key_value_map.<alias>`
+  when the fetch names an alias;
+- a partner with no stored key gets HTTP 500 (server error), not the document. The
+  message may be the plugin's default, `failed to encrypt response`; that's fine.
+
+**Then, before you deploy, protect the registration route.** The prompt doesn't.
+Add the two plugins from [step 3 of Build it in the UI](#build-it-in-the-ui) to the
+revision the agent built, deploy it, and carry on from step 5. If the agent has
+already deployed, the route is open now: clone the revision, add the plugins to the
+copy, and **Force Deploy** it straight away.
 
 See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the ground rules these prompts
 assume.
@@ -32,15 +57,16 @@ assume.
 ## Build it in the UI
 
 Screen and button names below are the real ones. The API lives under
-**API Gateway** in the left sidebar.
+**API Gateway** in the left sidebar; products, developers and apps live under
+**API Distribution**.
 
 **Before you start:**
 
 - **You have an account.** If you don't, register for a free trial at
   [trial.digitalapi.ai](https://trial.digitalapi.ai/). A new trial org comes with a
   `test` environment, which is all this walkthrough needs.
-- **You can create APIs.** If you don't see an **Add API** button, ask your org
-  admin.
+- **You can create APIs, products and apps.** If you don't see an **Add API**
+  button, ask your org admin.
 - **You have an OpenPGP public key with an encryption subkey** to register. How to
   check one: [See it work](#see-it-work).
 
@@ -99,10 +125,11 @@ If an API with the same name already exists in your org, the import fails with
 >
 > [`example/api-spec.yaml`](example/api-spec.yaml) is this API with all its
 > plugins already in place, and nothing in it needs filling in. Import that
-> instead and you can skip step 2.
+> instead and you can skip step 2. **Step 3 still applies:** that spec leaves the
+> registration route open.
 
 Either way, the API is not live yet: it has no upstream and isn't deployed.
-That comes in step 3.
+That comes in step 4.
 
 **2. Add the plugins**
 
@@ -161,9 +188,9 @@ route):
    ```
 
 2. **`pgp-crypto` — encrypts the document to that key.** It uses the same `$`
-   reference as the lookup, so it reads the same partner's key. If no usable key
-   is registered for the partner, the caller gets HTTP 500 (a server-side error)
-   with a short message, never the document in readable form.
+   reference as the lookup, so it reads the same partner's key. A partner with no
+   key registered gets HTTP 500 (a server-side error) with a short message, never
+   the document in readable form.
 
    ```json
    {"keys_ctx_namespace":"key_value_map","encrypt":{"target":"response","source":"body","public_key":"$request.headers.x-partner-id","fail_policy":"fail-close","fail_close_status":500,"fail_close_message":"no usable key is registered for this partner"},"max_body_size":1048576}
@@ -182,7 +209,53 @@ route):
 Repeat for each plugin and route. What every field means, and the optional extra (`request-id`) the full spec adds:
 [Configuration reference](#configuration-reference).
 
-**3. Give it an upstream, then deploy it**
+**3. Protect the registration route (required, before you deploy)**
+
+As built so far, anyone who can reach `POST /partners/keys` can register a key
+under any partner's id. Add two more plugins to that route only, with the same
+wizard (Scope: **Specific endpoint**, `POST /partners/keys`). Do this whichever way
+you created the API: neither example spec, and not the agent prompt, carries it.
+The document route stays as it is.
+
+1. **`helix-auth` — checks the caller's app key.** It reads the key from the
+   `X-Admin-Key` header and looks up which app it belongs to. No key, or a key that
+   belongs to no app, gets HTTP 401 (not signed in), and nothing is stored.
+
+   | Field | Value |
+   |---|---|
+   | **mode** | `validate` |
+   | **validate_auth_type** | `key-auth` |
+   | **apikey → source** | `header` |
+   | **apikey → key** | `X-Admin-Key` |
+
+   ```json
+   {"mode":"validate","validate_auth_type":"key-auth","apikey":{"source":"header","key":"X-Admin-Key"}}
+   ```
+
+   **apikey → source** is required. Until it is filled in, the wizard shows
+   `apikey.source: Missing required field` and won't let you continue. There is
+   no key to type in here: the keys live on the apps you create in step 6.
+
+2. **`api-product-enforcer` — lets only operator apps through.** `helix-auth` on
+   its own accepts the key of any app in the environment, whatever product that
+   app is on. This plugin lets through only apps on a product that includes this
+   API, and answers every other app with HTTP 403 (not allowed). In step 5 you
+   create that product for your operators alone.
+
+   ```json
+   {"error_policy":"fail_close","_meta":{"priority":3100}}
+   ```
+
+   Keep both settings. With `fail_open` instead of `fail_close`, the plugin would
+   let a refused app through. The priority makes the check run before
+   `key-value-map` writes the key; at its own priority it runs after, so a refused
+   app's key would already be stored by the time it got its 403. Details:
+   [Architecture → Execution order](architecture.md#execution-order).
+
+Until step 6 gives an operator a key, every registration is turned away. That is
+the safe state to deploy in.
+
+**4. Give it an upstream, then deploy it**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick environment
    `test`, and add a node at `httpbin.org`, port `443`, scheme HTTPS. If you
    switch the scheme to HTTP, the port stays at `443`: change it to `80` by
@@ -203,23 +276,90 @@ your change on the copy, then **Force Deploy** it. Rolling back needs no copy:
 click **Deploy**, pick the older revision (for example `r1`), and click **Force
 Deploy**.
 
-**4. Register a partner's key**
+**5. Create the operators product, and deploy it**
+1. Go to **API Distribution → API Products**, click **Add API Product**.
+2. Under **Basic Information**, set a **Display Name**, for example
+   `Partner key operators`.
+3. Under **APIs**, click **Add API**. In the **Add APIs** dialog, tick
+   `Partner Documents API`, then click **Add (1)**.
+4. Under **Authentication Methods**, leave it blank. It defaults to `helix-auth`,
+   which is what the registration route checks.
+5. Under **Quota**, make sure **Enable request quota** is on. It is by default,
+   set to 1000 per 1 hour, so don't click the switch: that turns the quota off,
+   and every product needs one. Each registration uses one request of it, so the
+   default is plenty.
+6. Leave **Quota scope** on **App level**.
+7. Click **Create API Product**.
+8. On the product's page, click **Deploy**, pick `test`, then **Deploy** again.
+   This is a different deploy from step 4. Do it before step 6: an app can only
+   pick products already deployed to its environment.
+
+**Add this API to no other product.** An app on any product that includes it
+gets through the registration route's check.
+
+**6. Give each operator an app, and copy its key**
+1. Go to **API Distribution → Developers**, click **Add Developer**, fill in the
+   name and email, then **Add**.
+2. Go to **API Distribution → Apps**, click **Add App**. Fill in **Display Name**,
+   for example `key-operator`. Pick the **Environment** and the **Developer**, add
+   the operators product, pick an authentication method and let credentials
+   auto-generate, then **Create App**. If the product list says **No products
+   found.**, the product isn't deployed to that environment yet: go back to
+   step 5.
+3. On the app's **Overview** tab, find the **Authentication** card. It shows
+   `helix-auth` with a key and a secret, both hidden, each with a show and a copy
+   button. Copy the **key**: that's what the operator sends in the `X-Admin-Key`
+   header. It is the credential key, not the app's id and not its secret.
+
+Give each operator their own app, so you can switch one off without the others.
+**Generate New Credentials**, in the same card, stops the old key within seconds
+and keeps the app's history.
+
+**7. Register a partner's key**
 
 There is no screen for this, and no control-plane API either: on this build, the
 registration route is the only way to write an entry. Send the request from
-[See it work](#see-it-work).
-
-**5. Protect the registration route before real use**
-
-As shipped it is open to anyone who can reach it. Add authentication to
-`/partners/keys` only, as in [solution 08](../08-api-key/), and restrict it to
-operators.
+[See it work](#see-it-work), with the operator's key.
 
 ## Install it directly
 
 To script it, call the control plane instead. `BASE` is the API address the
 portal calls (it usually starts with `api-`), not the portal page and not the
-gateway's address:
+gateway's address.
+
+**First, protect the registration route in your own copy of the spec.**
+[`example/api-spec.yaml`](example/api-spec.yaml) leaves `POST /partners/keys`
+open, so don't import it as it is. Copy it to
+`partner-documents-protected.yaml`, and in the copy add `helix-auth` and
+`api-product-enforcer` to that route's plugins, next to the two already there.
+The route's block then reads:
+
+```yaml
+  /partners/keys:
+    post:
+      # summary, parameters, requestBody and responses as in example/api-spec.yaml
+      x-helix-gateway:
+        plugins:
+          helix-auth:
+            mode: validate
+            validate_auth_type: key-auth
+            apikey:
+              source: header
+              key: X-Admin-Key
+          api-product-enforcer:
+            error_policy: fail_close
+            _meta:
+              priority: 3100   # checks the app before key-value-map (3001) stores anything
+          key-value-map:
+            fail_action: close
+            inserts:
+              - key: "$request.headers.x-partner-id"
+                value: "$request.body.public_key"
+          proxy-rewrite:
+            uri: /post
+```
+
+Then:
 
 ```bash
 export ORG=<ORG_ID>
@@ -227,10 +367,11 @@ export TOKEN=<control-plane bearer token>      # short-lived
 export BASE=https://<YOUR_CONTROL_PLANE_API>/api
 H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
 
-# 1. Import the spec. Nothing in it needs filling in — no key material is in it.
+# 1. Import YOUR COPY of the spec, the one with the registration route protected.
+#    Nothing else in it needs filling in: no key material is in it.
 #    Keep both ids the response returns.
-curl -s -H "authorization: Bearer $TOKEN" -F "file=@example/api-spec.yaml" \
-  "$BASE/orgs/$ORG/apis/from-spec"
+curl -s -H "authorization: Bearer $TOKEN" -F "file=@partner-documents-protected.yaml" \
+  "$BASE/orgs/$ORG/apis/from-spec"     # multipart upload, so no JSON content-type
 # → {"api":{"id":"<API_ID>", ...}, "revision":{"id":"<REVISION_ID>", ...}}
 
 # 2. Import does NOT make the routes live. Create an upstream, bind it to the
@@ -246,9 +387,30 @@ curl -s "${H[@]}" -X PATCH "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID
 curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/deploy" \
   -d '{"environmentId":"<TEST_ENV_ID>","force":false}'
 
-# 3. Put authentication in front of /partners/keys before anyone else can reach it
-#    (solution 08). Then register keys and prove it — see "See it work".
+# 3. Create the operators product with this API in it, then deploy it. Every
+#    product needs a quota object. Add this API to no other product.
+curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/products" \
+  -d '{"name":"partner-key-operators","displayName":"Partner key operators","apiIds":["<API_ID>"],"quota":{"limit":60,"interval":1,"interval_unit":"minute"}}' \
+  | jq -r '.id'                                              # → <PRODUCT_ID>
+curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/envs/<TEST_ENV_ID>/products/<PRODUCT_ID>/deploy"
+
+# 4. Create a developer, then ONE APP PER OPERATOR, subscribed to that product.
+#    The control plane issues each app's key; the response carries it.
+curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/developers" \
+  -d '{"firstName":"<FIRST_NAME>","lastName":"<LAST_NAME>","email":"<EMAIL>"}' \
+  | jq -r '.id'                                              # → <DEVELOPER_ID>
+
+curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/developers/<DEVELOPER_ID>/envs/<TEST_ENV_ID>/apps" \
+  -d '{"name":"<OPERATOR_APP_NAME>","products":{"<PRODUCT_ID>":1},"plugins":{"helix-auth":{}}}'
+
+# 5. Register keys with the operator app's key in X-Admin-Key, and prove it:
+#    see "See it work".
 ```
+
+On an app, `plugins` names the way the app proves who it is. An empty
+`{"helix-auth":{}}` asks the control plane to create the key and secret, like the
+UI's auto-generate option. Check the shape your org's version of the gateway
+expects before you script this for real.
 
 > Revisions must be **INACTIVE** to accept a spec change. If it's live, undeploy
 > first, or clone the revision so you keep a rollback target.
@@ -257,25 +419,40 @@ The same calls without narration: [API reference](api-reference.md).
 
 ## See it work
 
-Register a partner's key, then fetch a document as that partner:
+Register a partner's key with an operator's key, then fetch a document as that
+partner:
 
 ```bash
 GW=https://<YOUR_GATEWAY_HOST>
+ADMIN_KEY=<OPERATOR_KEY>      # the operator app's key, from step 6
 
 # an unregistered partner gets an error, never the document
 curl -s -w "\n%{http_code}\n" "$GW/partners/documents" -H 'X-Partner-Id: acme-bank'
 # {"message":"no usable key is registered for this partner"}
 # 500
 
+# without an operator's key, registration is turned away
+jq -Rs '{public_key: .}' partner-a-public.asc \
+  | curl -s -o /dev/null -w "%{http_code}\n" -X POST "$GW/partners/keys" \
+      -H 'X-Partner-Id: acme-bank' -H 'content-type: application/json' --data-binary @-
+# 401
+
+# ...and nothing was stored: still the error
+curl -s -o /dev/null -w "%{http_code}\n" "$GW/partners/documents" -H 'X-Partner-Id: acme-bank'
+# 500
+
 # register acme-bank's public key (the body is {"public_key": "<armored key>"})
 jq -Rs '{public_key: .}' partner-a-public.asc \
-  | curl -s -X POST "$GW/partners/keys" -H 'X-Partner-Id: acme-bank' \
-      -H 'content-type: application/json' --data-binary @-
+  | curl -s -X POST "$GW/partners/keys" -H "X-Admin-Key: $ADMIN_KEY" \
+      -H 'X-Partner-Id: acme-bank' -H 'content-type: application/json' --data-binary @-
 
 # now the document comes back encrypted to that key
 curl -s "$GW/partners/documents" -H 'X-Partner-Id: acme-bank' | base64 -d | head -1
 # -----BEGIN PGP MESSAGE-----
 ```
+
+An app key that isn't on the operators product gets HTTP 403 on the registration
+route instead of 401, and nothing is stored either.
 
 The response body is base64 **of** an ASCII-armored PGP message, with
 `content-type: text/plain`. Decode it, then decrypt with the partner's private key.
@@ -293,11 +470,14 @@ looks like success to anything that only checks the status:
 | registered with a **sign-only** key | **200** | *identical body* |
 | registered with a usable key | **200** | base64 PGP |
 
-`gpg --quick-generate-key`, the command almost everyone reaches for, makes exactly
-that kind of key, and adding `default never` does not change that. Check with:
+`gpg --quick-generate-key <uid> rsa3072`, or the same command with any other named
+algorithm, makes exactly that kind of key: only a primary key, which signs and
+certifies. The bare command, or `default default` in place of the algorithm, adds
+an encryption subkey. Check with the key's user id (its name or email) in place of
+`<uid>`:
 
 ```bash
-gpg --list-keys --with-colons "$UID" | awk -F: '/^(pub|sub)/{print $1, $12}'
+gpg --list-keys --with-colons "<uid>" | awk -F: '/^(pub|sub)/{print $1, $12}'
 # want:  pub scESC        e = encrypt, s = sign, c = certify
 #        sub e            no `sub e` row means the route cannot encrypt to it
 ```
@@ -305,7 +485,7 @@ gpg --list-keys --with-colons "$UID" | awk -F: '/^(pub|sub)/{print $1, $12}'
 Repair an existing key rather than regenerating it:
 
 ```bash
-FPR=$(gpg --list-keys --with-colons "$UID" | awk -F: '/^fpr/{print $10; exit}')
+FPR=$(gpg --list-keys --with-colons "<uid>" | awk -F: '/^fpr/{print $10; exit}')
 gpg --quick-add-key "$FPR" rsa3072 encr never
 ```
 
@@ -323,18 +503,30 @@ SECOND_PUBLIC_KEY_FILE=./partner-a-rotated.asc SECOND_GNUPGHOME=~/.gnupg-partner
 
 Exit code 0 means an unregistered partner is refused, a registered one gets
 ciphertext, entries are kept per partner, and re-registering changes the key with
-no deploy. What each check proves: [Tests](tests.md).
+no deploy. **The script sends no operator key**, so on a protected registration
+route, which every build here has, its registration check gets HTTP 401 and the
+run stops there. Make the calls above by hand instead. What each check proves:
+[Tests](tests.md).
 
 ## Variations
 
-**Protect the registration route.** It writes key material, so treat it like any
-admin endpoint: authenticated, restricted to operators, audited.
-[Solution 08](../08-api-key/) shows the authentication.
+**Keep the operator key away from your backend.** The gateway passes `X-Admin-Key`
+on to the backend exactly as the operator sent it, and `httpbin.org` echoes it
+back. To remove it, give the registration route's existing `proxy-rewrite` a
+`headers.remove` list; don't add a second `proxy-rewrite`. The key is checked
+before `proxy-rewrite` runs, so the check still works:
+
+```json
+{"uri":"/post","headers":{"remove":["X-Admin-Key"]}}
+```
 
 **Key entries on the authenticated caller.** Put `helix-auth` in front of the
 document route and use `$consumer.<suffix>` instead of
 `$request.headers.x-partner-id` in **both** places on that route. The entry is
-then picked by who the caller is, not by a header they choose.
+then picked by who the caller is, not by a header they choose. Partners then need
+apps of their own, so move the registration route into an API of its own first:
+an app on any product that includes the API gets through the registration
+route's check.
 
 **Use a different injecting consumer.** On an organisation that is not on a free
 trial, `lua-callout` can read a stored value and inject it into a proxied call
@@ -363,6 +555,23 @@ key-value-map:
   inserts:
     - key: "$request.headers.x-partner-id"
       value: "$request.body.public_key"
+```
+
+Registration — the protection you add before the first deploy. Neither example
+spec carries it:
+
+```yaml
+helix-auth:
+  mode: validate
+  validate_auth_type: key-auth
+  apikey:
+    source: header
+    key: X-Admin-Key
+
+api-product-enforcer:
+  error_policy: fail_close
+  _meta:
+    priority: 3100
 ```
 
 Use — fetch, then let the encryption plugin resolve the same reference:
@@ -399,42 +608,76 @@ pgp-crypto:
 | `pgp-crypto` | `max_body_size` | `1048576` | The encryption buffers the whole body; larger bodies are rejected. |
 | `proxy-rewrite` | `uri` | `/post` (registration), `/json` (document) | The backend's paths. |
 | `request-id` | `algorithm` / `header_name` | `uuid` / `X-Request-Id` | API-wide. Encryption errors are deliberately vague; this is what a partner quotes. |
+| `helix-auth` | `mode` / `validate_auth_type` | `validate` / `key-auth` | Registration only, added by you. Check the caller's app key. |
+| `helix-auth` | `apikey.source` / `apikey.key` | `header` / `X-Admin-Key` | Where the operator sends their app's key. `source` is required. |
+| `api-product-enforcer` | `error_policy` | `fail_close` | Registration only, added by you. Turn away apps not on a product that includes this API. `fail_open` would let them through. |
+| `api-product-enforcer` | `_meta.priority` | `3100` | Run the check before `key-value-map` (3001) stores anything. At its own priority, 2399, it runs after. |
 
 **Do not put a literal key in `inserts`.** That puts key material straight back
 into the configuration document, which is what this package exists to avoid.
 
 Placeholders in this package: `<ORG_ID>`, `<TEST_ENV_ID>`, `<API_ID>`,
-`<REVISION_ID>`, `<UPSTREAM_ID>`, `<YOUR_GATEWAY_HOST>`. Replace all of them before
-you run anything.
+`<REVISION_ID>`, `<UPSTREAM_ID>`, `<PRODUCT_ID>`, `<DEVELOPER_ID>`, `<FIRST_NAME>`,
+`<LAST_NAME>`, `<EMAIL>`, `<OPERATOR_APP_NAME>`, `<OPERATOR_KEY>`,
+`<YOUR_CONTROL_PLANE_API>`, `<YOUR_GATEWAY_HOST>`. Replace all of them before you
+run anything.
 
 Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digitalapi.ai/api-gateway).
 
 ## Troubleshooting
 
-| Symptom | Cause |
-|---|---|
-| Every partner gets the error | The reference resolves to nothing. Check `headers` is plural, and that the client sends the `X-Partner-Id` header. |
-| One partner works and the rest fail | A fixed string was written where a reference belongs. |
-| A registered partner gets 200 with the error message in the body | The stored key has no encryption subkey. Repair it and register again — see [See it work](#see-it-work). |
-| The document comes back readable | `fail_policy` is `fail-open` on `pgp-crypto`, which returns the backend's document unencrypted. |
-| The partner cannot decrypt a well-formed document | The wrong key was stored. Nothing at the gateway shows this; only a round-trip decrypt finds it. |
-| Registration returns 503 | The store could not be written. `fail_action: close` means nothing was saved. |
-| Registration returns 502, yet the key works | The status belongs to the echo upstream. The key is written before the request is passed on. Fetch a document to confirm. |
-| Rotation appears not to take effect | The write used a different id, so it created a second entry instead of replacing one. |
-| It worked, then stopped after an edit | `ctx_namespace` and `keys_ctx_namespace` no longer match. |
-| Deploy fails: `Only INACTIVE revisions can be updated` | Clone the revision or undeploy, then apply. |
-
-If you built it with the agent:
-
-| Symptom | Cause |
-|---|---|
-| `stream closed with reason: error` after a route write | The agent's tool arguments arrived malformed; nothing was written. Retry once, then import the spec for the rest. |
-| The agent substitutes a value for `$request.headers.x-partner-id` | Reply: leave the `$` references as written — the plugin resolves them at request time, not you. |
-| The agent writes `pgp-crypto` flat | Reply: the crypto config is nested under `encrypt` — show me the route object as JSON before sending. |
-| The write succeeds and the routes have no plugins | Nested under `x-helix-gateway`. Read the revision back and rewrite with a top-level `plugins` key. |
-
-Everything in [solution 13's troubleshooting](../13-pgp-encryption/guides.md#troubleshooting)
-still applies to the encryption itself — the wire format especially.
+- **Every partner gets the error.** The reference resolves to nothing. Check
+  `headers` is plural, that the client sends the `X-Partner-Id` header, and that
+  `pgp-crypto` points at what the fetch stored: the same reference, or the
+  fetch's alias.
+- **One partner works and the rest fail.** A fixed string was written where a
+  reference belongs.
+- **A registered partner gets 200 with the error message in the body.** The
+  stored key has no encryption subkey, which is what `gpg --quick-generate-key
+  <uid> rsa3072`, or any other named algorithm, makes. Repair it and register it
+  again: see [See it work](#see-it-work).
+- **The document comes back readable.** `fail_policy` is `fail-open` on
+  `pgp-crypto`, which returns the backend's document unencrypted.
+- **The partner cannot decrypt a well-formed document.** The wrong key was stored.
+  Nothing at the gateway shows this; only a round-trip decrypt finds it.
+- **Registration returns 401.** No key was sent, the key belongs to no app, or it
+  went in a header other than `X-Admin-Key`. Send the operator app's key, not its
+  secret.
+- **Registration returns 403 with an operator's key.** The app isn't on the
+  operators product, the product doesn't include this API, or the product isn't
+  deployed to the environment.
+- **An app that isn't an operator's gets 403, yet its key was stored.**
+  `api-product-enforcer` is at its own priority, so it runs after `key-value-map`
+  has written. Set its `_meta.priority` to `3100`.
+- **Anyone can register a key.** The protection isn't on the deployed revision.
+  Clone the revision, add the two plugins from
+  [step 3 of Build it in the UI](#build-it-in-the-ui), and **Force Deploy** it.
+- **Registration returns 503.** The store could not be written, and
+  `fail_action: close` means nothing was saved. With the protection in place, the
+  product's quota store being out of reach also gives 503.
+- **Registration returns 502, yet the key works.** The status belongs to the echo
+  upstream. The key is written before the request is passed on. Fetch a document
+  to confirm.
+- **Rotation appears not to take effect.** The write used a different id, so it
+  created a second entry instead of replacing one.
+- **It worked, then stopped after an edit.** `ctx_namespace` and
+  `keys_ctx_namespace` no longer match.
+- **`verify.sh` stops at the registration check with 401.** The script sends no
+  operator key. See [See it work](#see-it-work).
+- **Deploy fails: `Only INACTIVE revisions can be updated`.** Clone the revision
+  or undeploy, then apply.
+- **`stream closed with reason: error` after an agent route write.** The agent's
+  tool arguments arrived malformed, and nothing was written. Retry once, then
+  import [`example/api-spec.yaml`](example/api-spec.yaml) instead.
+- **The agent puts a value in place of `$request.headers.x-partner-id`.** Reply:
+  leave the reference as written; the gateway resolves it on each request.
+- **The schema rejects the agent's `pgp-crypto`.** It was written flat. The
+  encryption settings are nested under `encrypt`.
+- **The agent's routes exist with no plugins.** It wrapped them in
+  `x-helix-gateway` inside the live route object, which a live route silently
+  discards. Read the revision back and rewrite them with a top-level `plugins` key.
+- **Everything in [solution 13's troubleshooting](../13-pgp-encryption/guides.md#troubleshooting)
+  still applies** to the encryption itself, the wire format especially.
 - **Use the trace inspector to see each step.** On the API's page, open the
   **Observability** tab and click **Start trace session**. It shows the headers
   each plugin changes and the request body at every stage, which is the fastest

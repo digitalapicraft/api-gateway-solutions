@@ -25,6 +25,12 @@ private key material. Check 5 runs when `gpg` and `GNUPGHOME` (holding the match
 private key) are available; check 6 when the `SECOND_*` pair is set too. A skipped
 check is announced, not silently passed.
 
+**The script sends no operator key with its registration requests.** Every build
+in [Guides](guides.md) protects the registration route before it is deployed, so
+there check 2 gets HTTP 401 (not signed in) and the run stops. On a protected
+deployment, make the same calls by hand with the operator's key, as in
+[Guides → See it work](guides.md#see-it-work).
+
 Exit code 0 means all of these held:
 
 | # | Case | Expected |
@@ -54,14 +60,16 @@ Raw fixtures, if you want to run one case by hand instead of the whole script:
 [`tests/requests/`](tests/requests/) (the HTTP requests) and
 [`tests/expected/`](tests/expected/) (the expected status and body for each — the
 single source both `verify.sh` and the plan read from, so they can't drift apart).
+The registration request there carries no operator key: add an `X-Admin-Key`
+header with one before you send it to a protected route.
 
 ## The manual tests
 
 | Case | What it proves | How to run it |
 |---|---|---|
-| **Unusable key registered** | A key that is stored but cannot encrypt returns **200 with the error body** — the same body an unregistered partner gets with a 500. A status-only check passes while no document is returned. | Make a key with no encryption subkey (`gpg --quick-generate-key "$UID" rsa3072` does exactly this), register it under a fresh partner id, and fetch a document for that id. Expect 200 with `{"message":"no usable key is registered for this partner"}`. Repair with `gpg --quick-add-key <fpr> rsa3072 encr never` and register again. |
+| **Unusable key registered** | A key that is stored but cannot encrypt returns **200 with the error body** — the same body an unregistered partner gets with a 500. A status-only check passes while no document is returned. | Make a key with no encryption subkey: `gpg --quick-generate-key <uid> rsa3072` does exactly this, as does any other named algorithm (the bare command, or `default default`, adds an encryption subkey). Register it under a fresh partner id, and fetch a document for that id. Expect 200 with `{"message":"no usable key is registered for this partner"}`. Repair with `gpg --quick-add-key <fpr> rsa3072 encr never` and register again. |
 | **Reference typo** | The most likely configuration mistake gives no error anywhere. | In a **throwaway** environment, change one reference to `$request.header.x-partner-id` (singular) and call the document route. It fails exactly like "no key registered". |
-| **Unauthenticated registration** | What the shipped package does **not** protect. | Call the registration route with any partner id and your own public key. It succeeds, and that partner's documents are now encrypted to *your* key. Put identity in front of it ([solution 08](../08-api-key/)) before real use. |
+| **Unauthenticated registration** | What the spec and the prompt do **not** protect, and that the protection step does. | Call the registration route with any partner id and your own public key, and no `X-Admin-Key`. Without the protection step it succeeds, and that partner's documents are then encrypted to *your* key: that is why every build adds the step before its first deploy ([Guides](guides.md#build-it-in-the-ui)). With it, expect HTTP 401, or HTTP 403 (not allowed) with an app key that isn't on the operators product, and the partner's documents unchanged. |
 
 **Assert on the body in every test on the document route.** The automated fetch
 case does, which is why it catches an unusable key and a status check would not.
