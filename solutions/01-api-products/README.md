@@ -74,10 +74,12 @@ Once this is set up: a Free app that sends 6 requests in one minute gets blocked
 on the 6th. A Pro app calling at the exact same moment keeps working, completely
 unaffected.
 
-**Setting this up in the gateway's UI takes eight short steps:** import the
-API, give it an upstream and deploy it, create the Free product with its
-quota, deploy that too, create the Pro product the same way, add a developer,
-create two apps for them (one per plan), then grab each app's key.
+**Setting this up in the gateway's UI takes nine short steps:** create the
+API (from scratch, or from an OpenAPI spec), add the two plugins that check the
+caller and apply the limit, give it an upstream and deploy it, create the Free
+product with its quota, deploy that too, create the Pro product the same way,
+add a developer, create two apps for them (one per plan), then grab each app's
+key.
 [Full click-by-click walkthrough →](guides.md#build-it-in-the-ui)
 
 [Build it any of three ways, then see it work →](guides.md)

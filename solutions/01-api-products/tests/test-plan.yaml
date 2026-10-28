@@ -19,10 +19,6 @@ meta:
     the developer-scope case are manual: they require changing gateway-level
     configuration or observing behaviour across nodes, which no single request can
     assert.
-  status: >-
-    NOT EXECUTED for this package — no gateway connector was available in the session
-    that produced it. These are the assertions verify.sh makes, not results that have
-    been obtained. Run it against your own environment.
   two_apps_required: >-
     FREE_KEY and PRO_KEY MUST belong to two SEPARATE APPS. Quota is counted per app
     (the credential), so two keys on one app share a bucket and correct isolation
@@ -221,7 +217,6 @@ cases:
     notes: >-
       Pooling means one of that developer's apps CAN starve their own production traffic.
       Run this before choosing, so the trade-off is observed rather than assumed.
-
 
 coverage:
   positive: [valid-free-call, isolation]

@@ -15,9 +15,6 @@ meta:
     The assertions are about what the BACKEND received, so they need an upstream
     that echoes request headers. The package's sample upstream does; against your
     own backend run verify.sh with ECHOES_HEADERS=0 and read its log instead.
-  status: >-
-    EXECUTED against a deployed revision — 5/5 — and the three manual cases were
-    each reproduced on a temporary lab API. See ../validation/gateway-validation.yaml.
 
 cases:
   - id: enriched-read

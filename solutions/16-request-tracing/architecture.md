@@ -19,14 +19,15 @@ and close it (or let it expire) when you're done.
 
 | Word | What it means |
 |---|---|
-| **Session** | A recording window on **one API in one environment**. It has a duration (1 minute to 1 hour) and records up to **10 requests** by default. One session per API per environment at a time. |
+| **Session** | A recording window on **one API in one environment**. It has a duration (1 minute to 1 hour) and records up to **10 requests** by default. One open session per API per environment at a time; a session that is already full doesn't count. |
 | **Record** | Everything about one request: what arrived, every plugin that ran, what reached the backend, what came back, and the timings. Shown as one row in the session. |
 | **Filter** | An optional condition a request must meet to be recorded, such as `status >= 400` or a header your test sends. Checked **after** the response, so the status code can be used. |
 | **Outcome** | A one-word verdict on each record, described below. |
 
-Starting a session on an API that already has one open gives you **the open
-one**, with its original duration and filter. To change either, stop it and
-start again.
+Starting a session on an API that already has one open, and not yet full,
+gives you **the open one**, with its original duration and filter, even though
+the UI says **Tracing session started**. To change either, stop it and start
+again.
 
 ## How a request flows
 
@@ -50,20 +51,27 @@ This is the question a trace exists to settle. Two fields answer it:
 
 | What the record shows | Who answered | What to do |
 |---|---|---|
-| Outcome **short circuit**, naming a plugin | **The gateway.** That plugin returned the response, and the backend was never called. | Look at that plugin's config and the request it received. |
-| A **backend status** in the Upstream section, no short circuit | **Your backend.** The gateway passed its answer through. | Look at the **request as sent upstream**: headers, path and body after every plugin changed them. |
-| Outcome **ok** | Nobody refused it. | Use the timings, if the complaint is speed. |
+| Outcome **Upstream not called** (`short_circuit` in the raw data), naming a plugin | **The gateway.** That plugin returned the response, and the backend was never called. | Look at that plugin's config and the request it received. |
+| A **backend status** in the Upstream section, and the backend was called | **Your backend.** The gateway passed its answer through. | Look at the **request as sent upstream**: headers, path and body after every plugin changed them. |
+| Outcome **OK** (`ok` in the raw data) | Nobody refused it. | Use the timings, if the complaint is speed. |
 
-Every outcome the gateway records:
+Every outcome the gateway records. The UI shows the label; **Raw JSON** shows
+the value.
 
-| Outcome | Meaning |
-|---|---|
-| `ok` | The request succeeded. |
-| `short_circuit` | A plugin answered the request itself, such as a 400 from validation or a 401 from authentication. |
-| `client_error` | The final status was 4xx and no plugin short-circuited it. In practice, the backend returned it. |
-| `server_error` | The final status was 5xx. |
-| `upstream_error` | The backend could not be reached, or failed, at the network level. |
-| `plugin_error` | A plugin failed while it ran. |
+| UI label | Value | Meaning |
+|---|---|---|
+| **OK** | `ok` | The request succeeded. |
+| **Upstream not called** | `short_circuit` | A plugin answered the request itself, such as a 400 from validation or a 401 from authentication. |
+| **Client error** | `client_error` | The final status was 4xx and no plugin answered the request itself. In practice, the backend returned it. |
+| **Server error** | `server_error` | The final status was 5xx. |
+| **Upstream error** | `upstream_error` | The backend could not be reached, or failed, at the network level. |
+| **Plugin error** | `plugin_error` | A plugin failed while it ran. |
+
+An example of `upstream_error`: an upstream created through the API without
+`pass_host` and `upstream_host` sends your gateway's host name to the backend
+instead of the backend's own. The call to the backend fails, and the caller
+gets HTTP 502 (bad gateway). The record's `upstream_host` shows your gateway's
+host, not the backend's, which points straight at the upstream's settings.
 
 A record also carries a list of **anomalies**, such as a short circuit, an error
 status or a plugin that was expected but didn't run. In the UI these appear as
@@ -73,7 +81,7 @@ badges on the row.
 
 | Part | What you get |
 |---|---|
-| **Request** | Method, path, query, every header as received, and the body (if it fits; see below). |
+| **Request** | Method, path, query, every header as received, and the first few KB of the body. |
 | **Plugins, by phase** | For each plugin that ran: how long it took, its configuration, and a list of **changes**: headers added or replaced, variables set, the body before and after. |
 | **Phase timeline** | Time spent in each stage: rewrite, access, before proxy, upstream, header filter, body filter, delayed body filter, log. |
 | **Upstream** | The backend address, its status, connect time and response time. The request body as sent upstream. |
@@ -89,7 +97,7 @@ actually ran:
 rewrite → access → before proxy → upstream → header filter → body filter → log
 ```
 
-A plugin that short-circuits stops the request moving forward. In the sample
+A plugin that answers the request itself stops it moving forward. In the sample
 API's 400, `request-validation` answers in the **rewrite** stage, so there is
 no access stage, no upstream stage, and no backend status in the record. That
 absence is the proof the backend was never called.
@@ -103,9 +111,8 @@ absence is the proof the backend was never called.
   whoever runs your gateway), the session stops recording. It can still show
   as active until its duration runs out, so a session that stopped filling up
   is usually full, not broken.
-- **Large bodies in full.** Response bodies are cut at about 4 KB, and very
-  large request bodies are not recorded at all. The record says when either
-  happened.
+- **Large bodies in full.** Request and response bodies are both cut at about
+  4 KB. The record says when that happened.
 - **Anything redacted.** Headers are recorded exactly as sent, including
   `apikey`, `Authorization` and cookies. Anyone who can read traces in your org
   can read those values.
@@ -128,7 +135,7 @@ something to show. Each route produces a different kind of record:
 | `POST /posts` | `request-validation` requires a `title` | the gateway said no |
 | `GET /posts/{postId}` | `proxy-rewrite` sets `X-Partner-Channel: api` | the gateway changed the request |
 | `GET /posts/999999` | none (the backend has no such post) | the backend said no |
-| all | `request-id` | an `X-Request-Id` on every response, to match a partner's report to a record |
+| all | `request-id` | an `X-Request-Id` on every response, an id a partner can quote. It is 32 letters and digits (0–9 and a–f), set by the platform before the plugin runs, not the dashed UUID format the setting suggests. The caller receives it; the record's response headers don't show it. |
 
 There is no authentication on it, on purpose. Add `helix-auth` from
 [solution 01](../01-api-products/) or [02](../02-oauth-jwt/), and a rejected key

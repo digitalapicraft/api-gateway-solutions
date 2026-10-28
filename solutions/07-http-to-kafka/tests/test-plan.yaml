@@ -18,12 +18,6 @@ meta:
   note: >-
     Cases 1-4 are automated. Cases 5-8 need a running broker and a topic browser,
     and three of them need the broker deliberately broken, so all four are manual.
-  status: >-
-    EXECUTED. Cases 1-4 were run by verify.sh against a deployed route (exit 0),
-    and cases 5, 6 and 7 were confirmed against a real Kafka cluster using a
-    dedicated test topic that was deleted afterwards. Case 8 (topic auto-creation)
-    was NOT run — it needs a broker with auto.create.topics.enable and a topic that
-    does not yet exist.
 
 cases:
   - id: valid-event

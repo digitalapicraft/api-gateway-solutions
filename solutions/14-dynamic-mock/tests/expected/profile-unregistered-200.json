@@ -1,4 +1,5 @@
 {
   "status": 200,
+  "headers": { "X-Partner-Tier": null },
   "body": { "partner": "nobody-9", "tier": "", "settlement": "" }
 }

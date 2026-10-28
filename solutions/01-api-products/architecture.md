@@ -15,6 +15,12 @@ request it answers three questions:
 
 Your backend does not change at all. It never learns that plans exist.
 
+It does see the caller's key, though. The gateway passes the `apikey` header on
+to your backend unchanged, and adds `X-Consumer-Username` and
+`X-Credential-Identifier` (the app's id, not its name). `helix-auth` has no
+setting to hide the key. To keep it out of your backend and its logs, remove
+the header with `proxy-rewrite`: see [Variations](guides.md#variations).
+
 The key idea is simple: **the quota belongs to the product you sell**. It is
 not attached to a URL, an IP address, or a backend service. If you have used
 other gateways, please read this page before you configure anything. The way
@@ -41,7 +47,8 @@ to count on the consumer name. Here that would count the wrong thing.
 A developer with three apps gets **three separate budgets**. This is usually
 what you want. If their test app misbehaves, it should not use up their
 production app's budget. If you would rather pool all of a developer's apps
-into one budget, set `quota_key_scope: developer` on the product. Two keys on
+into one budget, set the product's **Quota scope** to **Developer level**
+(`quota_key_scope: developer` through the API). Two keys on
 the *same* app always share one budget. See [Tests](tests.md).
 
 ## How a request flows

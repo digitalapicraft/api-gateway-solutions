@@ -27,25 +27,28 @@
 #   problem (JSON upstream response -> XML for XML-wanting clients), not the
 #   request-side counterpart. Adding it would not help and could double-convert.
 #
-# EXECUTION IS PRIORITY/PHASE-ORDERED, NOT DOCUMENT-ORDERED (verified priorities
-# on this build). On /locations:
-#   proxy-rewrite (prio 1008)         rewrite phase — retarget the upstream path
-#                                     ONLY. Do NOT set Content-Type here: it runs
-#                                     BEFORE xml-to-json (997) and would hide the
-#                                     JSON body from the request transform.
-#   xml-to-json (prio 997)            request + response conversion
+# EXECUTION IS PRIORITY/PHASE-ORDERED, NOT DOCUMENT-ORDERED. On /locations:
+#   xml-to-json (prio 997)            request + response conversion. On the way in
+#                                     it also sets Content-Type AND Accept to
+#                                     application/xml.
+#   proxy-rewrite (_meta.priority 900) retarget the upstream path, then set
+#                                     Content-Type to text/xml for SOAP 1.1.
 #
-# The ordering that matters: proxy-rewrite runs BEFORE xml-to-json, which is why
-# the Content-Type warning below is the trap on this route. When you add identity
-# (solution 02) it lands in the access phase, ahead of both — so an unauthenticated
-# request costs no transform work.
+# The ordering that matters: proxy-rewrite's own priority is 1008, which would run
+# it BEFORE xml-to-json and relabel the JSON body so it is never converted. At 900
+# it runs AFTER the conversion, so the body is already XML when the content type is
+# set. Without that header a SOAP 1.1 service (.asmx and similar) rejects the
+# call with 415, because the converter sends application/xml. When you add
+# identity (solution 02), helix-auth runs first, in the rewrite phase (priority
+# 2450), ahead of both — so an unauthenticated request costs no transform work.
 #
 # PLUGIN SCHEMA NOTE
 #   xml-to-json's fields vary by build; confirm with get_plugin_config in YOUR
-#   org. On the verified build the useful ones are: transform_request (default
-#   false), transform_response (default true), content_types (which upstream
-#   types to convert), request_content_types (which request bodies to convert),
-#   property_naming (camelCase|PascalCase), array_item_name, max_body_size.
+#   org. On the tested build: transform_request (default false),
+#   transform_response (default true), content_types, request_content_types,
+#   root_attributes, root_name, request_root_name (default request), enable_decl,
+#   pretty (returns 503 on this build: leave it off), property_naming,
+#   array_item_name, max_body_size, ctx_namespace.
 #
 # UPSTREAM is bound on the service at import/bind time, NOT in the OpenAPI
 # paths. Replace <SOAP_UPSTREAM_URL> wherever your control plane asks for it.
@@ -55,7 +58,7 @@ openapi: 3.0.3
 
 info:
   title: Partner Locations API
-  version: 1.0.0
+  version: 1.1.0   # 1.1.0: proxy-rewrite sets text/xml at priority 900; root_attributes for the envelope namespaces
   description: >-
     Partner-facing location lookup. A SOAP/XML system of record is exposed as a
     REST/JSON endpoint at the edge: the gateway converts the request body to XML,
@@ -77,16 +80,19 @@ paths:
       requestBody:
         required: false
         description: >-
-          Query fields for the location lookup, as JSON. The gateway converts
-          this object to the XML the SOAP handler expects — the field names must
-          match the elements that handler reads.
+          The SOAP envelope, written as JSON. Each XML element becomes a JSON
+          key, prefixes included; the namespaces are added by xml-to-json's
+          root_attributes, so the partner never writes them. Replace the
+          operation and parameter names with the ones your service reads.
         content:
           application/json:
             schema:
               type: object
-              properties:
-                region:      { type: string, description: Region code to filter by }
-                activeOnly:  { type: boolean, description: Exclude decommissioned sites }
+            example:
+              soap:Envelope:
+                soap:Body:
+                  m:Operation:
+                    m:param: value
       responses:
         '200':
           description: >-
@@ -100,24 +106,25 @@ paths:
         '504': { description: The SOAP backend did not respond in time }
       x-helix-gateway:
         plugins:
-          # 1. Retarget the upstream path. The client called /locations; the
-          #    handler only answers on <SOAP_HANDLER_PATH>.
+          # 1. Retarget the upstream path, and set the content type a SOAP 1.1
+          #    service expects. The client called /locations; the handler only
+          #    answers on <SOAP_HANDLER_PATH>.
           #
-          #    DO NOT set Content-Type here. It is tempting — the SOAP handler
-          #    wants text/xml — and it BREAKS the request transform. proxy-rewrite
-          #    runs at priority 1008, xml-to-json at 997, so proxy-rewrite goes
-          #    FIRST: it would rewrite the content type to text/xml before
-          #    xml-to-json inspects it, the body would no longer match
-          #    request_content_types (default application/json), and the request
-          #    direction would silently never fire. On this build (verified), 
-          #    gateway. Let the transform own the content type.
+          #    _meta.priority 900 is what makes the Content-Type safe. At its own
+          #    priority (1008) proxy-rewrite runs before xml-to-json (997), relabels
+          #    the JSON body, and the request is never converted. At 900 it runs
+          #    after the conversion. SOAP 1.2 services want application/soap+xml
+          #    instead of text/xml.
           #
-          #    If your SOAP service requires a SOAPAction header, add it here —
-          #    many .asmx and classic SOAP 1.1 endpoints return a 500 with an
-          #    unhelpful envelope without one. That header is safe to set; the
-          #    content type is not.
+          #    If your service requires a SOAPAction header, add it under
+          #    headers.set next to Content-Type.
           proxy-rewrite:
             uri: <SOAP_HANDLER_PATH>
+            headers:
+              set:
+                Content-Type: "text/xml; charset=utf-8"
+            _meta:
+              priority: 900
 
           # 2. The bidirectional transform. ONE plugin, BOTH directions — but
           #    NEITHER direction is on by default in the way you would assume:
@@ -138,17 +145,22 @@ paths:
           #    to XML for clients that ask for XML. It solves the opposite
           #    problem and has no place here.
           #
-          #    Other fields worth knowing (confirm with get_plugin_config):
-          #      content_types          which upstream types to convert
-          #                             (default application/xml, text/xml)
-          #      request_content_types  which request bodies to convert
-          #                             (default application/json)
-          #      property_naming        camelCase | PascalCase
-          #      array_item_name        element name for array items (default item)
-          #      max_body_size          default 1048576
+          #    root_attributes adds the namespace declarations to the root
+          #    element, so a partner can send {"soap:Envelope": ...} without
+          #    writing xmlns attributes. Replace <SERVICE_NS> with your service's
+          #    namespace.
+          #
+          #    Other fields (confirm with get_plugin_config): content_types,
+          #    request_content_types, root_name, request_root_name (default
+          #    request), enable_decl, pretty (503 on this build), property_naming,
+          #    array_item_name (default item), max_body_size (default 1048576),
+          #    ctx_namespace.
           xml-to-json:
             transform_request: true
             transform_response: true
+            root_attributes:
+              "xmlns:soap": "http://schemas.xmlsoap.org/soap/envelope/"
+              "xmlns:m": "<SERVICE_NS>"
 
 # API-WIDE POLICY.
 #

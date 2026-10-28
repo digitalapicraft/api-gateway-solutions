@@ -18,21 +18,18 @@ meta:
     Cases 1-6 are automated. Case 7 (expiry) requires waiting out the token
     lifetime, and case 8 (rotation) mutates environment configuration, so both are
     manual and deliberately outside verify.sh.
-  status: >-
-    NOT EXECUTED for this package — no gateway connector was available in the
-    session that produced it. These are the assertions verify.sh makes, not
-    results that have been obtained. Run it against your own environment.
 
 cases:
   - id: unauthenticated
     type: negative
     intent: >-
       helix-auth validate rejects a call to a protected route that carries no
-      Authorization header, in the access phase, before the upstream is contacted.
+      Authorization header, before the upstream is contacted (helix-auth runs first,
+      in the rewrite phase).
     request: requests/unauthenticated.http
     expected: expected/unauthenticated.json
     response_notes: >-
-      helix-auth validate rejects in the access phase. The upstream is never
+      helix-auth validate rejects it first, in the rewrite phase. The upstream is never
       contacted, so nothing appears in your backend logs. The response body is
       whatever your gateway build emits for an auth rejection — assert the STATUS,
       not this shape. All four caller-side failure causes (no header, no Bearer
@@ -78,7 +75,8 @@ cases:
     notes: >-
       A 401 here, with a token issued seconds earlier, almost always means the
       signing secret differs between the issue route and the validate route. A 403
-      means authentication passed but authorization did not.
+      means another plugin, such as api-product-enforcer, is on the route:
+      helix-auth alone doesn't check the app's product.
 
   - id: forged-token
     type: negative
@@ -90,8 +88,8 @@ cases:
     expected: expected/invalid-token-401.json
     response_notes: >-
       A JWT with a valid three-segment shape but a signature this gateway did not
-      produce. Rejected in the access phase. Indistinguishable from the other 401s
-      by design — assert the status only. If this returns 200, the route is passing
+      produce. Rejected before the upstream is contacted. The body says
+      "Invalid or expired token", the same as an expired one — assert the status. If this returns 200, the route is passing
       everything through while appearing configured.
     expected_status: 401
     notes: >-

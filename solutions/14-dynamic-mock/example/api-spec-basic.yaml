@@ -1,0 +1,77 @@
+# Solution 14 — per-caller sandbox: the basic example spec.
+#
+# Three routes and nothing else: no plugins. Import this when you want to add the
+# plugins yourself in the UI, so you see what each one does. The walkthrough is
+# ../guides.md, "Build it in the UI".
+#
+# The same API with the plugins already in it is api-spec.yaml, next to this file.
+#
+# Until you add the plugins, nothing is stored and nothing is mocked: every route
+# is passed on to the upstream, which has no sandbox behind these paths.
+
+openapi: 3.0.3
+
+info:
+  title: Partner Sandbox API
+  version: 1.0.0
+  description: >-
+    A partner sandbox: one route where an operator registers a partner's values,
+    and two that answer with them. Add the plugins yourself to store the values
+    and build each response from them.
+
+paths:
+  /sandbox/partners:
+    post:
+      summary: Register or replace one partner's sandbox values (administrative)
+      description: >-
+        ADMINISTRATIVE. Protect this route before it is exposed.
+      parameters:
+        - name: x-partner-id
+          in: header
+          required: true
+          description: The partner being registered.
+          schema: { type: string }
+        - name: x-tier
+          in: header
+          required: true
+          description: The tier this partner should see in the sandbox.
+          schema: { type: string, example: gold }
+        - name: x-settlement-account
+          in: header
+          required: true
+          description: The settlement account this partner should see.
+          schema: { type: string, example: GB29-SANDBOX-0001 }
+      responses:
+        '200': { description: Request accepted }
+
+  /sandbox/profile:
+    get:
+      summary: The calling partner's own sandbox profile
+      parameters:
+        - name: x-partner-id
+          in: header
+          required: true
+          description: Identifies the caller.
+          schema: { type: string }
+      responses:
+        '200':
+          description: The caller's sandbox profile.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  partner:    { type: string }
+                  tier:       { type: string }
+                  settlement: { type: string }
+
+  /sandbox/diagnostics:
+    get:
+      summary: Show how a stored value is referenced (teaching route)
+      parameters:
+        - name: x-partner-id
+          in: header
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Diagnostic output }

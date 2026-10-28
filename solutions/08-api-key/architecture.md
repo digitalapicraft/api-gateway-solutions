@@ -1,92 +1,275 @@
-# Architecture — API-key identity at the edge
+# Architecture — API keys checked at the gateway
 
-## Request path
+> [Overview](README.md) · [Business need](business-need.md) · **Architecture** · [Guides](guides.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [API reference](api-reference.md)
 
-```
-Terminal ──X-Device-Key──▶ Gateway ──▶ Upstream
-                             │
-                             ├── request-id        (API-wide, correlation)
-                             ├── helix-auth        (access phase, priority 2450)
-                             │     validate · key-auth · apikey.source: header
-                             │     resolve the key to an app credential
-                             └── proxy-rewrite     (rewrite phase, priority 1008)
-                                   retarget the upstream path
-```
+---
 
-What happens to a request, in the order it actually happens:
+## What the gateway does here
 
-1. **rewrite phase** — `proxy-rewrite` retargets the upstream path. It takes no
-   part in the auth decision; it runs first because the rewrite phase runs before
-   the access phase, not because it is more important.
-2. **access phase** — `helix-auth` reads the configured header, resolves the value
-   to an app credential in the org, and attaches that identity to the request
-   context. No match, or no header at all, ends the request here with a 401. The
-   upstream is never contacted.
-3. **upstream** — the request is forwarded with the caller's identity already
-   established. Downstream plugins that need to know who is calling — metering,
-   analytics — read it from the context rather than re-deriving it.
+The gateway becomes the one place where every caller is identified. For every
+request it answers one question: **which app does this key belong to?**
 
-**Phase beats priority, and priority only orders within a phase.** `helix-auth`
-has the higher priority number (2450 against 1008) and still runs second, because
-its phase is later. This is the single most common source of "the plugins are in
-the wrong order" confusion on this platform.
+- If the key belongs to an existing app, the request goes through, marked with
+  the name of that app.
+- Anything else is refused with HTTP 401 (not authenticated). Your backend is
+  not contacted.
 
-## Native vs custom
+Your backend does not change. It never sees a request without a valid key.
 
-Entirely native. `helix-auth` in `validate` mode with `validate_auth_type:
-key-auth` is the platform's own answer to API-key identity, and it resolves the
-key to the same app object that products, quotas and analytics are keyed on.
+**This solution identifies callers. It does not limit them.** It uses the same
+`helix-auth` key check as [solution 01](../01-api-products/). It does not use
+01's `api-product-enforcer`, so no usage limit is applied. Every app still needs a
+product, because signing up to a product is how an app gets its key.
 
-Two alternatives were considered and rejected:
+**This setup doesn't check which product an app is on.** The key check only
+confirms the key belongs to an app in this environment. A key from any app is
+accepted, even one whose product doesn't include this API. To let in only the
+apps on a product that includes this API, add 01's `api-product-enforcer`; it
+also applies the product's usage limit.
 
-- **A standalone `key-auth` plugin.** It does not exist on this build. `key-auth`
-  and `jwt-auth` are `validate_auth_type` *values* of `helix-auth`. Reaching for
-  a plugin by that name is the most common wrong turn here.
-- **A custom policy checking a header against a list.** It would work and it would
-  be wrong: the list has to live somewhere, revocation becomes a config deploy
-  again, and the resolved identity would be invisible to every other plugin that
-  expects the platform's app object. The whole operational benefit of this
-  solution comes from the credential being a first-class control-plane resource.
+For the full list of fields on every plugin, see
+[docs.digitalapi.ai/api-gateway](https://docs.digitalapi.ai/api-gateway).
 
-No custom code is required, and none is included.
+## The words used on this page
 
-## Why the key is resolved rather than compared
-
-A configuration that compares an incoming header to a literal value in the spec
-would authenticate too — and would be a materially worse system:
-
-| | Literal in the config | Resolved to an app credential |
+| Word | What it means in Helix | Name used inside the platform |
 |---|---|---|
-| Where the secret lives | In the spec, in git, in every revision | On the credential, issued by the control plane |
-| Revoking one caller | Edit and redeploy the API | Delete the app |
-| Callers per key | One key, everybody shares it | One credential per caller |
-| Who can see it | Anyone who can read the repo | Nobody; it is never in the document |
-| Metering and analytics | Nothing to attribute to | The app is the unit both are keyed on |
+| **Developer** | The company or team that owns the callers | a Consumer |
+| **App** | One caller: one terminal, or one partner's scheduled job. It has its own key and secret. | a Credential |
+| **Product** | A set of APIs an app signs up to. Here it is how the app gets its key. Which product the app is on isn't checked, and its quota (usage limit) is not enforced. | a product document |
+| **Key** | The value the caller sends in `X-Device-Key`. It is the app's credential *key*, not its id and not its secret. | the credential key |
+| **Control plane** | The part of the platform where you manage APIs, products, developers and apps. | — |
+| **Upstream** | Your backend service. The gateway forwards requests that pass to it. | — |
+| **Terminal** | In this example, a payment card machine. It stands for any device or job that calls the API. | — |
 
-This is why the shipped spec has no key in it, and why that absence is a feature
-rather than an omission.
+**One app per caller.** If several callers share an app, you lose what this
+solution is for. You can no longer tell those callers apart, or switch one off on
+its own.
 
-## When not to use this shape
+## Which credential fits your caller
 
-- **The caller can run a token exchange.** Then it should — a credential that
-  expires on its own is strictly better where it is available.
-  [Solution 02](../02-oauth-jwt/).
-- **An external IdP already issues tokens.** The gateway must be a verifier, not a
-  second issuer. [Solution 05](../05-okta-jwt/).
-- **The body's integrity is the point.** A key authenticates the sender and says
-  nothing about the payload. [Solution 06](../06-hmac-auth/).
-- **The credential cannot be kept out of public reach** — a single-page app or a
-  mobile binary. A key shipped in client code is a published key, and no gateway
-  configuration changes that.
-- **You need per-user identity or consent.** Different problem entirely.
+A credential is what a caller uses to prove who it is: a key, a token or a
+signature. What the caller can do decides which one to use, not personal
+preference.
 
-## Failure modes and what they look like
+| Your caller | Use | Why |
+|---|---|---|
+| **Can set a header, nothing more** — a small device, older software that links two systems, a partner's scheduled job | **`helix-auth` validate · key-auth** — this solution | One header. The gateway finds the app. Switch-off takes effect straight away. |
+| **Can keep a secret and swap it for a token** — a partner's backend, a server-to-server connection | **`helix-auth` generate + validate** — [solution 02](../02-oauth-jwt/) | The long-lived secret is no longer sent with each request. A leaked token stops working on its own. |
+| **Already gets tokens from your identity provider** — Okta, Entra ID, Auth0, Keycloak | **`openid-connect`** — [solution 05](../05-okta-jwt/) | The gateway checks tokens that another system created. It must not create its own. |
+| **Can keep a secret, and you need proof the body wasn't changed** | **`hmac-auth`** — [solution 06](../06-hmac-auth/) | The secret is never sent at all. The signature covers the body. |
 
-| Symptom | Cause |
-|---|---|
-| Every request 401s with *Missing API key in request* | The header name on the wire is not the one in `apikey.key`, or the key is in the query string while `source` is `header` |
-| Every request 401s with *Invalid API key in request* | The value is not a credential key — usually the app id or the app secret was sent instead |
-| Dry-run rejects the config, naming `apikey` | `apikey.source` is absent. It is required in practice even though the published schema marks it optional |
-| A valid key returns **403** | Authentication succeeded, authorization did not: the app's product does not cover this API |
-| A revoked caller keeps working for a short while | Credential state is cached at the gateway; the cache interval is your real revocation latency |
-| Turning on `secret_validation` lets a caller in with only the secret | That is what the flag does — it accepts the secret as an *alternative* credential, not an additional one |
+All four answer "who is calling?". Use exactly one of them on a route.
+
+## How a request flows
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant T as Terminal
+    participant GW as Gateway
+    participant CP as Control plane
+    participant UP as Upstream
+
+    Note over T,GW: every call sends the same header
+    T->>GW: GET /fleet/price-list<br/>X-Device-Key: <the app's key>
+
+    Note over GW: helix-auth checks the key (key-auth), rewrite phase, first<br/>finds the app the key belongs to
+    alt key belongs to an existing app
+        GW->>UP: GET /todos/1 (path rewritten)<br/>X-Device-Key passed on as sent
+        UP-->>GW: 200
+        GW-->>T: 200 + X-Request-Id
+    else no header
+        GW--xT: 401 "Missing API key in request"
+    else key unknown, or the app was deleted
+        GW--xT: 401 "Invalid API key in request"
+    end
+
+    Note over CP,GW: switching a caller off is done in the control plane
+    CP-)GW: delete the app, or generate new credentials
+    T->>GW: GET /fleet/price-list (same key)
+    GW--xT: 401 — no deploy, no config change, no device update
+```
+
+The key is checked first, before anything else changes the request or forwards
+it (see [Execution order](#execution-order)). So a refused request costs your backend
+nothing. Your backend never sees it, your database never sees it, and it uses
+none of your backend's connections.
+
+The terminals call the routes `/fleet/price-list` and `/fleet/takings`. These
+paths are a promise to devices that are hard to update, so they must not change.
+The backend's paths (`/todos/1` and `/posts` on the public test service) can
+change. The `proxy-rewrite` plugin changes the path the gateway forwards to. So
+the paths the devices call never have to follow the backend.
+
+## Reading a rejection
+
+| Status | What it means | Where to look |
+|---|---|---|
+| **401** *Missing API key in request* | Nothing arrived in `X-Device-Key` | The header name in the request, or the key was sent in the URL instead |
+| **401** *Invalid API key in request* | Something arrived, but it belongs to no app | Usually the app's id or secret was sent instead of its key, or the app was deleted |
+| **`apikey.source: Missing required field`** in the wizard, or **dry-run rejected** naming `apikey` | `apikey.source` is missing from the config | See [Settings worth extra attention](#settings-worth-extra-attention) |
+
+(A dry-run is a test deploy that checks the configuration without changing
+anything live.)
+
+There is no HTTP 403 (forbidden) in this setup: a key from any app in the
+environment gets through, whatever product that app is on.
+
+In [solution 02](../02-oauth-jwt/), both kinds of 401 give the same message.
+Here the two messages are different. That helps a genuine caller work out what
+went wrong. Treat the message as a hint, not a promise that it will never change.
+
+## Execution order
+
+Plugins don't run in the order they appear in the file. They run in stages, called
+**phases**. Inside a phase they run by **priority**, highest number first.
+
+| Order | Plugin | Phase | Priority | What it does |
+|---|---|---|---|---|
+| — | `request-id` | — | — | On the whole API. Adds an `X-Request-Id` header: an id you can use to match up log entries for one request |
+| 1 | `helix-auth` (validate · key-auth) | rewrite | 2450 | Finds the app from the key. Refuses anything else. |
+| 2 | `proxy-rewrite` | rewrite | 1008 | Changes the path sent to the upstream. Takes no part in the key check. |
+
+Both run in the rewrite phase, so priority decides: `helix-auth` (2450) runs
+before `proxy-rewrite` (1008). A refused call stops there. Its path is never
+changed and it never reaches your backend. A trace of the request shows the same
+order.
+
+Once `helix-auth` has found the app, later plugins that need to know who is
+calling (usage limits, reports) read it from the request. They don't work it out
+again.
+
+## Why the key is looked up, not compared
+
+You could instead write one fixed key into the spec and compare the header with
+it. That would also "work", but it would be much worse:
+
+| | Fixed value in the config | Looked up on the app |
+|---|---|---|
+| Where the secret lives | In the spec, in git, in every revision (saved version of the API's configuration) | On the app, created by the control plane |
+| Switching off one caller | Edit the API and deploy it again | Delete the app |
+| Callers per key | One key, shared by everyone | One per caller |
+| Who can see it | Anyone who can read the repository | Nobody; it is never in the document |
+| Usage limits and reports | Nothing to count each request under | The app is what both count against |
+
+That is why the spec that comes with this package has no key in it. Leaving the
+key out is the design.
+
+## No custom code needed
+
+Everything here is built in. `helix-auth` in `validate` mode with
+`validate_auth_type: key-auth` is the platform's own way to identify callers by
+API key. It finds the same app that products, usage limits and reports use.
+
+Two other approaches were considered and rejected:
+
+- **A separate `key-auth` plugin.** It does not exist on this build (this version
+  of the gateway). `key-auth` and `jwt-auth` are *values* of `helix-auth`'s
+  `validate_auth_type` setting, not plugins. Looking for a plugin with that name
+  is the most common mistake here.
+- **Custom code that checks a header against a list.** It would work, and it
+  would be wrong. The list has to be stored somewhere. Switching a caller off
+  means deploying a config change again. And no other plugin could see who the
+  caller is.
+
+## When to use this
+
+Use it when:
+
+- your callers can set a header but can't swap a secret for a token,
+- you need to know each caller, and switch off each caller on its own, without
+  touching the backend or the caller's code,
+- you hand out one shared key today and want one per caller, or
+- you want to identify callers now and add usage limits later.
+
+Do not use it when:
+
+- **the caller can keep a secret and swap it for a token.** Use
+  [solution 02](../02-oauth-jwt/). When it is possible, a credential that stops
+  working on its own after a while is better.
+- **an identity provider already issues tokens to these callers.** Use
+  [solution 05](../05-okta-jwt/).
+- **you need proof the body wasn't changed** (payments, instructions). Use
+  [solution 06](../06-hmac-auth/).
+- **you need to know which person is calling.** A key identifies an app, not a
+  person.
+- **the key can't be kept out of public reach**, as in a public web app or a
+  mobile app. A key shipped in code that runs on users' devices is a published key.
+
+## Prerequisites
+
+- The API is imported and deployed, with an upstream linked to it.
+- `helix-auth` exists in your org with the fields in this spec. Its exact list of
+  fields varies between versions of the gateway. Check it with
+  `get_plugin_config` before deploying.
+- A product that includes this API, **deployed to the environment**, with a quota
+  (every product needs one, even though it isn't enforced here).
+- A developer, and **one app per caller** signed up to that product.
+
+## Settings worth extra attention
+
+**`apikey` with `source` is required.** There is no default value. The
+Configure plugin wizard shows `apikey.source: Missing required field` and won't
+let you continue without it. A spec or an agent-written config without it is
+refused at the dry-run:
+
+```text
+property "apikey" with "source" is required when mode is validate
+and validate_auth_type is key-auth
+```
+
+**`secret_validation` is not a second check.** From the plugin's own schema:
+
+> *Key-auth validate only. When true, the credential secret is accepted as an
+> **alternative** credential if the api key is absent.*
+
+It **widens** what is accepted. Someone might turn it on hoping the device must
+then send both the key and the secret. It does the opposite. With it on:
+
+- the app's secret on its own, with no key, gets 200;
+- another app's secret on its own also gets 200;
+- a wrong secret gets 401;
+- a wrong key together with a good secret gets 401. The key is checked first,
+  and a bad key never falls back to the secret.
+
+This package leaves it off. If you want two separate checks, use
+[solution 06](../06-hmac-auth/).
+
+**Header, not query string.** `apikey.source` accepts `header` or `query` (the
+part of the URL after `?`). Choose `header`. A key in a URL is copied into every
+access log, proxy log, referrer header and browser history it passes through.
+The tests confirm that this configuration **refuses** a key sent in the query
+string.
+
+**No `cors`, on purpose.** CORS is a setting that lets web pages in a browser
+call the API. Devices are not browsers. A CORS policy that allows every site on
+an API for devices would give browser pages a way in that the devices never need.
+
+## Limits worth knowing
+
+- **The key is sent with every request.** Anything that can see a request can
+  reuse it: a proxy, a network device that decrypts traffic, or a log that records
+  headers. Quick switch-off reduces the damage. It doesn't prevent it.
+- **The key reaches your backend.** The gateway passes `X-Device-Key` on
+  unchanged, and adds `X-Consumer-Username` and `X-Credential-Identifier` (the
+  app's id, not its name). `helix-auth` has no setting to hide the key. To keep
+  it out of your backend and its logs, remove the header with the route's
+  `proxy-rewrite`: see [Variations](guides.md#variations).
+- **A key never expires.** It works until somebody removes the app. Nothing
+  cleans up after you the way a token's lifetime does. Review the live apps
+  regularly instead.
+- **It identifies the caller. It does not decide what the caller may do.** The
+  key proves which app is calling, not what it is allowed to do.
+- **The identity is always an app, never a person.** There is no consent step
+  and no acting on someone's behalf.
+- **Switch-off takes seconds, not milliseconds.** The gateway keeps a short-term
+  copy of credential details (a cache). Measure that delay in your own environment
+  and publish *that* as the time it takes to switch a caller off. Don't quote a
+  number from here.
+- **Deleting an app deletes its history.** The delete dialog warns that the app's
+  usage history and analytics go with it. To switch a caller off and keep its
+  history, use **Generate New Credentials** on the app instead.
+- **Giving one app a new key cuts over at once.** The old key stops working the
+  moment the new one is live. If your devices update over several weeks, run two
+  apps, and delete the old one once every device has the new key.

@@ -134,7 +134,10 @@ jobs:
                     'rfc-editor.org', 'openid.net', 'oauth.net', 'jwt.io',
                     # product documentation and the free-trial sign-up —
                     # docs.digitalapi.ai, trial.digitalapi.ai
-                    'digitalapi.ai')
+                    'digitalapi.ai',
+                    # the SOAP 1.1 envelope namespace — an identifier from the
+                    # SOAP standard, not a host anyone calls
+                    'xmlsoap.org')
 
           def host_ok(h):
               h = h.strip('<>{}').lower().rstrip('.')

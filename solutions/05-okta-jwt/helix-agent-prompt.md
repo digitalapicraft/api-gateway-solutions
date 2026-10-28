@@ -1,9 +1,19 @@
 # Agent-mode prompt — verify Okta-issued tokens at the gateway
 
-Paste this to the Helix Agent as one message, replacing the `{{...}}` values.
-Bring an Okta authorization server's discovery URL and the client id and secret
-of an Okta application. Why it is worded this way and what to check before you
-trust it are in the [README](README.md#build-it-with-the-helix-agent).
+> [Overview](README.md) · [Business need](business-need.md) · [Architecture](architecture.md) · [Guides](guides.md) · **Agent prompt** · [Tests](tests.md) · [API reference](api-reference.md)
+
+---
+
+Paste this to the Helix Agent as one message, replacing the `{{...}}` values. You
+need an org that includes the `openid-connect` plugin, an Okta authorization
+server's discovery URL, and the client id and secret of an Okta application.
+
+**If the run ends early, paste the two steps one at a time instead.** When it
+finishes, read the deployed revision back and check that `openid-connect` carries
+`bearer_only: true` and your real client id and secret, not placeholders. Then
+check for `use_jwks: true`: the agent often leaves it out, and without it every
+token is refused, so add it yourself if it is missing. See
+[Troubleshooting](guides.md#troubleshooting) if something looks off.
 
 ## Prompt
 

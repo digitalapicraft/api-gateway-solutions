@@ -1,0 +1,2 @@
+POST {{gateway}}/sandbox/partners
+x-partner-id: initech-3

@@ -1,5 +1,9 @@
 # Mask PII in API responses and logs, at the API gateway
 
+> [Overview](README.md) · **Business need** · [Architecture](architecture.md) · [Guides](guides.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [API reference](api-reference.md)
+
+---
+
 > Audit flagged customer PII in the log aggregator, so there is a ticket to mask
 > the logs. Reading the sample lines, it became obvious the support console shows
 > two hundred agents the same thing: every customer's email, phone number and home
@@ -25,8 +29,8 @@ The two masks are independent, and shipping only one is how this usually fails:
 
 It is not access control: masking narrows what a legitimate caller sees, not who
 may call. It is not reversible, and it only finds the fields it was told about.
-[Before/after, why masks fail in practice, and what this does not buy you are in
-the README](README.md#business-need).
+[Why masks fail in practice](architecture.md#the-scope-setting) and [what this
+does not buy you](architecture.md#what-it-does-not-do) are in Architecture.
 
 *Also searched as: mask PII at the API gateway · redact sensitive fields in API
 responses · data masking API · mask email and phone in JSON · redact PII from logs ·
