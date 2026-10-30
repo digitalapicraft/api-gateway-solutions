@@ -1,0 +1,8 @@
+{
+  "status": 400,
+  "headers": {
+    "present": ["X-Request-Id"],
+    "absent": ["X-Powered-By"]
+  },
+  "body": "property \"priority\" validation failed: matches none of the enum values"
+}

@@ -1,0 +1,6 @@
+### Case: backend-paths-unreachable — the backend's own path, called directly.
+###
+### Expect 404 {"error_msg":"404 Route Not Found"}. Try /users and
+### /users/1/todos as well.
+GET {{GATEWAY}}/users/1
+accept: application/json

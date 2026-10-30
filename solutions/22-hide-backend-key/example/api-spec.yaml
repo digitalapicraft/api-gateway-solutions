@@ -1,0 +1,102 @@
+# Solution 22 — keep a supplier's API key out of every client.
+#
+# This is the importable artifact: an OpenAPI 3.0.3 document carrying
+# x-helix-gateway.plugins. Import it, link an upstream, deploy the revision.
+#
+# WHAT THIS DOES
+#   A weather supplier issued ONE API key. Instead of compiling it into every
+#   client, the gateway holds it. Each client app gets its OWN gateway key and
+#   sends it in X-Api-Key. On the way to the supplier the gateway:
+#     - checks the client's key (helix-auth, key-auth),
+#     - adds the supplier's key in X-Supplier-Key (proxy-rewrite headers.set),
+#     - removes the client's X-Api-Key (proxy-rewrite headers.remove).
+#   The supplier sees only its own key. A client never holds it.
+#
+# BEFORE YOU DEPLOY: REPLACE <SUPPLIER_API_KEY> BELOW WITH THE REAL VALUE.
+#   The gateway uses the value exactly as written. It does not read environment
+#   variables and does not resolve ${...} or <ENV:...> references: a value left
+#   as <SUPPLIER_API_KEY> is sent to the supplier as that literal text, and the
+#   supplier rejects every call. Replace it in your own copy (or in the console
+#   after import) and never commit the real value to a repository.
+#
+# RUNNABLE ON A FRESH FREE-TRIAL ORG. Link an upstream for postman-echo.com
+# (port 443, HTTPS). It is a public test service that echoes the request it
+# received, so you can see exactly what "the supplier" got. Its /get path stands
+# in for the supplier's forecast endpoint. With your real supplier, change the
+# upstream and the uri below.
+#
+# ORDER. helix-auth (priority 2450) and proxy-rewrite (1008) both run in the
+# rewrite phase, highest priority first. So the key check reads X-Api-Key BEFORE
+# proxy-rewrite removes it. Document order plays no part.
+#
+# WHY THE remove MATTERS. helix-auth has no setting to hide the client's key: it
+# forwards X-Api-Key to the backend as sent. Without headers.remove, every
+# client's own gateway key would reach the supplier, and appear in its logs.
+
+openapi: 3.0.3
+
+info:
+  title: Weather API
+  version: 1.0.0
+  description: >-
+    The forecast endpoint your mobile app, web app and partners call. Each client
+    sends its own key in X-Api-Key. The gateway checks it, then calls the weather
+    supplier with the supplier's key, which no client ever holds.
+
+paths:
+  /forecast:
+    get:
+      summary: Get the forecast
+      description: >-
+        Requires the calling app's own key in `X-Api-Key`. A missing key is
+        rejected with `Missing API key in request`, an unknown one with
+        `Invalid API key in request`, both HTTP 401, before the supplier is
+        called. Query parameters (for example `?city=London`) are passed on to
+        the supplier unchanged.
+      parameters:
+        - { name: city, in: query, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: The supplier's answer, passed through unchanged
+          content:
+            application/json:
+              schema:
+                type: object
+        '401': { description: No key in X-Api-Key, or a key that belongs to no app }
+      x-helix-gateway:
+        plugins:
+          # Runs after helix-auth (lower priority, same phase). Three jobs:
+          #   uri     the supplier's path for this route (postman-echo: /get)
+          #   set     the supplier's key. "set" replaces any value a client sends
+          #           in the same header, so a client cannot choose the key.
+          #   remove  the client's own gateway key, so the supplier never sees it.
+          proxy-rewrite:
+            uri: /get
+            headers:
+              set:
+                X-Supplier-Key: "<SUPPLIER_API_KEY>"
+              remove:
+                - X-Api-Key
+
+# API-WIDE POLICY. Covers every route, including any you add later.
+#
+# A route you add later gets the key check from here automatically, but NOT the
+# supplier's key: give it its own proxy-rewrite with the same headers block, or
+# the supplier rejects it and the client's X-Api-Key goes through.
+x-helix-gateway:
+  plugins:
+    # The client's own key, read from X-Api-Key and matched to an app. No key or
+    # an unknown key: HTTP 401, and the supplier is never called. There is no key
+    # value in this block: keys live on the apps the control plane creates.
+    helix-auth:
+      mode: validate
+      validate_auth_type: key-auth
+      apikey:
+        source: header
+        key: X-Api-Key
+
+    # An id on every response, so a client's report can be matched to the
+    # gateway's record of the call.
+    request-id:
+      algorithm: uuid
+      header_name: X-Request-Id

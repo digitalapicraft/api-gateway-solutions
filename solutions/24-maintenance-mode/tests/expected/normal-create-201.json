@@ -1,0 +1,10 @@
+{
+  "status": 201,
+  "headers": {
+    "present": ["X-Request-Id", "X-Powered-By"]
+  },
+  "body": {
+    "title": "verify.sh booking",
+    "id": 101
+  }
+}

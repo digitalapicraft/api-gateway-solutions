@@ -1,0 +1,7 @@
+### Case: create — a partner adds an item.
+### Expect 201. The sample backend echoes the item with id 101 and stores nothing.
+POST {{GATEWAY}}/catalog/items
+X-Api-Key: {{PARTNER_API_KEY}}
+content-type: application/json
+
+{"title":"Trail running shoe","price":89.5}

@@ -1,0 +1,19 @@
+### Case: write-unknown-key — each write method with a key no app has.
+### Expect 401 "Invalid API key in request" from all three. This is also what a
+### switched-off partner sees.
+POST {{GATEWAY}}/catalog/items
+X-Api-Key: 00000000-not-a-real-key
+content-type: application/json
+
+{"title":"Trail running shoe","price":89.5}
+
+###
+PUT {{GATEWAY}}/catalog/items/1
+X-Api-Key: 00000000-not-a-real-key
+content-type: application/json
+
+{"id":1,"title":"Trail running shoe","price":79.5}
+
+###
+DELETE {{GATEWAY}}/catalog/items/1
+X-Api-Key: 00000000-not-a-real-key

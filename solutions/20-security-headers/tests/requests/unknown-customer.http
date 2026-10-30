@@ -1,0 +1,7 @@
+### Case: unknown-customer — an error the backend returns.
+###
+### Expect 404 with body {}, from the backend, and the same headers as a 200.
+### An error response is still a response, and scanners ask for plenty of
+### things that don't exist.
+GET {{GATEWAY}}/users/999999
+accept: application/json

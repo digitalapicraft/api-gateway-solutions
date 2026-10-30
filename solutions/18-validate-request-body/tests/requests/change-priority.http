@@ -1,0 +1,8 @@
+### Case: change-priority — a change that sends one field.
+###
+### Expect 200 from the ticket service. PATCH requires nothing, so a body with
+### only "priority" is fine.
+PATCH {{GATEWAY}}/tickets/1
+content-type: application/json
+
+{"priority": "low"}

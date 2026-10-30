@@ -1,0 +1,5 @@
+### Case: list-query-kept — the query string through a fixed rewrite ("uri").
+###
+### Expect 200 and exactly 2 customers. The backend received GET /users?_limit=2.
+GET {{GATEWAY}}/v1/customers?_limit=2
+accept: application/json

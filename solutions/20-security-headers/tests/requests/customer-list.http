@@ -1,0 +1,6 @@
+### Case: customer-list — the whole list through the gateway.
+###
+### Expect 200 and the same headers as one-customer. The body (10 records,
+### about 5.6 KB) is byte-identical to the backend's GET /users.
+GET {{GATEWAY}}/users
+accept: application/json

@@ -1,0 +1,8 @@
+### Case: change-bad-priority — a change with a priority outside the list.
+###
+### Expect 400. Nothing is required on PATCH, but a field that is sent must
+### still follow the rule.
+PATCH {{GATEWAY}}/tickets/1
+content-type: application/json
+
+{"priority": "urgent"}

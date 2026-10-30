@@ -1,0 +1,56 @@
+# Solution 23 — Retire an old API version: the basic example spec.
+#
+# Four routes and nothing else: no plugins. Import this when you want to add the
+# plugins yourself in the UI, so you see what each one does. The walkthrough is
+# ../guides.md, "Build it in the UI".
+#
+# The same API with the plugins already in it is api-spec.yaml, next to this file.
+#
+# RUNNABLE ON A FRESH FREE-TRIAL ORG once the plugins are added. The upstream is
+# public https://jsonplaceholder.typicode.com. Without the plugins, every route
+# sends its own path (/v1/products/1) to the backend, which has no such path and
+# answers 404.
+
+openapi: 3.0.3
+
+info:
+  title: Products API
+  version: 1.0.0
+  description: >-
+    Two versions of one API side by side. Add the plugins yourself to send both
+    versions to the backend, mark v1 as deprecated, and retire one v1 endpoint.
+
+paths:
+  /v1/products/{productId}:
+    get:
+      summary: Get a product (v1, deprecated)
+      deprecated: true
+      parameters:
+        - { name: productId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: The product. }
+
+  /v1/products/{productId}/reviews:
+    get:
+      summary: Get a product's reviews (v1, retired)
+      deprecated: true
+      parameters:
+        - { name: productId, in: path, required: true, schema: { type: string } }
+      responses:
+        '410': { description: Retired. The gateway answers this once you add mocking. }
+
+  /v2/products/{productId}:
+    get:
+      summary: Get a product (v2)
+      parameters:
+        - { name: productId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: The product. }
+
+  /v2/products/{productId}/reviews:
+    get:
+      summary: Get a product's reviews (v2)
+      parameters:
+        - { name: productId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: The product's reviews (an array). }

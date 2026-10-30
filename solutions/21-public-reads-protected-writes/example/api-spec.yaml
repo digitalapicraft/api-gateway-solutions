@@ -1,0 +1,153 @@
+# Solution 21 — public reads, protected writes.
+#
+# This is the importable artifact: an OpenAPI 3.0.3 document carrying
+# x-helix-gateway.plugins. Import it, bind the upstream, and deploy the revision;
+# or paste the agent prompt into Agent Mode and it builds the same thing.
+#
+# RUNNABLE ON A FRESH FREE-TRIAL ORG. The upstream is the public
+# https://jsonplaceholder.typicode.com, so every route returns real data with no
+# backend of your own. Deploy to the "test" environment (the free-trial default).
+#
+# WHAT THIS DOES
+#   Anyone can read the catalogue: GET /catalog/items and
+#   GET /catalog/items/{itemId} need no key. Adding, changing or removing an item
+#   (POST, PUT, DELETE) needs a partner app's key in the X-Api-Key header. A
+#   write with no key, or with a key that belongs to no app, gets 401 and never
+#   reaches the backend.
+#
+# THE LESSON IS PLACEMENT
+#   helix-auth sits on the three WRITE routes only, under each path and method.
+#   Put it in the API-wide block at the bottom of this file instead and it
+#   covers the reads too: every search engine and comparison site would get 401.
+#   The two read routes below carry no plugin block at all. That is what "open"
+#   looks like in the spec.
+#
+#   Methods are separate routes. GET /catalog/items and POST /catalog/items are
+#   two routes on one path, each with its own plugins. A method the spec does not
+#   list (PATCH, for example) has no route, so the gateway answers 404 and
+#   nothing reaches the backend: "open reads" never means "open everything".
+#
+# THE SPEC CONTAINS NO SECRET
+#   helix-auth names the HEADER the key arrives in, never a key. The keys live on
+#   the partners' apps, which the control plane creates. Nothing here to fill in.
+#
+# EXECUTION ORDER IS PRIORITY-DRIVEN, NOT DOCUMENT ORDER
+#   helix-auth (2450) and proxy-rewrite (1008) both run in the rewrite phase, so
+#   on a write route helix-auth runs first and a rejected request stops there.
+#   proxy-rewrite only changes the path sent to the backend.
+
+openapi: 3.0.3
+
+info:
+  title: Catalogue API
+  version: 1.0.0
+  description: >-
+    A product catalogue anyone can read and only partners can change. Reads are
+    open; writes need a partner app's key in X-Api-Key. Proxies the public
+    jsonplaceholder service (its /posts collection stands in for catalogue
+    items) so it returns real data on a fresh org.
+
+paths:
+  /catalog/items:
+    get:
+      summary: List catalogue items
+      description: Open. No key needed.
+      responses:
+        '200': { description: The catalogue }
+      # No x-helix-gateway block: this route is public on purpose.
+
+    post:
+      summary: Add a catalogue item (partners only)
+      description: >-
+        Needs a partner app's key in X-Api-Key. No key gets
+        `Missing API key in request`; a key that belongs to no app gets
+        `Invalid API key in request`. Both are 401.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201': { description: Created (the sample backend echoes the item with an id) }
+        '401': { description: No key, or a key that belongs to no app }
+      x-helix-gateway:
+        plugins:
+          # Write route: a partner's key is required. apikey.source is
+          # required; the dry-run rejects the block without it.
+          helix-auth:
+            mode: validate
+            validate_auth_type: key-auth
+            apikey:
+              source: header
+              key: X-Api-Key
+
+  /catalog/items/{itemId}:
+    get:
+      summary: Get one catalogue item
+      description: Open. No key needed.
+      parameters:
+        - { name: itemId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: The item }
+        '404': { description: No such item (answered by the backend) }
+      # No x-helix-gateway block: this route is public on purpose.
+
+    put:
+      summary: Change a catalogue item (partners only)
+      parameters:
+        - { name: itemId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200': { description: Updated }
+        '401': { description: No key, or a key that belongs to no app }
+      x-helix-gateway:
+        plugins:
+          helix-auth:
+            mode: validate
+            validate_auth_type: key-auth
+            apikey:
+              source: header
+              key: X-Api-Key
+
+    delete:
+      summary: Remove a catalogue item (partners only)
+      parameters:
+        - { name: itemId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Removed }
+        '401': { description: No key, or a key that belongs to no app }
+      x-helix-gateway:
+        plugins:
+          helix-auth:
+            mode: validate
+            validate_auth_type: key-auth
+            apikey:
+              source: header
+              key: X-Api-Key
+
+# API-WIDE POLICY: every route, reads and writes alike. Nothing here decides who
+# may call; that is why helix-auth is NOT in this block.
+x-helix-gateway:
+  plugins:
+    # The public paths stay /catalog/items...; the sample backend serves the
+    # same data at /posts... One rule maps all five routes:
+    #   /catalog/items     -> /posts
+    #   /catalog/items/7   -> /posts/7
+    # With your own backend, change the second value (or drop the plugin if
+    # your backend already serves /catalog/items).
+    proxy-rewrite:
+      regex_uri:
+        - ^/catalog/items(.*)$
+        - /posts$1
+
+    # A request id on every response, so a partner's report ("my PUT failed at
+    # 10:42") can be matched to the gateway's record of that call.
+    request-id:
+      algorithm: uuid
+      header_name: X-Request-Id

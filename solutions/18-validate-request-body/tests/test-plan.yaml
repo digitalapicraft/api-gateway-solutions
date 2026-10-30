@@ -1,0 +1,143 @@
+# Test plan — Validate the request body.
+#
+# Cases 1-7 are executed in order by ../example/verify.sh, which exits 0 only if
+# all of them hold. The fixtures under requests/ and expected/ document each case
+# independently so you can run one by hand.
+#
+# Substitute your own values:
+#   {{GATEWAY}}   gateway base URL, e.g. https://<YOUR_GATEWAY_HOST>
+
+meta:
+  solution: 18-validate-request-body
+  version: 1.0.0
+  executor: example/verify.sh
+  how_the_answerer_is_known: >-
+    The sample backend (jsonplaceholder) sends X-Powered-By: Express on every
+    response and never answers these calls with 400. A response that carries the
+    header came from the backend; a 400 without it came from the gateway.
+    verify.sh checks the header is present on the good calls first, so its
+    absence on a 400 means something. BACKEND_HEADER overrides the header name.
+
+cases:
+  - id: create-valid
+    type: positive
+    intent: A ticket that follows the rule reaches the backend.
+    request: requests/create-valid.http
+    expected: expected/create-valid-201.json
+    asserts:
+      - status is 201
+      - X-Powered-By is present (the backend answered)
+
+  - id: missing-priority
+    type: negative
+    intent: A required field that is missing is refused at the gateway, by name.
+    request: requests/missing-priority.http
+    expected: expected/missing-priority-400.json
+    asserts:
+      - status is 400
+      - the body names "priority"
+      - X-Powered-By is absent (the backend never saw the call)
+
+  - id: title-null
+    type: negative
+    intent: >-
+      A field that is present but the wrong type is refused. null counts as
+      present, so this is the type rule at work, not the required list.
+    request: requests/title-null.http
+    expected: expected/title-null-400.json
+    asserts:
+      - status is 400
+      - the body names "title"
+      - X-Powered-By is absent
+    response_notes: >-
+      The message ends "got userdata", the checker's word for a JSON null.
+
+  - id: priority-not-allowed
+    type: negative
+    intent: A value outside the allowed list is refused.
+    request: requests/priority-not-allowed.http
+    expected: expected/priority-not-allowed-400.json
+    asserts:
+      - status is 400
+      - the body names "priority"
+      - X-Powered-By is absent
+    response_notes: >-
+      The message does not list the allowed values. Matching is exact, so
+      "HIGH" is refused too.
+
+  - id: not-json
+    type: negative
+    intent: A body that cannot be read as JSON is refused.
+    request: requests/not-json.http
+    expected: expected/not-json-400.json
+    asserts:
+      - status is 400
+      - X-Powered-By is absent
+    response_notes: >-
+      The message is the JSON parser's, and names a character position rather
+      than a field.
+
+  - id: change-priority
+    type: boundary
+    intent: >-
+      The rule is per route. PATCH requires nothing, so a change that sends
+      one field reaches the backend.
+    request: requests/change-priority.http
+    expected: expected/change-priority-200.json
+    asserts:
+      - status is 200
+      - X-Powered-By is present
+
+  - id: change-bad-priority
+    type: negative
+    intent: On PATCH, a field that is sent must still follow the rule.
+    request: requests/change-bad-priority.http
+    expected: expected/change-bad-priority-400.json
+    asserts:
+      - status is 400
+      - the body names "priority"
+      - X-Powered-By is absent
+
+  # ---- manual ----------------------------------------------------------------
+
+  - id: trace-shows-gateway
+    type: negative
+    manual: true
+    intent: >-
+      A trace record confirms the gateway answered and the backend was never
+      called.
+    procedure: >-
+      Open a trace session on the API (solution 16). Send the missing-priority
+      request. The record's outcome is short_circuit, short_circuit.plugin is
+      request-validation in the rewrite phase, and the upstream section has no
+      status. Send create-valid: the outcome is ok and the upstream status is 201.
+
+  - id: empty-body
+    type: negative
+    manual: true
+    intent: A request with no body at all is refused.
+    procedure: >-
+      POST /tickets with content-type application/json and no body. Expect 400
+      with a short HTML error page and no message. With rejected_msg set, the
+      fixed message is sent instead.
+
+  - id: first-failure-only
+    type: boundary
+    manual: true
+    intent: The message names one field at a time.
+    procedure: >-
+      POST /tickets with {}. Expect 400 naming "title" only. Add a title and send
+      again: the 400 now names "priority".
+
+  - id: known-gaps
+    type: boundary
+    manual: true
+    intent: >-
+      The sample rule lets these through, by design. Each has a fix in
+      guides.md, Variations.
+    procedure: >-
+      POST /tickets with each of these and expect 201 from the backend:
+      {"title":"   ","priority":"low"} (spaces only);
+      {"title":"x","priority":"low","priorty":"high"} (an unlisted field);
+      title=x&priority=low as application/x-www-form-urlencoded (a form body).
+      PATCH /tickets/1 with {} and expect 200.
