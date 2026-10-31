@@ -20,7 +20,7 @@
 #   proxy-rewrite injects them as headers on the upstream call. The backend reads a
 #   header instead of making the lookup itself.
 #
-# THE TWO THINGS THAT MAKE THIS WORK, BOTH VERIFIED AGAINST A GATEWAY
+# THE TWO THINGS THAT MAKE THIS WORK
 #
 #   1. phase: rewrite — NOT access.
 #      proxy-rewrite runs in the REWRITE phase. A callout configured for the access
@@ -108,7 +108,7 @@ paths:
 
           # The injection. These variable names are literal — the dots are part of
           # the name, not a path expression. An unresolved variable is NOT an
-          # error: in the fail-open run the three headers simply did not arrive at
+          # error: under fail-open the three headers simply do not arrive at
           # the backend at all. Your backend must therefore treat the headers as
           # optional and decide what to do when they are missing.
           proxy-rewrite:

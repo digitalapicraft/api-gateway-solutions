@@ -12,7 +12,7 @@ both directions:
 1. **Inbound** (`POST /statements/inbound`). The partner sends an encrypted
    instruction. The gateway decrypts it, replaces the request body with the plain
    content, sets `content-type: application/json`, and passes it to your backend.
-2. **Outbound** (`GET /statements/{statementId}`). Your backend returns an ordinary
+2. **Outbound** (`GET /statements/:statementId`). Your backend returns an ordinary
    JSON statement. The gateway encrypts it to the partner's public key and replaces
    the response body with the encrypted file, setting `content-type: text/plain`.
 
@@ -27,6 +27,8 @@ For the full list of fields on every plugin mentioned here, see
 | Word | What it means here |
 |---|---|
 | **Key pair** | A public key (handed out) and its private key (kept secret), generated together. |
+| **Encryption subkey** | The part of a key pair that encryption uses. A key without one can't be encrypted to. |
+| **Passphrase** | An optional password that protects the private key wherever it is stored. If your key has one, the inbound route needs it too. |
 | **Encrypt to** | Encrypt with the *recipient's* public key, so only the recipient's private key can decrypt. |
 | **Armor** | The text form of a PGP message: `-----BEGIN PGP MESSAGE-----` … |
 | **Wire format** | What travels over HTTP here: **base64 of the armor**, in both directions. |
@@ -119,9 +121,9 @@ the partner is part of the work: [Guides → The note to send your partner](guid
 | Route | Status | What it means |
 |---|---|---|
 | Inbound | **200** | Decrypted; the backend received plain content. |
-| Inbound | **400** | Not a PGP message this gateway can decrypt — raw armor, plain text, or a message encrypted to a different key. The backend was not called. |
+| Inbound | **400** | Not a PGP message this gateway can decrypt — raw armor, plain text, or a message encrypted to a different key — or the private key's passphrase is missing or wrong. The backend was not called. |
 | Outbound | **200**, `text/plain` | The statement, encrypted to the partner's key. |
-| Outbound | **500** | The response could not be encrypted, usually because the public key cannot be read. |
+| Outbound | **500** | The response could not be encrypted, usually because the public key cannot be read or is still the placeholder. |
 
 **Errors are vague on purpose.** The caller sees `failed to encrypt response` or
 your `fail_close_message`, and nothing else. An unreadable key, a wrong recipient
@@ -162,10 +164,11 @@ the in-process path does not cover. It uses the gateway's own CPU, and is bounde
 - **Rotating a key is a configuration change and a deploy**, and the old and new
   keys cannot both be live on one route — a hard cutover that has to be agreed with
   the partner.
-- **Every key is a literal in a document** that somebody could commit.
+- **Every key is a literal in a document** that somebody could commit, and so
+  is the passphrase, if your private key has one.
 
 For one long-lived partner that is acceptable and simple. Past the first partner it
-is the main cost of the design, which is why [solution 12](../12-key-value-map/)
+is the main cost of the design, which is why [solution 14](../14-per-partner-pgp-keys/)
 exists: the same plugin, with the key fetched from a store per request.
 
 ## No custom code needed
@@ -180,7 +183,7 @@ exists: the same plugin, with the key fetched from a store per request.
 | Per-partner keys | A config file it reads | One key pair per route — see above |
 
 The one place a custom service wins is many partners, because it can look a key up
-per request. That exists here too: [solution 12](../12-key-value-map/).
+per request. That exists here too: [solution 14](../14-per-partner-pgp-keys/).
 
 ## When to use this
 
@@ -200,7 +203,7 @@ Do not use it when:
   management for no gain.
 - **you need to prove who sent it.** That is a signature —
   [solution 06](../06-hmac-auth/).
-- **you have many partners.** Use [solution 12](../12-key-value-map/) rather than
+- **you have many partners.** Use [solution 14](../14-per-partner-pgp-keys/) rather than
   many routes with many key pairs.
 - **the payloads are large.** The crypto buffers the whole body and costs CPU per
   request.
@@ -209,10 +212,13 @@ Do not use it when:
 
 ## Prerequisites
 
-- An OpenPGP key pair of your own (for inbound), and your partner's public key (for
-  outbound). For a single-party test, one pair can fill both fields.
-- Keys with an **encryption subkey**. `gpg --quick-generate-key` does not make one;
-  see [Guides → Troubleshooting](guides.md#troubleshooting).
+- An OpenPGP key pair of your own (for inbound), with its passphrase if it has
+  one, and your partner's public key (for outbound). For a single-party test, one
+  pair can fill both fields. How to make them:
+  [Guides → Get the keys](guides.md#get-the-keys).
+- Keys with an **encryption subkey**. `gpg --quick-generate-key` makes one when
+  you leave the algorithm as `default`; naming an algorithm such as `rsa3072`
+  does not.
 - An upstream bound to the revision. The spec uses the public `httpbin.org`, whose
   `/post` echoes what it receives, so you can see the decrypted text.
 
@@ -224,7 +230,8 @@ Do not use it when:
   response body and discards the rest of the document. It is not a way to encrypt
   one field of a document you otherwise keep.
 - **Key material is a literal** in the document, with no environment-variable
-  lookup. The gateway does not resolve `<ENV:...>` or `${...}`.
+  lookup, and so is the passphrase. The gateway does not resolve `<ENV:...>` or
+  `${...}`.
 - **Rotation is a hard cutover** on a route, and there is **one key pair per
   route**.
 - **A wrong recipient key cannot be detected at the gateway.** The response is well

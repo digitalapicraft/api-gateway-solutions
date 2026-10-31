@@ -298,7 +298,7 @@ curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/developers" \
   | jq -r '.id'                                              # → <DEVELOPER_ID>
 
 curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/developers/<DEVELOPER_ID>/envs/<TEST_ENV_ID>/apps" \
-  -d '{"name":"<TERMINAL_APP_NAME>","products":{"<PRODUCT_ID>":1},"plugins":{"helix-auth":{}}}'
+  -d '{"name":"<TERMINAL_APP_NAME>","displayName":"<TERMINAL_APP_DISPLAY_NAME>","products":{"<PRODUCT_ID>":1},"plugins":{"helix-auth":{}}}'
 ```
 
 On an app, `plugins` names the way the app proves who it is. An empty

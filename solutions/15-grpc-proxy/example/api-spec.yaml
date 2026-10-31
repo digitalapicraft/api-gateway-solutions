@@ -1,7 +1,7 @@
 # =============================================================================
 # 15-grpc-proxy — the gateway in front of a bidirectional-streaming gRPC
-# service: authentication at connection initiation, concurrency caps per
-# caller, and connection telemetry, without touching the service.
+# service: authentication at connection initiation and connection telemetry,
+# without touching the service.
 #
 # READ THIS FIRST — THIS PACKAGE IS SHAPED DIFFERENTLY FROM EVERY OTHER ONE.
 #
@@ -30,9 +30,10 @@
 # ONE STREAM IS ONE REQUEST. Every access-phase plugin evaluates exactly once,
 # at stream initiation — which is what makes "authenticate the connection" work
 # at all. It also means a product quota counts STREAMS, NOT MESSAGES: one
-# long-lived connection carrying a million messages consumes one unit. Verified
-# with a limit-count of 1, which allowed five messages on one stream and then
-# rejected the next stream.
+# long-lived connection carrying a million messages consumes one unit. A request
+# limit of 1 lets messages flow on one stream and refuses the next stream. This
+# spec carries no api-product-enforcer, so a product's quota is not enforced
+# until you add one.
 #
 # DO NOT ADD A BODY-TOUCHING PLUGIN TO THESE ROUTES. Anything that buffers or
 # rewrites a body — response-rewrite, xml-to-json, request-validation,
@@ -51,8 +52,7 @@ info:
   description: >-
     A bidirectional-streaming gRPC service exposed through the gateway. Timing
     units hold a connection open for hours; the gateway authenticates each one as
-    it connects, caps how many a single caller may hold, and records how long
-    each stayed open — none of which the service has to implement.
+    it connects and records how long each stayed open — none of which the service has to implement.
 
 paths:
   /timing.TimingUnit/Ping:
@@ -98,8 +98,7 @@ paths:
       summary: Bidirectional command channel
       description: >-
         The server pushes commands down an open stream. Same policy as Status —
-        authenticated once at initiation, and counted against the same
-        concurrency cap.
+        authenticated once at initiation.
       responses:
         '200': { description: gRPC bidirectional stream }
         '401': { description: Missing or invalid API key }

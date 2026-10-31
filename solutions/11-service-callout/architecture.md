@@ -60,8 +60,7 @@ sequenceDiagram
 
 ## The two settings that make this work
 
-Both were checked against a running gateway, and both are reasons a configuration
-that looks right can do nothing at all.
+Get either one wrong and a configuration that looks right does nothing at all.
 
 ### 1. `phase: rewrite`, not `access`
 
@@ -70,8 +69,8 @@ priority only orders plugins *within* one phase. `proxy-rewrite` runs in the
 **rewrite** phase. A callout set to the **access** phase therefore runs *after* it:
 the headers have already been set, with nothing to put in them.
 
-Checked deliberately: an access-phase callout returned **HTTP 200 (OK)** with **no
-enrichment headers at the backend**, and no error anywhere. Within the rewrite
+An access-phase callout returns **HTTP 200 (OK)** with **no enrichment headers
+at the backend**, and no error anywhere. Within the rewrite
 phase, `service-callout` (2003) runs before `proxy-rewrite` (1008), which is the
 order this needs.
 
@@ -105,12 +104,17 @@ is invisible until a backend notices the header is missing.
 `headers.set` **replaces** a header the client sent. `headers.add` leaves the
 client's value in place alongside the gateway's.
 
-For an enrichment header this is a security property, not a style choice. Checked:
-a client sending `X-Tenant-Plan: Enterprise-Unlimited` had it overwritten with the
-callout's real value. With `add`, any caller could assert its own plan and the
-backend would believe it.
+For an enrichment header this is a security property, not a style choice. A
+client that sends `X-Tenant-Plan: Enterprise-Unlimited` has it overwritten with
+the callout's real value. With `add`, any caller could assert its own plan and the
+backend would believe it. [`example/verify.sh`](example/verify.sh) checks this for
+exactly that reason.
 
 ## Failure policy is a decision, per route
+
+This is the most important choice in the package. Before, each service decided
+for itself, whoever wrote it: one retried, one carried on, one failed the
+request. Here the policy is written on each route.
 
 | Policy | Behaviour | Fits |
 |---|---|---|
@@ -122,8 +126,8 @@ The example makes opposite choices on its two routes, on purpose:
 
 | Route | Policy | Why |
 |---|---|---|
-| `GET /storefront/orders` | `fail-open` | A read without the tenant's plan is survivable. Checked: 200, and the headers absent. |
-| `POST /storefront/checkout` | `fail-close` | Taking money without knowing the account's status is worse than failing. Checked: 503 with the configured message, and the backend never called. |
+| `GET /storefront/orders` | `fail-open` | A read without the tenant's plan is survivable. If the lookup fails: 200, and the headers absent. |
+| `POST /storefront/checkout` | `fail-close` | Taking money without knowing the account's status is worse than failing. If the lookup fails: 503 with the configured message, and the backend never called. |
 
 **Under `fail-open` the headers are absent, not empty.** Every backend must decide
 explicitly what a missing header means. One that assumes it is always there fails
@@ -152,8 +156,9 @@ almost nothing to adopt. Map what the backend needs, not the whole profile.
 |---|---|
 | 200, and no enrichment headers at all | `phase: access` instead of `rewrite`; or the callout failed under `fail-open` |
 | One header missing, the others present | That mapped path didn't match anything. No value, no error |
-| The header is there but wrong, or empty | The variable name doesn't match `ctx.helix.<ctx_namespace>.<field>` exactly — usually after `ctx_namespace` was changed |
+| The header is there but wrong, or empty | The variable name doesn't match `ctx.helix.<ctx_namespace>.<field>` exactly — usually after `ctx_namespace` was changed — or names a field `map_response_to_ctx` doesn't define |
 | A caller's own value reaches the backend | `headers.add` where `headers.set` belongs |
+| No enrichment headers, and a caller's own `X-Tenant-Plan` reaches the backend | Nothing sets the headers: the callout stored its answer and no `proxy-rewrite` reads it |
 | 503 with the callout's message | `fail-close` doing its job; the profile service can't be reached from the gateway |
 | The route got slower by exactly the timeout | The callout is timing out on every request, and the request waits for it |
 | A new route isn't enriched | `service-callout` is set per route |
@@ -210,6 +215,9 @@ Do not use it when:
 - **Carry structured data.** Mapped values become string headers.
 - **Hide what it injects.** Injected headers are visible downstream; don't map
   anything the backend shouldn't hold.
+- **Spare the backends all work.** Under `fail-open` the headers can be absent,
+  and each backend has to decide what that means: one documented behaviour
+  instead of many undocumented ones.
 
 ## Prerequisites
 

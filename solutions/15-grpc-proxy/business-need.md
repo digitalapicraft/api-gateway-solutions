@@ -1,36 +1,38 @@
-# Authentication for gRPC streams, without changing the service
+# gRPC stream authentication at the API gateway
 
 > [Overview](README.md) · **Business need** · [Architecture](architecture.md) · [Guides](guides.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [API reference](api-reference.md)
 
 ---
 
-> Timing units, payment terminals and telemetry agents hold a gRPC stream open for
-> hours. Nothing in front of them can see the connection, so every team builds its
-> own key check inside its own service.
+> Our timing units hold a bidirectional gRPC stream open for hours. Anything that
+> wants to know who is connected, refuse one unit, or count them has to be built
+> into the service, so each team that owns a streaming service builds its own key
+> check, its own idea of who's connected, and its own way to cut one off.
 >
-> **Some of your traffic is not requests. It is connections.**
+> **Put the gateway in front of the stream: it authenticates each connection as it
+> opens, and the service implements nothing.**
 
-- **Authentication ships as configuration.** A streaming service that had none
-  gains it with no code change, checked once as each connection opens.
-- **One check instead of one per service**, against the same app credentials as
-  every other API.
-- **Connections become visible** — how many, and how long each stayed open — per
-  app, without the service reporting anything.
+- **Auth implementations: one per streaming service → one, at the edge.** The unit
+  sends a key in its gRPC metadata; the gateway resolves it to an app.
+- **Cutting off one unit: a code change → disabling its credential.** Its next
+  connection is refused.
+- **Service code changed: none.** The stream stays bidirectional and stays open.
 
-One fact decides whether this fits your commercial model:
+One stream is one request to the gateway, and that decides what you can do with it:
 
-| | Ordinary API calls | gRPC streams through the gateway |
-|---|---|---|
-| What a policy sees | Every request | The moment each stream opens — **once** |
-| What a quota counts | Requests | **Streams**, not messages. A million messages on one connection use one unit. |
-| Revoking a credential | Stops the next request | Stops the next stream. An open stream carries on until it ends. |
+| You want | At the gateway |
+|---|---|
+| refuse a unit before it connects | yes, checked once as the stream opens |
+| count or meter connections per app | yes, once `api-product-enforcer` is on the routes; a quota counts streams |
+| meter or inspect individual messages | no; nothing at the edge sees inside the stream |
+| cut off a unit mid-stream | no; a revoked key stays effective until that stream ends |
 
-If you planned to charge per message at the gateway, that does not work with
-streams, and no setting changes it. For hours-long streams, decide deliberately
-how a revoked client is cut off — a maximum stream lifetime enforced by the
-service, or an out-of-band disconnect. More in
-[Architecture](architecture.md#what-this-does-not-do).
+A rejection is an HTTP 401, not a gRPC status, so clients see it as a transport
+error unless they check the HTTP status. The gRPC part lives on the upstream, not
+in the API spec. [Before/after, the upstream, and what this does not buy you are
+in Architecture](architecture.md).
 
-*Also searched as: gRPC API gateway authentication · gRPC streaming proxy ·
-authenticate gRPC metadata · bidirectional stream gateway · API key for gRPC ·
-long-lived connection monitoring · gRPC reflection through a proxy.*
+*Also searched as: gRPC authentication at the API gateway · authenticate gRPC
+streams · API key for gRPC metadata · bidirectional streaming through a gateway ·
+gRPC proxy with auth · long-lived connection identity · gRPC reflection through a
+gateway.*

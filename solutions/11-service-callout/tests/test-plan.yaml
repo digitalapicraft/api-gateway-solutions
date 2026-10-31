@@ -84,8 +84,8 @@ cases:
     request: requests/callout-down.http
     expected: expected/callout-down-503.json
     response_notes: >-
-      503 with the configured message. The backend is never called. Reproduced on a
-      lab route whose callout pointed at an unresolvable host.
+      503 with the configured message. The backend is never called. To see it, point the
+      callout at a host that does not resolve.
     expected_status: 503
     type_of_execution: manual
     procedure: >-
@@ -104,7 +104,7 @@ cases:
       Same lab route, policy fail-open, callout pointed at an unresolvable host.
     expected_outcome: >-
       200, and the backend receives the request with the enrichment headers ABSENT
-      — not empty, absent. Reproduced during this package's validation run. Your
+      — not empty, absent. Your
       backend must therefore treat them as optional and decide explicitly what to
       do when they are missing; a backend that assumes the header is always there
       will fail in a way that looks like a gateway bug.
@@ -123,8 +123,7 @@ cases:
       In a THROWAWAY environment, change the callout's phase from rewrite to access
       and call the route.
     expected_outcome: >-
-      200, and no enrichment headers at the backend at all. Reproduced during this
-      package's validation run. proxy-rewrite runs in the rewrite phase, so a
+      200, and no enrichment headers at the backend at all. proxy-rewrite runs in the rewrite phase, so a
       callout in the access phase produces its values after the injection has
       already happened. Nothing errors; the headers are just not there.
     notes: >-

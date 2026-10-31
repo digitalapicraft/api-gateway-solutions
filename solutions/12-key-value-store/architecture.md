@@ -1,4 +1,4 @@
-# Architecture — per-caller values composed at the edge
+# Architecture — per-caller values composed at the gateway
 
 > [Overview](README.md) · [Business need](business-need.md) · **Architecture** · [Guides](guides.md) · [Agent prompt](helix-agent-prompt.md) · [Tests](tests.md) · [API reference](api-reference.md)
 
@@ -160,7 +160,7 @@ validation, an audit trail, and the ability to pass values to a real backend. It
 costs a deployable, a pipeline and an on-call rotation, for a system whose only
 purpose is to let other people test. For sandbox data that trade is usually wrong.
 Where a value must reach your own services, the trade flips, and this pattern
-cannot do that job at all — see [solution 12](../12-key-value-map/).
+cannot do that job at all — see [solution 14](../14-per-partner-pgp-keys/).
 
 ## Where the values live
 
@@ -182,7 +182,7 @@ Do not use it when:
 
 - **the stored value has to reach a real backend.** `mocking` answers the request
   itself, so it can show a value but never forward one. That needs `pgp-crypto` or
-  `lua-callout` — see [solution 12](../12-key-value-map/).
+  `lua-callout` — see [solution 14](../14-per-partner-pgp-keys/).
 - **the data is confidential.** Every value is readable by anyone who can send the
   right partner id, which is a header.
 

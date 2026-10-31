@@ -1,4 +1,4 @@
-# Solution 12 — per-partner key material: the basic example spec.
+# Solution 14 — per-partner key material: the basic example spec.
 #
 # Two routes and nothing else: no plugins. Import this when you want to add the
 # plugins yourself in the UI, so you see what each one does. The walkthrough is

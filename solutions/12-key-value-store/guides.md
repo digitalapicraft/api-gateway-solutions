@@ -22,11 +22,24 @@ Then, for everyone: [See it work](#see-it-work) · [Variations](#variations) ·
 
 ## Build it with the Helix Agent
 
-[`helix-agent-prompt.md`](helix-agent-prompt.md) has four steps: create the API,
-add the registration route, add the read route, then read the revision back.
-**Paste each as its own message.** The prompt builds a smaller version than the
-spec; for the full version, import [`example/api-spec.yaml`](example/api-spec.yaml)
-instead.
+[`helix-agent-prompt.md`](helix-agent-prompt.md) has two steps: create the API with
+its two routes, then make them store each partner's values and answer with them.
+**Paste the whole prompt as one message** and replace the `{{...}}` values. It
+builds a smaller version than the spec, with no `/sandbox/diagnostics` teaching
+route. For the full version, import [`example/api-spec.yaml`](example/api-spec.yaml)
+instead. Then run [`example/verify.sh`](example/verify.sh) as in
+[See it work](#see-it-work).
+
+**Before you trust it, read the stored revision back and check:**
+
+- **The registration route** carries `key-value-map` with `inserts` keyed per
+  partner (`tier:$request.headers.x-partner-id`, `settlement:…`), and `mocking`
+  answering 202.
+- **The profile route** carries a `key-value-map` `fetch` of the same keys, with an
+  `alias` on each.
+- **The profile route's `mocking`** reads `$ctx.helix.key_value_map.<alias>`: a bare
+  `$`, no braces. `${ctx.helix…}` comes back empty, with a 200.
+- **Both plugins sit under their own names** in each route's `plugins` map.
 
 See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the ground rules these prompts
 assume.
@@ -240,8 +253,9 @@ who sends none, and without `x-tier` and `x-settlement-account` nothing is store
 
 **5. Before you expose it**
 
-- **Protect `/sandbox/partners`** ([solution 08](../08-api-key/)). Anyone who can
-  reach it can change any partner's values.
+- **Protect `/sandbox/partners` like any admin endpoint**
+  ([solution 08](../08-api-key/)). Anyone who can reach it can change any
+  partner's values.
 - **Don't let untrusted callers register.** Header values are copied into the
   reply as they are, with no escaping. A partner registered with
   `x-tier: gold","admin":"true` gets a profile with an extra `"admin":"true"`
@@ -340,14 +354,50 @@ the first one's, an unknown partner gets empty values, a change needs no deploy,
 and the bare `$ctx` syntax works while the braced one does not. What each check
 proves: [Tests](tests.md).
 
+On a build from the agent prompt, checks 1 to 5 cover what it built. Check 6 needs
+the `/sandbox/diagnostics` route, which the prompt leaves out, so it fails until
+you add that route ([Variations](#variations)).
+
 ## Variations
+
+Where a variation has a prompt, send it to the Helix Agent in the same session,
+once the main build is done. Like the main prompt, it says what should be true and
+leaves the plugins to the agent.
 
 **Change the paths.** `/sandbox/partners`, `/sandbox/profile` and
 `/sandbox/diagnostics` are illustrative; any paths work.
 
+**Protect the registration route.** `/sandbox/partners` ships with no sign-in, so
+anyone who can reach it can change any partner's values. Protect it like any admin
+endpoint, for example with an operator's API key ([solution 08](../08-api-key/)).
+With the agent:
+
+```text
+Require an operator's API key in the X-Admin-Key header on POST /sandbox/partners
+only, and leave the profile route as it is. Tell me what is still open after that.
+```
+
 **Store more fields.** Add another `inserts` entry on the registration route and
-another aliased `fetch` key on the profile route. The shipped spec already stores
-two (`tier` and `settlement`); the agent prompt stores one.
+another aliased `fetch` key on the profile route. The shipped spec and the agent
+prompt both store two (`tier` and `settlement`). A hyphen in an alias is fine:
+`$ctx.helix.key_value_map.my-tier` resolves like any other name. With the agent:
+
+```text
+Also store each partner's X-Region header, and return it as "region" in the
+profile response.
+```
+
+**Show the store's contents while your team learns it.** The agent prompt leaves
+out the `/sandbox/diagnostics` teaching route. To add it:
+
+```text
+Add GET /sandbox/diagnostics, answered by the gateway, showing the calling
+partner's stored tier read two ways: as $ctx.helix.key_value_map.tier and as
+${ctx.helix.key_value_map.tier}, plus everything stored for that partner. I'll
+remove it before production.
+```
+
+Drop it before production: it shows the store's contents to any caller.
 
 **Change the expiry.** Values are stored with `ttl: 86400` (24 hours). Pick it for
 how often your partners' data changes. Past it, a partner silently reverts to the
@@ -355,7 +405,12 @@ unregistered response.
 
 **Identify partners by credential, not header.** `x-partner-id` is a header the
 caller controls. In a real deployment, derive the identity from an authenticated
-credential instead ([solution 08](../08-api-key/)).
+credential instead ([solution 08](../08-api-key/)). With the agent:
+
+```text
+X-Partner-Id is a header anyone can send. Identify the calling app instead, and key
+the stored values on that app, so a partner can only ever read its own.
+```
 
 **Tell a miss from an empty value.** Both render as `""`. Store a marker value if
 you need to tell them apart.
@@ -486,12 +541,21 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
   (86400 seconds). A redeploy or a rollback does not remove them.
 - **Deploy fails: `Only INACTIVE revisions can be updated`.** Clone the revision
   or undeploy, then apply.
+- **Built with the agent: it writes a design but creates nothing, or designs
+  without the gateway's key-value store** (it says live execution is off, suggests
+  a backend service, or picks a different plugin). The build needs `key-value-map`
+  to store and look up each partner's values, and `mocking` to answer with
+  `$ctx.helix.key_value_map.<alias>`. Start a new session and say that the values
+  live in the gateway's key-value store and the gateway answers with `mocking`. The
+  dependable path is to import [`example/api-spec.yaml`](example/api-spec.yaml).
 - **Built with the agent: the route deploys with plugins you never asked for.**
-  The plugin-name level was dropped. Read the revision back and ask for a
-  `plugins` object keyed by plugin name.
+  The plugin-name level was dropped, and one plugin's fields were promoted into
+  the `plugins` map. Read the revision back and ask for a `plugins` object keyed
+  by plugin name.
 - **Built with the agent: `stream closed with reason: error`, and nothing was
-  written.** The structure was too deep for one write. Split the step, or use
-  spec import.
+  written.** The agent sent a malformed write for a large or deeply nested route.
+  Retry once, or paste the two steps as separate messages. If it fails again,
+  import [`example/api-spec.yaml`](example/api-spec.yaml).
 - **Use the trace inspector to see each step.** On the API's page, open the
   **Observability** tab and click **Start trace session**. It shows the headers
   each plugin changes and the request body at every stage, which is the fastest

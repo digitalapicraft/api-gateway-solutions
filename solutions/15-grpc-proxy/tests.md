@@ -1,4 +1,4 @@
-# Tests — a bidirectional gRPC stream, authenticated at the edge
+# Tests — a bidirectional gRPC stream, authenticated at the gateway
 
 > [Overview](README.md) · [Business need](business-need.md) · [Architecture](architecture.md) · [Guides](guides.md) · [Agent prompt](helix-agent-prompt.md) · **Tests** · [API reference](api-reference.md)
 
@@ -26,7 +26,9 @@ not to.
 
 Optional overrides, whose defaults match the spec's example service:
 `UNARY_METHOD`, `UNARY_BODY`, `BIDI_METHOD`, `BIDI_BODY`, `HOLD_METHOD`,
-`HOLD_SECONDS` (default 20) and `KEY_HEADER` (default `X-Unit-Key`).
+`HOLD_SECONDS` (default 20) and `KEY_HEADER` (default `X-Unit-Key`). If you built
+the API with the Helix Agent, set `KEY_HEADER` to the header it reads the key
+from: the agent picks its own unless the prompt names one.
 
 Exit code 0 means all six held:
 

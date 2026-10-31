@@ -282,7 +282,7 @@ curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/developers" \
   -d '{"firstName":"<FIRST_NAME>","lastName":"<LAST_NAME>","email":"<EMAIL>"}' \
   | jq -r '.id'                                              # → <DEVELOPER_ID>
 curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/developers/<DEVELOPER_ID>/envs/<TEST_ENV_ID>/apps" \
-  -d '{"name":"<APP_NAME>","products":{"<PRODUCT_ID>":1},"plugins":{"helix-auth":{}}}'
+  -d '{"name":"<APP_NAME>","displayName":"<APP_DISPLAY_NAME>","products":{"<PRODUCT_ID>":1},"plugins":{"helix-auth":{}}}'
 ```
 
 `plugins` on an app names the auth method it uses, and an empty

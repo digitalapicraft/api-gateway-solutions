@@ -23,7 +23,7 @@ written, and there is no control-plane call that sets it for you.
 | Create a product | `POST /api/orgs/{orgId}/products` | `{"name","displayName","apiIds","quota":{"limit":-1}}` | An app gets its credentials through a product. Which product isn't checked here: `helix-auth` alone accepts a token from any app in the environment. Every product needs a `quota` object; `limit: -1` means unlimited. |
 | Deploy the product | `POST /api/orgs/{orgId}/envs/{envId}/products/{productId}/deploy` | — | A separate deploy from the revision's. |
 | Create a developer | `POST /api/orgs/{orgId}/developers` | `{"firstName","lastName","email"}` | Returns the developer's `id`. |
-| Create an app | `POST /api/orgs/{orgId}/developers/{developerId}/envs/{envId}/apps` | `{"name","products":{"<productId>":<rank>},"plugins":{"helix-auth":{}}}` | `developerId` and the environment are **path segments**, not body fields. An empty `helix-auth` object asks for auto-generated credentials: the client id (the credential key) and the client secret. |
+| Create an app | `POST /api/orgs/{orgId}/developers/{developerId}/envs/{envId}/apps` | `{"name","displayName","products":{"<productId>":<rank>},"plugins":{"helix-auth":{}}}` | `developerId` and the environment are **path segments**, not body fields. An empty `helix-auth` object asks for auto-generated credentials: the client id (the credential key) and the client secret. |
 
 Two calls a caller makes, not the control plane — listed so the whole flow is in
 one place:

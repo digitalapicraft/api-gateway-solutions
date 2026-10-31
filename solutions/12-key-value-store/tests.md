@@ -21,6 +21,10 @@ yours differ. The script makes up fresh partner ids on every run, because the st
 outlives the test: a re-run against the same environment would otherwise be
 answered by the previous run's values.
 
+A build from the [agent prompt](helix-agent-prompt.md) has no `/sandbox/diagnostics`
+route. Cases 1 to 5 cover it, and case 6 fails until you add that route (see
+[Variations](guides.md#variations)).
+
 Exit code 0 means all six held:
 
 | # | Case | Expected |
