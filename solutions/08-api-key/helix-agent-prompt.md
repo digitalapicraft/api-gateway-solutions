@@ -16,14 +16,11 @@ Step 1:
 Create a REST API called "{{api_name}}" in the {{environment}} environment, proxying
 https://jsonplaceholder.typicode.com. Two routes: GET /fleet/price-list, which the
 upstream serves at /todos/1, and POST /fleet/takings, which it serves at /posts.
-Keep my paths.
 
 Step 2:
 Our fleet's terminals call these routes, and each terminal has its own API key.
 Update both routes so a call is accepted only with a valid key in the X-Device-Key
-header: a key in any other header or in the query string is refused, and the
-app's secret is never accepted in place of the key. The callers are devices, not
-browsers. Deploy it.
+header. Deploy it.
 
 Step 3:
 Create a developer "{{developer_name}}", a corresponding product and an app to work
