@@ -644,9 +644,8 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
 - **Deploy or dry-run fails: `encrypt.public_key: key material reference must be $consumer.<field>, $user.<field>, or $ctx.helix.<path> (got '$request.headers.x-partner-id')`.**
   `pgp-crypto` can't take the partner id header as its key. Give the document
   route's fetch `alias: partner_public_key`, and set `pgp-crypto`'s `public_key` to
-  `$ctx.helix.key_value_map.partner_public_key`. The agent can write the header
-  there, because the prompt asks for the partner id to be written that way
-  everywhere it appears.
+  `$ctx.helix.key_value_map.partner_public_key`. The prompt doesn't say how the
+  key is referenced, so an agent can still put the header there.
 - **Every partner gets the error.** The reference resolves to nothing. Check
   `headers` is plural, that the client sends the `X-Partner-Id` header, and that
   `pgp-crypto`'s `public_key` names the fetch's alias:

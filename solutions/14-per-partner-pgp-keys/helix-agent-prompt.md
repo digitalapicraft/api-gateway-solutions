@@ -30,8 +30,4 @@ so that:
 - GET /partners/documents fetches the key stored for the request's X-Partner-Id
   and returns the backend's document encrypted to it. A partner with no stored key
   gets a 500 and never the document in the clear.
-Both routes refer to the partner id as $request.headers.x-partner-id, written
-exactly that way everywhere it appears and left for the gateway to resolve on each
-request. The encryption settings sit under "encrypt" in the PGP plugin's
-configuration, not at its top level.
 ```
