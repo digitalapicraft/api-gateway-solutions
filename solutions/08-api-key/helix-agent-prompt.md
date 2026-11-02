@@ -23,7 +23,7 @@ Our fleet's terminals call these routes, and each terminal has its own API key.
 Update both routes so a call is accepted only with a valid key in the X-Device-Key
 header: a key in any other header or in the query string is refused, and the
 app's secret is never accepted in place of the key. The callers are devices, not
-browsers. Put a request id on every response. Deploy it.
+browsers. Deploy it.
 
 Step 3:
 Create a developer "{{developer_name}}", a corresponding product and an app to work
