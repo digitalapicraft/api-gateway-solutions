@@ -4,53 +4,28 @@
 
 ---
 
-Replace the `{{...}}` values, then **paste Step 1, confirm, and paste Step 2** in
-the same chat. See [Troubleshooting](guides.md#troubleshooting) if something looks
-off.
+Paste this to the Helix Agent as one message, replacing the `{{...}}` values. What
+to check before you trust the result is in
+[Guides](guides.md#build-it-with-the-helix-agent); if something looks off, see
+[Troubleshooting](guides.md#troubleshooting).
 
 ## Prompt
 
-### Step 1 — create and protect the API
-
 ```text
-Create a REST API "{{api_name}}" on upstream
-https://jsonplaceholder.typicode.com, environment test, with routes
-GET /fleet/price-list and POST /fleet/takings. Fresh org — nothing exists yet.
+Step 1:
+Create a REST API called "{{api_name}}" in the {{environment}} environment, proxying
+https://jsonplaceholder.typicode.com. Two routes: GET /fleet/price-list, which the
+upstream serves at /todos/1, and POST /fleet/takings, which it serves at /posts.
+Keep my paths.
 
-My route paths are the contract with the fleet; the upstream's are not. Add
-proxy-rewrite: /fleet/price-list -> /todos/1 and /fleet/takings -> /posts. Don't
-rename my routes to match the backend.
+Step 2:
+Our fleet's terminals call these routes, and each terminal has its own API key.
+Update both routes so a call is accepted only with a valid key in the X-Device-Key
+header: a key in any other header or in the query string is refused, and the
+app's secret is never accepted in place of the key. The callers are devices, not
+browsers. Put a request id on every response. Deploy it.
 
-Protect both with helix-auth, mode validate, validate_auth_type key-auth, reading
-the key from the HEADER X-Device-Key. key-auth is a validate_auth_type here, not a
-standalone plugin. apikey with source is required — the dry-run rejects the config
-without it.
-
-No secret goes in the spec: the key lives on the app credential and the route only
-names the header it arrives in. Don't set secret_validation — despite the name it
-accepts the credential's secret as an ALTERNATIVE credential, which widens what
-authenticates.
-
-Put request-id in the SERVICE spec so it applies API-wide. Don't add cors — these
-callers are devices, not browsers.
-
-Plugins go in a top-level "plugins" map on the route object, each under its own
-plugin name. No "x-helix-gateway" wrapper — a live route discards it silently and
-still reports success.
-
-Show me the spec, run dry_run_deploy, then read the revision back so I can see
-which plugins actually landed. Wait before deploying.
-```
-
-### Step 2 — issue a credential and test it
-
-```text
-Deploy the revision to test. Then create a product containing this API with a
-generous quota, deploy it to test, then create a developer "{{developer_name}}"
-with one app subscribed to it and give me the app's API key.
-
-Then curl commands showing, in order: no key → 401; the key in X-Device-Key → 200;
-an unknown key → 401; the right key in an "apikey" header → 401; and the right key
-as a query parameter → 401. The last two prove the header NAME and the header
-SOURCE are both part of the contract.
+Step 3:
+Create a developer "{{developer_name}}", a corresponding product and an app to work
+with the above API. Give me the app's API key.
 ```

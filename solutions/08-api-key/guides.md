@@ -26,10 +26,23 @@ Then, for everyone: [See it work](#see-it-work) · [Variations](#variations) ·
 
 ## Build it with the Helix Agent
 
-Works on a **new org**. [`helix-agent-prompt.md`](helix-agent-prompt.md) has two
-steps: Step 1 creates and protects the API, Step 2 deploys it, creates a key and
-gives you the calls that test it. **Paste one step at a time and confirm between them**, in the
-same chat.
+Works on a **new org**. [`helix-agent-prompt.md`](helix-agent-prompt.md) has the
+whole build as one prompt in three steps: the routes, the key check and the deploy,
+then a developer, product and app with a key. Paste it as one message and replace
+the `{{...}}` values.
+
+When it finishes, read the revision back. Before you trust it, check:
+
+- both routes carry `helix-auth` with `mode: validate`, `validate_auth_type:
+  key-auth` and `apikey` set to `source: header`, `key: X-Device-Key`;
+- `secret_validation` is not set: it would accept the app's secret in place of
+  the key;
+- there is no `cors` plugin, and `request-id` is on, API-wide or on each route;
+- the routes rewrite to `/todos/1` and `/posts`;
+- the revision is deployed, and the app is subscribed to the product.
+
+Then run [`example/verify.sh`](example/verify.sh) with `DEVICE_KEY` set to the app's
+key.
 
 See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the ground rules these prompts
 assume.

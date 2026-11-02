@@ -27,10 +27,30 @@ Then, for everyone: [See it work](#see-it-work) · [Variations](#variations) ·
 ## Build it with the Helix Agent
 
 Works on a **fresh, empty org**. [`helix-agent-prompt.md`](helix-agent-prompt.md)
-has two steps: Step 1 creates the ingest route, Step 2 gives you the commands that
-prove it. **Paste Step 1, check the result, then paste Step 2.** The agent's
-version checks only that the required fields are present; for the full field
-checks, import [`example/api-spec.yaml`](example/api-spec.yaml) instead.
+has the whole build as one prompt in two steps: the route, then the validation, the
+202 and the publishing. Create the Kafka topic first, then paste it as one message
+and replace the `{{...}}` values.
+
+When it finishes, read the revision back. Before you trust it, check:
+
+- `POST /events` carries `request-validation` requiring `event_id`, `event_type`
+  and `occurred_at`, with `rejected_code` 400. The spec also checks each field's
+  type; the agent's build may check only that they are present;
+- `mocking` answers 202 with `{"accepted":true}` and `with_mock_header: false`. It
+  defaults to `true`, which adds an `x-mock-by` header;
+- `kafka-logger` has `_meta.filter` `[["status","==",202]]`, so a rejected event is
+  never published;
+- its `log_format.request_id` is `$apisix_request_id`, not `$request_id`, so each
+  message matches the caller's `X-Request-Id`;
+- `required_acks` is `-1`, so a message counts only once every replica has it.
+  The spec also sets `producer_type: sync`, `batch_max_size: 1` and
+  `max_retry_count: 3`. The prompt doesn't ask for those, so set any the build
+  leaves out;
+- `request-id` sits API-wide, and every plugin is keyed by its own name in a flat
+  `plugins` map.
+
+Then run [`example/verify.sh`](example/verify.sh). It can't see Kafka itself:
+[Verifying the Kafka leg](#verifying-the-kafka-leg) shows how to check the topic.
 
 See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the ground rules these prompts
 assume.
