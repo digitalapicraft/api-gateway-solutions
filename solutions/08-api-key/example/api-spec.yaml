@@ -58,7 +58,7 @@ openapi: 3.0.3
 
 info:
   title: Terminal API
-  version: 1.0.0
+  version: 1.1.0
   description: >-
     The two endpoints a field terminal calls: it pulls its price list and pushes
     its takings. Every call is identified by the terminal's own API key, resolved
@@ -138,22 +138,14 @@ paths:
           proxy-rewrite:
             uri: /posts
 
-# API-WIDE POLICY.
+# NO API-WIDE POLICY.
 #
-# Note what is NOT here. There is no cors block: these callers are embedded
-# devices, not browsers, and a wildcard CORS policy on a fleet API grants browser
-# origins an access path the fleet itself never needs. Solution 02 carries cors
-# because its callers include browser clients; this one deliberately does not.
+# There is no cors block: these callers are embedded devices, not browsers, and a
+# wildcard CORS policy on a fleet API grants browser origins an access path the
+# fleet itself never needs. Solution 02 carries cors because its callers include
+# browser clients; this one deliberately does not.
 #
 # helix-auth is applied per route rather than at the document root only because
 # both routes need it identically — hoisting it to the root would work here. It is
 # kept per route so that adding an unauthenticated health route later is a local
 # change rather than a re-think.
-x-helix-gateway:
-  plugins:
-    # Correlation id on every call. When a site reports "terminal 3312 has been
-    # failing since Tuesday", this is the field that ties the gateway's record of
-    # the rejection to the backend's record of the calls that did get through.
-    request-id:
-      algorithm: uuid
-      header_name: X-Request-Id

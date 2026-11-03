@@ -78,7 +78,7 @@ sequenceDiagram
     alt key belongs to an existing app
         GW->>UP: GET /todos/1 (path rewritten)<br/>X-Device-Key passed on as sent
         UP-->>GW: 200
-        GW-->>T: 200 + X-Request-Id
+        GW-->>T: 200
     else no header
         GW--xT: 401 "Missing API key in request"
     else key unknown, or the app was deleted
@@ -127,7 +127,6 @@ Plugins don't run in the order they appear in the file. They run in stages, call
 
 | Order | Plugin | Phase | Priority | What it does |
 |---|---|---|---|---|
-| — | `request-id` | — | — | On the whole API. Adds an `X-Request-Id` header: an id you can use to match up log entries for one request |
 | 1 | `helix-auth` (validate · key-auth) | rewrite | 2450 | Finds the app from the key. Refuses anything else. |
 | 2 | `proxy-rewrite` | rewrite | 1008 | Changes the path sent to the upstream. Takes no part in the key check. |
 

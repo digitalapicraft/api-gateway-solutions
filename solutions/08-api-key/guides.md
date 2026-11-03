@@ -26,10 +26,23 @@ Then, for everyone: [See it work](#see-it-work) · [Variations](#variations) ·
 
 ## Build it with the Helix Agent
 
-Works on a **new org**. [`helix-agent-prompt.md`](helix-agent-prompt.md) has two
-steps: Step 1 creates and protects the API, Step 2 deploys it, creates a key and
-gives you the calls that test it. **Paste one step at a time and confirm between them**, in the
-same chat.
+Works on a **new org**. [`helix-agent-prompt.md`](helix-agent-prompt.md) has the
+whole build as one prompt in three steps: the routes, the key check and the deploy,
+then a developer, product and app with a key. Paste it as one message and replace
+the `{{...}}` values.
+
+When it finishes, read the revision back. Before you trust it, check:
+
+- both routes carry `helix-auth` with `mode: validate`, `validate_auth_type:
+  key-auth` and `apikey` set to `source: header`, `key: X-Device-Key`;
+- `secret_validation` is not set: it would accept the app's secret in place of
+  the key;
+- there is no `cors` plugin;
+- the routes rewrite to `/todos/1` and `/posts`;
+- the revision is deployed, and the app is subscribed to the product.
+
+Then run [`example/verify.sh`](example/verify.sh) with `DEVICE_KEY` set to the app's
+key.
 
 See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the ground rules these prompts
 assume.
@@ -101,8 +114,8 @@ That comes in step 3.
 **2. Add the plugins**
 
 Two plugins go on each route: one checks the caller's key, the other points the
-route at the right path on your backend. A third, optional one gives every
-request an id. Add them **before** you deploy: a live revision can't be changed.
+route at the right path on your backend. Add them **before** you deploy: a live
+revision can't be changed.
 
 On the API's page, open **Configuration → Plugins** and click **Configure
 plugin**. A short wizard opens:
@@ -114,9 +127,8 @@ plugin**. A short wizard opens:
    Paste the JSON below, or fill in the fields. Then **Next**.
 4. **Review** — shows the configuration before and after. Click **Apply**.
 
-The first two plugins go on **Specific endpoint**, so run the wizard once per
-plugin per route: four times, picking the route named below each time. The
-third goes on **Entire Revision**, once.
+Both plugins go on **Specific endpoint**, so run the wizard once per plugin per
+route: four times, picking the route named below each time.
 
 1. **`helix-auth` — checks the caller's key.** It reads the key from the
    `X-Device-Key` header and looks up which app it belongs to. No key, or a key
@@ -167,20 +179,8 @@ third goes on **Entire Revision**, once.
    on to your backend as sent; to remove it, see
    [Keep the key away from your backend](#variations).
 
-3. **`request-id` (optional) — gives every request an id.** Add it once, with
-   **Entire Revision**. It adds an `X-Request-Id` header to every response, so
-   you can match the gateway's record of a call with your backend's. The
-   solution works without it and `verify.sh` doesn't check for it, but the
-   expected result for a valid key,
-   [`tests/expected/valid-200.json`](tests/expected/valid-200.json), lists its
-   header.
-
-   ```json
-   {"algorithm":"uuid","header_name":"X-Request-Id"}
-   ```
-
-Repeat until both routes carry both of the first two plugins. What every field
-means: [Configuration reference](#configuration-reference).
+Repeat until both routes carry both plugins. What every field means:
+[Configuration reference](#configuration-reference).
 
 **3. Give it an upstream, then deploy it**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick environment
@@ -451,7 +451,6 @@ helix-auth:
 | `helix-auth` | `apikey.source` | `header` | Where the key is read from. **Required.** `query` (the URL) is allowed, but is a bad idea. |
 | `helix-auth` | `apikey.key` | `X-Device-Key` | The header name. Any name works. Callers must use exactly this name, so treat it as fixed once you publish it. |
 | `proxy-rewrite` | `uri` | `/todos/1` on `GET /fleet/price-list` · `/posts` on `POST /fleet/takings` | Changes the path callers use into the path on the upstream (your backend). Change these values when you use your own backend. It doesn't remove `X-Device-Key`, so the key reaches your backend; see [Variations](#variations) to remove it. |
-| `request-id` | `algorithm` / `header_name` | `uuid` / `X-Request-Id` | On the whole API. Gives each request an id, so you can match the gateway's log of a refused call with your backend's log of the calls that got through. |
 
 **Notice what that block does not contain.** There is no key and no secret. The
 route names the *header the key arrives in*. The key itself is created on the app
