@@ -1,0 +1,102 @@
+# Solution 17 — the same API once the backend exists: no mock.
+#
+# Same routes and contract as api-spec.yaml, with the mocking blocks removed.
+# Deploy this as a new revision of the same API and every call goes to the
+# backend. The frontend keeps the same host, paths and methods, so nothing
+# changes on its side. The x-mock-by header disappears with the mock.
+#
+# Also the starting point for "Build it in the UI": import this, then add the
+# mock to each route by hand. Removing it again is the switch-over.
+#
+# THE proxy-rewrite BLOCKS ARE FOR THE SAMPLE BACKEND ONLY. The public test
+# backend, jsonplaceholder.typicode.com, has no /shipments, so these map the
+# public paths onto its /posts:
+#   GET  /shipments/{shipmentId}  → GET  /posts/{shipmentId}
+#   POST /shipments               → POST /posts
+# Its answers are posts, not shipments; they only show that the call reached a
+# backend. If your own backend serves /shipments, delete both proxy-rewrite
+# blocks: the routes then pass straight through.
+
+openapi: 3.0.3
+
+info:
+  title: Shipments API
+  version: 1.0.0
+  description: >-
+    Shipment tracking for the frontend, served by the backend. The routes and
+    the contract are the same as the mocked version.
+
+paths:
+  /shipments/{shipmentId}:
+    get:
+      summary: Track one shipment
+      parameters:
+        - { name: shipmentId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: The shipment.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Shipment' }
+      x-helix-gateway:
+        plugins:
+          # SAMPLE BACKEND ONLY — see the header comment.
+          proxy-rewrite:
+            regex_uri: ["^/shipments/(.*)$", "/posts/$1"]
+
+  /shipments:
+    post:
+      summary: Create a shipment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NewShipment' }
+      responses:
+        '201':
+          description: Created. Location names the new shipment.
+          headers:
+            Location: { schema: { type: string }, description: Path of the new shipment }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Shipment' }
+      x-helix-gateway:
+        plugins:
+          # SAMPLE BACKEND ONLY — see the header comment.
+          proxy-rewrite:
+            uri: /posts
+
+components:
+  schemas:
+    Shipment:
+      type: object
+      required: [shipmentId, status, carrier, eta, events]
+      properties:
+        shipmentId: { type: string, example: SHP-1001 }
+        status:
+          type: string
+          enum: [LABEL_CREATED, PICKED_UP, DEPARTED_HUB, ARRIVED_HUB, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED]
+        carrier: { type: string, example: Acme Freight }
+        eta: { type: string, format: date-time, nullable: true }
+        events:
+          type: array
+          items:
+            type: object
+            properties:
+              at: { type: string, format: date-time }
+              status: { type: string }
+              location: { type: string }
+    NewShipment:
+      type: object
+      required: [origin, destination]
+      properties:
+        origin: { type: string, example: Rotterdam }
+        destination: { type: string, example: Leeds }
+        carrier: { type: string, example: Acme Freight }
+
+# API-WIDE POLICY — unchanged by the switch-over.
+x-helix-gateway:
+  plugins:
+    request-id:
+      algorithm: uuid
+      header_name: X-Request-Id

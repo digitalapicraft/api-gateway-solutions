@@ -1,0 +1,6 @@
+### Case: unknown-customer — an id the backend doesn't have.
+###
+### Expect 404 with the backend's body {} and an X-Request-Id: the route
+### matched, and the backend said no.
+GET {{GATEWAY}}/v1/customers/999
+accept: application/json

@@ -1,0 +1,19 @@
+{
+  "status": 200,
+  "body": {
+    "args": {
+      "city": "London"
+    },
+    "headers": {
+      "host": "postman-echo.com",
+      "x-supplier-key": "<SUPPLIER_API_KEY>",
+      "x-credential-identifier": "<APP_ID>",
+      "x-consumer-username": "<CONSUMER_ID>",
+      "x-api-key": "<APP_API_KEY>",
+      "accept": "*/*",
+      "x-forwarded-host": "<YOUR_GATEWAY_HOST>",
+      "x-forwarded-proto": "https"
+    },
+    "url": "https://postman-echo.com/get?city=London"
+  }
+}

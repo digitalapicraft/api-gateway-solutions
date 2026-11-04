@@ -1,0 +1,19 @@
+{
+  "status": 201,
+  "headers": {
+    "present": [
+      "x-mock-by",
+      "X-Request-Id"
+    ],
+    "values": {
+      "Location": "/shipments/SHP-1001"
+    }
+  },
+  "body": {
+    "shipmentId": "SHP-1001",
+    "status": "LABEL_CREATED",
+    "carrier": "Acme Freight",
+    "eta": "2026-11-04T17:00:00Z",
+    "events": []
+  }
+}

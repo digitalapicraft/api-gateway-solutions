@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "present": ["X-Request-Id", "X-Powered-By"],
+    "absent": ["Retry-After"]
+  }
+}

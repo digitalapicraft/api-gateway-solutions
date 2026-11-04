@@ -1,0 +1,6 @@
+### Case: list bookings.
+###
+### Normal state: 200 from the backend (it carries X-Powered-By).
+### Maintenance state: 503 from the gateway, with Retry-After and a JSON message.
+GET {{GATEWAY}}/bookings
+accept: application/json

@@ -1,0 +1,7 @@
+### Case: dot-dot-path — "../" segments, sent as-is.
+###
+### Expect 404 {"error_msg":"404 Route Not Found"}. Send it with
+### curl --path-as-is "{{GATEWAY}}/v1/customers/../../users/1/todos" — most
+### clients, curl included, resolve the "../" themselves before sending.
+GET {{GATEWAY}}/v1/customers/../../users/1/todos
+accept: application/json

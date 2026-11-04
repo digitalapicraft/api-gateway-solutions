@@ -1,0 +1,6 @@
+### Case: unknown-key — a key that belongs to no app.
+### Expect 401 with "Invalid API key in request". This is also what a client sees
+### after its app is deleted or given new credentials.
+GET {{GATEWAY}}/forecast?city=London
+X-Api-Key: 00000000-not-a-real-key
+accept: application/json

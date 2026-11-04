@@ -1,0 +1,59 @@
+# Solution 18 — Validate the request body: the basic example spec.
+#
+# Two routes and nothing else: no plugins. Import this when you want to add the
+# plugins yourself in the UI, so you see what each one does. The walkthrough is
+# ../guides.md, "Build it in the UI".
+#
+# The same API with the plugins already in it is api-spec.yaml, next to this file.
+#
+# Until you add proxy-rewrite, these routes send /tickets to the backend as it
+# is, and jsonplaceholder has no /tickets path, so every call returns 404.
+#
+# RUNNABLE ON A FRESH FREE-TRIAL ORG. The upstream is public
+# https://jsonplaceholder.typicode.com, which stands in for a support-ticket
+# service.
+
+openapi: 3.0.3
+
+info:
+  title: Support Tickets API
+  version: 1.0.0
+  description: >-
+    A support-ticket API on the public jsonplaceholder service. Add the plugins
+    yourself to check every new ticket and every change at the gateway.
+
+paths:
+  /tickets:
+    post:
+      summary: Open a ticket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, priority]
+              properties:
+                title: { type: string, minLength: 1 }
+                priority: { type: string, enum: [low, normal, high] }
+      responses:
+        '201': { description: Created. The ticket service echoes the ticket with an id. }
+        '400': { description: The body broke the rule. The gateway answers this once you add request-validation. }
+
+  /tickets/{ticketId}:
+    patch:
+      summary: Change a ticket
+      parameters:
+        - { name: ticketId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string, minLength: 1 }
+                priority: { type: string, enum: [low, normal, high] }
+      responses:
+        '200': { description: The changed ticket, as the ticket service returns it. }
+        '400': { description: A field broke the rule. The gateway answers this once you add request-validation. }

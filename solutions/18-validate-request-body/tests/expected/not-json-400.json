@@ -1,0 +1,8 @@
+{
+  "status": 400,
+  "headers": {
+    "present": ["X-Request-Id"],
+    "absent": ["X-Powered-By"]
+  },
+  "body": "Expected value but found invalid token at character 1"
+}

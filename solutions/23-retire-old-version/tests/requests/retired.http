@@ -1,0 +1,7 @@
+### Case: retired — the gateway answers 410 itself.
+###
+### Expect 410, a JSON body whose "successor" is /v2/products/7/reviews, a
+### Sunset of Wed, 30 Sep 2026 23:59:59 GMT and a Link to the same address.
+### No X-Powered-By header: that one comes from the backend, which is never called.
+GET {{GATEWAY}}/v1/products/7/reviews
+accept: application/json

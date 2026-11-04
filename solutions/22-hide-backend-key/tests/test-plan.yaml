@@ -1,0 +1,156 @@
+# Test plan — Keep a supplier's API key out of every client.
+#
+# Cases 1-7 are executed in order by ../example/verify.sh, which exits 0 only if
+# all of them hold. Cases 4-6 read what the backend received, so they need an
+# upstream that echoes the request: postman-echo.com, as in the example. The
+# fixtures under requests/ and expected/ document each case so you can run one
+# by hand.
+#
+# Substitute your own values:
+#   {{GATEWAY}}       gateway base URL, e.g. https://<YOUR_GATEWAY_HOST>
+#   {{APP_API_KEY}}   the app's key: the credential KEY, not its secret or its id
+#   <SUPPLIER_API_KEY> in the fixtures is the value you configured on the route
+
+meta:
+  solution: 22-hide-backend-key
+  version: 1.0.0
+  executor: example/verify.sh
+  note: >-
+    Cases 1-7 are automated. The missing-remove case, the hide-the-caller
+    variation and switching an app off are manual: the first two need a
+    different configuration deployed, the last destroys the key the other cases
+    use.
+  echo_backend: >-
+    postman-echo.com returns the request it received, including the supplier's
+    key, in the response body. So with this test upstream a client CAN read the
+    supplier's key in the body. That is the echo service doing its job, not the
+    gateway leaking it. A real supplier does not echo its key back.
+
+cases:
+  - id: no-key
+    type: negative
+    intent: >-
+      A call with no client key is refused at the gateway, and the supplier is
+      never called.
+    request: requests/no-key.http
+    expected: expected/no-key-401.json
+    response_notes: >-
+      "Missing API key in request" means nothing arrived in X-Api-Key. The body
+      is JSON but is sent as text/plain.
+
+  - id: unknown-key
+    type: negative
+    intent: >-
+      A key that belongs to no app is refused. This is also what a client sees
+      after its app is deleted or given new credentials.
+    request: requests/unknown-key.http
+    expected: expected/unknown-key-401.json
+    response_notes: >-
+      "Invalid API key in request" means a key arrived and matched no app. A 200
+      here means the route checks no key at all.
+
+  - id: valid-key
+    type: positive
+    intent: >-
+      A valid app key reaches the supplier, and the key check still reads
+      X-Api-Key even though proxy-rewrite removes it later: the key check runs
+      first.
+    request: requests/valid-key.http
+    expected: expected/valid-200.json
+    response_notes: >-
+      The body is postman-echo's record of the request it received. Query
+      parameters pass through unchanged (args.city). The gateway also adds
+      x-consumer-username and x-credential-identifier, which name the app; they
+      are not secrets. See the hide-the-caller case to remove them as well.
+
+  - id: supplier-key-sent
+    type: positive
+    intent: >-
+      The backend receives X-Supplier-Key with exactly the configured value.
+    request: requests/valid-key.http
+    expected: expected/valid-200.json
+    notes: >-
+      verify.sh compares the echoed value with SUPPLIER_KEY. If the backend
+      received text such as <SUPPLIER_API_KEY> or <ENV:SUPPLIER_API_KEY>, the
+      placeholder or reference was stored as written: the gateway resolves no
+      references, so the route must hold the literal key.
+
+  - id: client-key-removed
+    type: positive
+    intent: >-
+      The backend does not receive the client's own X-Api-Key.
+    request: requests/valid-key.http
+    expected: expected/valid-200.json
+    notes: >-
+      Fails when headers.remove is missing. Compare with the missing-remove case
+      below, which shows the backend receiving the client's key.
+
+  - id: client-sends-supplier-key
+    type: boundary
+    intent: >-
+      A client that sends its own X-Supplier-Key cannot choose the key the
+      supplier sees: headers.set replaces it.
+    request: requests/client-sends-supplier-key.http
+    expected: expected/valid-200.json
+    notes: >-
+      headers.add would keep the client's value as well, so the supplier could
+      receive a key the client picked. Use set.
+
+  - id: no-supplier-key-in-response-headers
+    type: positive
+    intent: >-
+      No response header the client receives contains the supplier's key.
+    request: requests/valid-key.http
+    expected: expected/valid-200.json
+    notes: >-
+      verify.sh checks the response headers only. The response body from
+      postman-echo does contain the key, because it echoes the request; see
+      meta.echo_backend.
+
+  - id: missing-remove
+    type: failure
+    intent: >-
+      Show what happens without headers.remove: the key check has no setting to
+      hide the client's key, so the client's own X-Api-Key goes on to the
+      supplier.
+    type_of_execution: manual
+    procedure: >-
+      In a test environment, deploy the route with proxy-rewrite's headers.set
+      but no headers.remove. Send requests/valid-key.http. Then run verify.sh
+      against it.
+    expected: expected/leaky-200.json
+    expected_outcome: >-
+      200, and the echoed headers include x-api-key with the client's key.
+      verify.sh fails at "the backend received the client's X-Api-Key".
+
+  - id: hide-the-caller
+    type: boundary
+    intent: >-
+      The two headers the gateway adds to name the app can be removed too, so
+      the supplier learns nothing about which client called.
+    type_of_execution: manual
+    procedure: >-
+      Add X-Consumer-Username and X-Credential-Identifier to the remove list,
+      deploy, and send requests/valid-key.http.
+    expected_outcome: >-
+      200; the echoed headers carry x-supplier-key and none of x-api-key,
+      x-consumer-username or x-credential-identifier. verify.sh still exits 0.
+
+  - id: switch-off-a-client
+    type: failure
+    intent: >-
+      Stopping one client is a control-plane change to its app. The supplier key
+      and the other clients are untouched.
+    type_of_execution: manual
+    procedure: >-
+      Confirm the app's key returns 200. Delete the app, or click Generate New
+      Credentials on it. Send the same request with the same key.
+    expected_outcome: >-
+      401 "Invalid API key in request" within a short delay; another app's key
+      still returns 200.
+
+coverage:
+  positive: [valid-key, supplier-key-sent, client-key-removed, no-supplier-key-in-response-headers]
+  negative: [no-key, unknown-key]
+  boundary: [client-sends-supplier-key, hide-the-caller]
+  failure:  [missing-remove, switch-off-a-client]

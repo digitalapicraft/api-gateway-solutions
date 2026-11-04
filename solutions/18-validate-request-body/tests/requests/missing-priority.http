@@ -1,0 +1,8 @@
+### Case: missing-priority — a ticket with no priority.
+###
+### Expect 400 'property "priority" is required', answered by the gateway.
+### No X-Powered-By header: the ticket service never saw the request.
+POST {{GATEWAY}}/tickets
+content-type: application/json
+
+{"title": "Printer on fire"}
