@@ -24,8 +24,9 @@
 #
 #   1. phase: rewrite — NOT access.
 #      proxy-rewrite runs in the REWRITE phase. A callout configured for the access
-#      phase runs AFTER it, so the header values are not there yet and the backend
-#      receives empty headers. Within the rewrite phase, service-callout (priority
+#      phase runs AFTER it, so the header values are not there yet: the headers
+#      are left out altogether, and a header of the same name that the client
+#      sent is stripped too. Within the rewrite phase, service-callout (priority
 #      2003) runs before proxy-rewrite (1008), which is the order this needs.
 #      Phase beats priority; priority only orders within a phase.
 #
@@ -168,7 +169,9 @@ x-helix-gateway:
   plugins:
     # Correlation id. A callout doubles the number of places a request can be slow
     # or fail, and the failure surfaces at the gateway rather than in either
-    # service's log. This is the field that ties the three together.
+    # service's log. The id reaches the backend; it is not sent to the profile
+    # service unless you add it to the callout with custom_headers (see the
+    # guide's configuration reference).
     request-id:
       algorithm: uuid
       header_name: X-Request-Id
