@@ -30,7 +30,8 @@ Exit code 0 means all five checks held:
 way for callers to raise their own privileges, and it breaks silently if someone
 changes `set` to `add` while tidying up. Check 3 is quietly useful: mapping the
 callout's own status lets a backend tell a real answer from a fail-open miss. It
-arrives with a 404 or 500 from the profile service, but not after a timeout.
+arrives with any 4xx or 5xx from the profile service, but not when the service
+can't be reached at all: down, DNS, TLS or a timeout.
 Check 5 catches the plugin being per route — a route added later gets no
 enrichment until someone remembers.
 

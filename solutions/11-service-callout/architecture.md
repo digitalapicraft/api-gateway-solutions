@@ -123,7 +123,7 @@ request. Here the policy is written on each route.
 |---|---|---|
 | `fail-open` | The request carries on; the enrichment headers are **absent**; the error is recorded in the request's context | A read path where a missing answer is survivable |
 | `fail-close` | **HTTP 503 (service unavailable)** with the configured message; the backend is never called | A write path where acting without the answer is worse than failing |
-| `log-only` | From the caller's side, the same as `fail-open`: the request carries on and the headers are absent. The error is only logged, not recorded in the context | Diagnostics; rarely what you want in production |
+| `log-only` | From the caller's side, the same as `fail-open`. The error is only logged, not recorded in the context | Diagnostics; rarely what you want in production |
 
 `async: true` is a separate setting, not a policy: the request doesn't wait for
 the lookup and the answer is never stored for it, so the headers are absent.
@@ -132,19 +132,23 @@ The example makes opposite choices on its two routes, on purpose:
 
 | Route | Policy | Why |
 |---|---|---|
-| `GET /storefront/orders` | `fail-open` | A read without the tenant's plan is survivable. If the lookup fails: 200, and the headers absent. |
+| `GET /storefront/orders` | `fail-open` | A read without the tenant's plan is survivable. If the lookup fails: 200, and the mapped headers absent, except `X-Profile-Status`, which carries the 4xx/5xx status. |
 | `POST /storefront/checkout` | `fail-close` | Taking money without knowing the account's status is worse than failing. If the lookup fails: 503 with the configured message, and the backend never called. |
 
-**What counts as a failed lookup.** The profile service can't be reached, it
-doesn't answer within `timeout`, or it answers with an error such as HTTP 404 (not
-found) or 500 (server error). All of these trigger the policy, so a tenant with no
-profile record is handled the same way as an outage.
+**What counts as a failed lookup.** The profile service can't be reached (it is
+down, or DNS or TLS fails), it doesn't answer within `timeout`, or it answers with
+an error status, 4xx or 5xx, such as HTTP 404 (not found) or 500 (server error).
+All of these trigger the policy. Any 2xx or 3xx answer counts as success, even
+with an empty body. So a tenant with no profile record gets 503 on checkout only
+if the profile service answers 4xx or 5xx for a missing tenant. If it answers
+`200 {}`, checkout still reaches the backend, just with no `X-Tenant-Plan`.
 
 **Under `fail-open` the headers are absent, not empty.** Every backend must decide
 explicitly what a missing header means. One that assumes it is always there fails in a way that
 is hard to trace back. Mapping the callout's own status
-(`X-Profile-Status`) helps, with one gap: after a 404 or 500 it still arrives,
-carrying that status, but after a timeout it is missing like the others.
+(`X-Profile-Status`) helps, with one gap: after a 4xx or 5xx answer it still
+arrives, carrying that status, but when the service can't be reached at all
+(down, DNS, TLS or a timeout) it is missing like the others.
 
 ## Why headers
 
@@ -166,7 +170,8 @@ almost nothing to adopt. Map what the backend needs, not the whole profile.
 
 | Symptom | Cause |
 |---|---|
-| 200, and no enrichment headers at all | `phase: access` instead of `rewrite` (a client's own header of the same name is stripped too); or the callout failed under `fail-open` |
+| 200, and no enrichment headers at all | `phase: access` instead of `rewrite` (a client's own header of the same name is stripped too); or the profile service couldn't be reached under `fail-open` |
+| 200, and only `X-Profile-Status`, carrying a 4xx or 5xx | The profile service answered with an error under `fail-open`. The mapped headers are absent, except `X-Profile-Status` |
 | One header missing, the others present | That mapped path didn't match anything (a path into a list never does). No value, no error |
 | A header is missing, and a client's own header of that name is stripped too | The variable name doesn't match `ctx.helix.<ctx_namespace>.<field>` exactly — usually after `ctx_namespace` was changed — or names a field `map_response_to_ctx` doesn't define |
 | A caller's own value reaches the backend | `headers.add` where `headers.set` belongs |

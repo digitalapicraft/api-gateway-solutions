@@ -476,19 +476,22 @@ uses `uri: /post` and sets only `X-Tenant-Plan` and `X-Profile-Status`.
 | `proxy-rewrite` | `headers.set` | `X-Tenant-*: ${ctx.helix.service_callout.<field>}` | `set` replaces a client's header; `add` wouldn't. The variable name is literal, dots included. |
 | `request-id` | `algorithm` / `header_name` | `uuid` / `X-Request-Id` | API-wide. A callout doubles the places a request can be slow or fail; this id ties the gateway's and the backend's records of one request together. It isn't sent to the profile service unless you add it (below). |
 
-**What counts as a failed lookup.** The profile service can't be reached, it
-doesn't answer within `timeout`, or it answers with an error such as HTTP 404 (not
-found) or 500 (server error). All of these trigger the policy, so a tenant with no
-profile record is handled the same way as an outage.
+**What counts as a failed lookup.** The profile service can't be reached (it is
+down, or DNS or TLS fails), it doesn't answer within `timeout`, or it answers with
+an error status, 4xx or 5xx, such as HTTP 404 (not found) or 500 (server error).
+All of these trigger the policy. Any 2xx or 3xx answer counts as success, even
+with an empty body. So a tenant with no profile record gets 503 on checkout only
+if the profile service answers 4xx or 5xx for a missing tenant. If it answers
+`200 {}`, checkout still reaches the backend, just with no `X-Tenant-Plan`.
 
 **The four ways to handle a failed or slow lookup.** Three are values of
 `error_handling.policy`; the fourth is a separate setting.
 
 | Setting | What the caller and the backend see |
 |---|---|
-| `fail-open` | The request carries on; the headers are absent. |
+| `fail-open` | The request carries on. The mapped headers are absent, except `X-Profile-Status`, which carries the 4xx/5xx status. |
 | `fail-close` | HTTP 503 with `error_handling.message`; the backend is never called. |
-| `log-only` | From the caller's side, the same as `fail-open`: the request carries on and the headers are absent. The error is only logged. |
+| `log-only` | From the caller's side, the same as `fail-open`. The error is only logged. |
 | `async: true` | The request doesn't wait for the lookup, and the answer is never stored for it, so the headers are absent. That defeats the purpose here. |
 
 **Other `service-callout` fields** the example doesn't set:
@@ -528,11 +531,16 @@ Every field of every plugin, and the wider product docs:
   profile service counts as a failed lookup, the same as an outage, so
   `fail-close` refuses the request. On the read route (`fail-open`) the request
   carries on, and `X-Profile-Status` arrives as `404`.
+- **Checkout reaches the backend with no `X-Tenant-Plan`.** The profile service
+  answered with a 2xx or 3xx status, for example `200 {}` for a tenant it doesn't
+  know. Any 2xx or 3xx counts as a successful lookup, even with an empty body, so
+  `fail-close` lets the request through. Make the profile service answer 404 for
+  a missing tenant if checkout must be refused.
 - **200, but no enrichment headers at the backend.** The lookup is in
   `phase: access`; it must be `rewrite`. Phase beats priority, and nothing
   errors. The headers are left out altogether, and a caller's own header of the
-  same name is stripped too. A lookup that failed under `fail-open` also leaves
-  the headers out.
+  same name is stripped too. Under `fail-open`, a profile service that can't be
+  reached also leaves the headers out.
 - **200, no enrichment headers, and a caller's own `X-Tenant-Plan` reaches the
   backend.** Nothing writes the headers: the lookup stores the profile and no
   plugin reads it. Add `proxy-rewrite` with `headers.set` reading

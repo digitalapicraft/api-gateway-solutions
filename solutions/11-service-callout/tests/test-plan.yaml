@@ -110,7 +110,7 @@ cases:
       — not empty, absent. Your
       backend must therefore treat them as optional and decide explicitly what to
       do when they are missing; a backend that assumes the header is always there
-      will fail in a way that looks like a gateway bug.
+      will fail in a way that is hard to trace back.
     notes: >-
       This is the case that decides whether fail-open is the right policy for your
       route. If the backend cannot behave sensibly without the answer, use
