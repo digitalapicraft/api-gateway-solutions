@@ -71,8 +71,11 @@ cases:
     expected_status: 200
     notes: >-
       A 404 here is a routing failure, not a masking one — proxy-rewrite's
-      regex_uri carries the id to the upstream. Filters are per route, so it is
+      regex_uri carries the id to the upstream. The body's id must match the one
+      in the path (3), or a fixed uri would pass. Filters are per route, so it is
       easy to update one route and forget the other; this case catches that.
+      An empty body with a 200 means the backend compressed its reply in a format
+      response-rewrite can't decode; see the guides' Troubleshooting.
 
   - id: log-mask-applied
     type: positive
