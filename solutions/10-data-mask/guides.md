@@ -47,8 +47,8 @@ Screen and button names below are the real ones. The API lives under
 
 **1. Create the API**
 
-Pick one of the two ways below. Both give you the same thing: an API called
-`Support Console API` with two routes and no plugins yet.
+Pick one of the two ways below. Both give you the same thing: an API with two
+routes and no plugins yet.
 
 *Option A — from scratch*
 1. Go to **API Gateway → APIs**, click **Add API** (or **Create your first API**).
@@ -69,6 +69,10 @@ Pick one of the two ways below. Both give you the same thing: an API called
 3. Drag in your own OpenAPI 3.0 file, or use our example,
    [`example/api-spec-basic.yaml`](example/api-spec-basic.yaml): the same two
    routes, no plugins. Then click **Import**.
+
+The import names the API after the spec's `info.title`, in lower case with
+hyphens: `support-console-api`. Imported routes have no names, so in the plugin
+wizard in step 2, pick each route by its path.
 
 If an API with the same name already exists in your org, the import fails with
 *API with name '<name>' already exists*. Type another name in the form's
@@ -273,7 +277,9 @@ GATEWAY=https://<YOUR_GATEWAY_HOST> ./example/verify.sh
 
 `LIST_PATH`, `ONE_PATH` and `MASK` override the defaults if your routes or
 replacement text differ. Exit code 0 means every record is masked, the email
-domain survives, and fields outside the filters are untouched.
+domain survives, fields outside the filters are untouched, and the single-record
+route returns the customer you asked for. To call the routes the way a browser
+does, add `ACCEPT_ENCODING='gzip, br, zstd'`.
 
 **`verify.sh` can't check the log side** — no client-side check can see what a
 logger wrote. To check it: add a logger (for example `http-logger`, pointing at a
@@ -403,6 +409,13 @@ Every field of every plugin, and the wider product docs:
 - **Nothing is masked, and every call returns 200.** The patterns assume compact
   JSON (`"email":"`) while the backend sends `"email": "…"`. Ask for patterns that
   match a field however it is spaced.
+- **HTTP 200 with an empty body on one route.** The backend compressed its reply
+  in a format `response-rewrite` can't decode (zstd), so the gateway sent nothing
+  back. Ask the backend for gzip instead: add
+  `"headers":{"set":{"Accept-Encoding":"gzip"}}` to that route's
+  `proxy-rewrite`, for example `{"uri":"/users","headers":{"set":{"Accept-Encoding":"gzip"}}}`.
+  It can show up in a browser but not in curl, because curl doesn't ask for
+  compression unless you tell it to.
 - **An email address in some other field is masked too.** The email pattern
   matches anything shaped like an address, not just the `email` field. Tie it to
   `"email"` if other fields must stay unchanged.
@@ -443,6 +456,10 @@ Every field of every plugin, and the wider product docs:
   unreadable in the **Response** tab, so call the API with curl to read it. The
   **Upstream** tab's **Total** adds connect time to response time, so it can be
   larger than the request's own total.
+- **The trace doesn't show the masking.** It shows header and path changes, but
+  not the body edits `response-rewrite` makes, and the response body it captures
+  is the compressed reply from the backend. To check masking, call the route
+  itself.
 - **See what changed, and when, in Audit Logs.** **Observability → Audit Logs**
   lists every clone, plugin change and deploy. Its times are in your local time,
   while analytics uses UTC. Anything done with your token, including scripts and
