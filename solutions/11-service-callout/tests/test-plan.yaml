@@ -1,8 +1,11 @@
 # Test plan — one shared lookup at the edge, delivered to the backend as headers.
 #
-# Cases 1-5 are executed by ../example/verify.sh. The failure-policy and
-# phase-ordering cases need a route pointed at an unreachable callout, so they are
-# procedures rather than assertions against the shipped routes.
+# 8 cases: 4 automated, 4 manual. ../example/verify.sh runs the four automated
+# cases (enriched-read, mapped-second-field, spoofed-header, enriched-write) as
+# five numbered checks: enriched-read is checks 1 and 3, mapped-second-field is
+# check 2, spoofed-header is check 4, enriched-write is check 5. The four manual
+# cases need a deliberately broken route or a load test, so they are procedures
+# rather than assertions against the shipped routes.
 #
 # Substitute your own values:
 #   {{GATEWAY}}   gateway base URL, e.g. https://<YOUR_GATEWAY_HOST>
@@ -107,7 +110,7 @@ cases:
       — not empty, absent. Your
       backend must therefore treat them as optional and decide explicitly what to
       do when they are missing; a backend that assumes the header is always there
-      will fail in a way that looks like a gateway bug.
+      will fail in a way that is hard to trace back.
     notes: >-
       This is the case that decides whether fail-open is the right policy for your
       route. If the backend cannot behave sensibly without the answer, use
@@ -123,9 +126,11 @@ cases:
       In a THROWAWAY environment, change the callout's phase from rewrite to access
       and call the route.
     expected_outcome: >-
-      200, and no enrichment headers at the backend at all. proxy-rewrite runs in the rewrite phase, so a
-      callout in the access phase produces its values after the injection has
-      already happened. Nothing errors; the headers are just not there.
+      200, and no enrichment headers at the backend at all. proxy-rewrite runs in
+      the rewrite phase, so a callout in the access phase produces its values
+      after the headers were set. Nothing errors; the headers are left out
+      altogether, and a header of the same name that the client sends is
+      stripped too.
     notes: >-
       "It deploys cleanly and does nothing" is the hardest class of bug to
       recognise, which is why this is a written case rather than a sentence in the

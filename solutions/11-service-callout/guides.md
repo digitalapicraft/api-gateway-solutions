@@ -129,12 +129,15 @@ on the whole API.
 On the API's page, open **Configuration → Plugins** and click **Configure
 plugin**. A short wizard opens:
 
-1. **Plugin** — pick the plugin from the catalog.
+1. **Plugin** — pick the plugin from the catalog. The lookup is listed as
+   **Service Callout**.
 2. **Scope** — choose **Specific endpoint** and pick the route. (**Entire
    Revision** would apply it to every route.)
 3. **Configure** — the JSON editor and the Properties list sit side by side.
-   Paste the JSON below, or fill in the fields. Then **Next**. The tables show
-   the simple fields; the nested settings are easiest to paste as JSON.
+   **Paste the JSON below into the JSON editor**, rather than filling in the
+   Properties fields: these settings are nested, and the JSON carries all of
+   them at once. Then **Next**. The tables pick out the settings that matter
+   most; the JSON holds all of them.
 4. **Review** — shows the configuration before and after. Click **Apply**.
 
 Run the wizard once for each plugin on each route: four times in all.
@@ -142,20 +145,22 @@ Run the wizard once for each plugin on each route: four times in all.
 Two rules hold on both routes:
 
 - **`phase` must be `rewrite`.** That makes the lookup finish before the header
-  values are filled in. Set to `access`, it runs too late and the headers arrive
-  empty, with no error.
+  values are filled in. Set to `access`, it runs too late: the headers are left
+  out altogether, and a header of the same name that the client sent is
+  stripped too. Nothing errors.
 - **Copy the `${ctx.helix.service_callout.…}` header values exactly, dots
-  included.** Each one is the name under which the lookup stored a field; a
-  typo gives an empty header, again with no error.
+  included.** Each one is the name under which the lookup stored a field. With a
+  typo, or the wrong namespace, the header is left out, and a header of the
+  same name that the client sent is stripped too, again with no error.
 
 On the `GET /storefront/orders` route (Scope: **Specific endpoint**, that
 route), the lookup is **fail-open**: if the
 profile service is down, the call still reaches the backend, just without the
 headers.
 
-1. **`service-callout` — looks up the tenant's profile.** It calls the profile
-   service and keeps three fields from the reply: the plan, the contact email,
-   and the reply's status code.
+1. **Service Callout (`service-callout`) — looks up the tenant's profile.** It
+   calls the profile service and keeps three fields from the reply: the plan,
+   the contact email, and the reply's status code.
 
    | Field | Value |
    |---|---|
@@ -212,8 +217,9 @@ profile service can't be reached, the gateway answers HTTP 503 (service
 unavailable) with `tenant profile unavailable`, and the backend is never called.
 Taking an order without knowing the account's status is worse than refusing it.
 
-1. **`service-callout` — the same lookup, refusing to go on without it.** It
-   keeps two fields this time: the plan and the reply's status code.
+1. **Service Callout (`service-callout`) — the same lookup, refusing to go on
+   without it.** It keeps two fields this time: the plan and the reply's status
+   code.
 
    | Field | Value |
    |---|---|
@@ -267,7 +273,9 @@ Repeat for each plugin and route. The optional extra (`request-id`) the full
 spec adds API-wide: [Configuration reference](#configuration-reference).
 
 **Using your own profile service?** In this step, change the callout `uri` to
-your service, and the `map_response_to_ctx` paths to its response shape.
+your service, and the `map_response_to_ctx` paths to its response shape. To
+look up each caller's own profile rather than one fixed record, see
+[Look up the calling tenant](#variations).
 
 **3. Give it an upstream, then deploy it**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick environment
@@ -307,6 +315,9 @@ H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
 # 1. Import the spec. Nothing in it needs filling in. Keep both ids it returns.
 #    For your own profile service, first change the callout uri and the
 #    map_response_to_ctx paths.
+#    The upload is multipart/form-data (-F "file=@..."). Send only the
+#    authorization header with it: a JSON content-type header breaks the upload.
+#    A JSON body, {"spec": <the document>}, also works.
 curl -s -H "authorization: Bearer $TOKEN" \
   -F "file=@example/api-spec.yaml" "$BASE/orgs/$ORG/apis/from-spec"
 # → {"api":{"id":"<API_ID>", ...}, "revision":{"id":"<REVISION_ID>", ...}}
@@ -358,8 +369,29 @@ wrong-phase cases need a deliberately broken route: [Tests](tests.md).
 
 ## Variations
 
-Each of these is a follow-up you can paste to the agent in the same chat, once
-the build is working. Like the prompt, each says what you want to be true.
+**Look up the calling tenant.** The example asks for the same record
+(`/users/1`) on every call, only so that it runs with nothing to fill in. In real
+use, each caller needs its own profile. The callout's `uri` can't contain
+request variables, but `custom_query_params` and `custom_headers` can. So keep
+the `uri` fixed and send the tenant's id as a query parameter or a header:
+
+```json
+{
+  "uri": "https://profiles.example.com/tenant",
+  "custom_query_params": {
+    "tenant_id": "$http_x_tenant_id"
+  }
+}
+```
+
+Here `$http_x_tenant_id` is the value of the caller's `X-Tenant-Id` header.
+`custom_headers` takes the same form. Don't trust an id the caller simply types
+in: take it from the caller's sign-in instead (see
+[solution 08](../08-api-key/)). The profile service must answer with a single
+object, not a list: see [Configuration reference](#configuration-reference).
+
+The rest are follow-ups you can paste to the agent in the same chat, once the
+build is working. Like the prompt, each says what you want to be true.
 
 **Point it at my real profile service**
 ```text
@@ -432,17 +464,59 @@ uses `uri: /post` and sets only `X-Tenant-Plan` and `X-Profile-Status`.
 | Plugin | Field | Value here | What it means |
 |---|---|---|---|
 | `service-callout` | `uri` / `method` | the public sample profile service / `GET` | Replace with your own profile service. It must be reachable from the gateway. |
-| `service-callout` | `phase` | `rewrite` | **Must** be `rewrite` so the values exist before `proxy-rewrite` reads them. `access` gives 200 with no headers and no error. |
-| `service-callout` | `timeout` | `3000` (ms) | The call is synchronous, so this is added to the route's worst case. Choose it; don't inherit it. |
-| `service-callout` | `ssl_verify` | `true` | Verify the profile service's TLS certificate. |
-| `service-callout` | `map_response_to_ctx` | `tenant_plan: body.company.name`, `tenant_contact: body.email`, `profile_status: status` | Dotted paths into the answer. `status` and `headers.<name>` are also available. A path that matches nothing gives no value and no error. |
-| `service-callout` | `error_handling.policy` | `fail-open` (read) / `fail-close` (write) | What happens when the call fails. `log-only` is the third option. |
+| `service-callout` | `phase` | `rewrite` | **Must** be `rewrite` so the values exist before `proxy-rewrite` reads them. With `access`, the route answers 200, the headers are left out (a client's own header of the same name is stripped too), and nothing errors. |
+| `service-callout` | `timeout` | `3000` (ms) | The request waits for the lookup, so this is added to the route's worst case. Choose it; don't inherit it. |
+| `service-callout` | `ssl_verify` | `true` | Check the profile service's TLS certificate. |
+| `service-callout` | `map_response_to_ctx` | `tenant_plan: body.company.name`, `tenant_contact: body.email`, `profile_status: status` | Dotted paths into the answer. `status` and `headers.<name>` are also available. A path that matches nothing gives no value and no error. **The answer must be a single object, not a list:** a path into a list, such as `body.0.email`, doesn't resolve. |
+| `service-callout` | `error_handling.policy` | `fail-open` (read) / `fail-close` (write) | What happens when the call fails. See the four options below. |
 | `service-callout` | `error_handling.message` | `tenant profile unavailable` (write route) | The message returned with the 503 under `fail-close`. |
-| `service-callout` | `keepalive` | `enabled: true`, `pool_size: 32`, `timeout: 60000` | Reuse connections. Without it every request pays a fresh TCP and TLS handshake to the profile service. |
+| `service-callout` | `keepalive` | `enabled: true`, `pool_size: 32`, `timeout: 60000` | Reuse connections. Without it every request pays a fresh TCP and TLS handshake to the profile service. `pool_size` is 5 if you don't set it. |
 | `service-callout` | `ctx_namespace` | not set — the default, `service_callout` | Part of every variable name. Change it and every reference must change. |
 | `proxy-rewrite` | `uri` | `/headers` (read) / `/post` (write) | The backend path. |
 | `proxy-rewrite` | `headers.set` | `X-Tenant-*: ${ctx.helix.service_callout.<field>}` | `set` replaces a client's header; `add` wouldn't. The variable name is literal, dots included. |
-| `request-id` | `algorithm` / `header_name` | `uuid` / `X-Request-Id` | API-wide. A callout doubles the places a request can be slow or fail; this ties them together. |
+| `request-id` | `algorithm` / `header_name` | `uuid` / `X-Request-Id` | API-wide. A callout doubles the places a request can be slow or fail; this id ties the gateway's and the backend's records of one request together. It isn't sent to the profile service unless you add it (below). |
+
+**What counts as a failed lookup.** The profile service can't be reached (it is
+down, or DNS or TLS fails), it doesn't answer within `timeout`, or it answers with
+an error status, 4xx or 5xx, such as HTTP 404 (not found) or 500 (server error).
+All of these trigger the policy. Any 2xx or 3xx answer counts as success, even
+with an empty body. So a tenant with no profile record gets 503 on checkout only
+if the profile service answers 4xx or 5xx for a missing tenant. If it answers
+`200 {}`, checkout still reaches the backend, just with no `X-Tenant-Plan`.
+
+**The four ways to handle a failed or slow lookup.** Three are values of
+`error_handling.policy`; the fourth is a separate setting.
+
+| Setting | What the caller and the backend see |
+|---|---|
+| `fail-open` | The request carries on. The mapped headers are absent, except `X-Profile-Status`, which carries the 4xx/5xx status. |
+| `fail-close` | HTTP 503 with `error_handling.message`; the backend is never called. |
+| `log-only` | From the caller's side, the same as `fail-open`. The error is only logged. |
+| `async: true` | The request doesn't wait for the lookup, and the answer is never stored for it, so the headers are absent. That defeats the purpose here. |
+
+**Other `service-callout` fields** the example doesn't set:
+
+| Field | What it does |
+|---|---|
+| `forwarded_headers` | A list of header names from the caller's request to pass on to the profile service. |
+| `custom_headers` | Headers to add to the lookup. Values can use request variables. |
+| `custom_query_params` | Query parameters to add to the lookup's address. Values can use request variables. A parameter already in `uri` is kept, unless one here has the same name. |
+| `request_body_template` | A body to send with the lookup, for a profile service that expects one. Values can use request variables. If set, it replaces `send_request_object`. |
+| `send_request_object` | Sends the profile service a JSON description of the caller's request: method, path, headers, body and query string. Its headers include any key or token the caller sent. |
+
+**Pass the request id to the profile service.** `X-Request-Id` reaches your
+backend, but not the profile service. To send it there too, add
+`custom_headers` to the callout's JSON. `$http_x_request_id` is the request's
+`X-Request-Id` value, and `X-Corr-Id` is the header name the profile service
+gets; use whatever name it expects:
+
+```json
+{
+  "custom_headers": {
+    "X-Corr-Id": "$http_x_request_id"
+  }
+}
+```
 
 Placeholders in this package: `<ORG_ID>`, `<API_ID>`, `<REVISION_ID>`,
 `<UPSTREAM_ID>`, `<TEST_ENV_ID>`, `<YOUR_GATEWAY_HOST>`. Replace all of them
@@ -453,9 +527,20 @@ Every field of every plugin, and the wider product docs:
 
 ## Troubleshooting
 
+- **A tenant with no profile record gets HTTP 503 on checkout.** A 404 from the
+  profile service counts as a failed lookup, the same as an outage, so
+  `fail-close` refuses the request. On the read route (`fail-open`) the request
+  carries on, and `X-Profile-Status` arrives as `404`.
+- **Checkout reaches the backend with no `X-Tenant-Plan`.** The profile service
+  answered with a 2xx or 3xx status, for example `200 {}` for a tenant it doesn't
+  know. Any 2xx or 3xx counts as a successful lookup, even with an empty body, so
+  `fail-close` lets the request through. Make the profile service answer 404 for
+  a missing tenant if checkout must be refused.
 - **200, but no enrichment headers at the backend.** The lookup is in
   `phase: access`; it must be `rewrite`. Phase beats priority, and nothing
-  errors. A lookup that failed under `fail-open` looks the same.
+  errors. The headers are left out altogether, and a caller's own header of the
+  same name is stripped too. Under `fail-open`, a profile service that can't be
+  reached also leaves the headers out.
 - **200, no enrichment headers, and a caller's own `X-Tenant-Plan` reaches the
   backend.** Nothing writes the headers: the lookup stores the profile and no
   plugin reads it. Add `proxy-rewrite` with `headers.set` reading
@@ -465,10 +550,14 @@ Every field of every plugin, and the wider product docs:
   lookup never stored: the namespace holds only the names in
   `map_response_to_ctx`. Replace it with this package's design: `service-callout`
   in `phase: rewrite`, and `proxy-rewrite` with `headers.set`.
-- **The headers are missing or empty though the lookup worked.** The variable
-  name is literal, dots and all: `${ctx.helix.<ctx_namespace>.<field>}`, and
-  `<field>` must be a name `map_response_to_ctx` defines. Change
-  `ctx_namespace` and every reference changes.
+- **A header is missing though the lookup worked.** The variable name is
+  literal, dots and all: `${ctx.helix.<ctx_namespace>.<field>}`, and `<field>`
+  must be a name `map_response_to_ctx` defines. With a typo or the wrong
+  namespace, the header is left out, and a caller's own header of the same name
+  is stripped too. Change `ctx_namespace` and every reference changes.
+- **A header is missing, and the profile service answers with a list.** A path
+  into a list, such as `body.0.email`, doesn't resolve. The profile service must
+  answer with a single object.
 - **The routes exist but carry no plugins.** The agent put them under
   `x-helix-gateway` inside the live route, which a live route drops without an
   error. On a live route, plugins go in a top-level `plugins` map, each under
@@ -496,7 +585,6 @@ Every field of every plugin, and the wider product docs:
   laptop.
 - **`Only INACTIVE revisions can be updated`.** A live revision can't be
   changed. Clone the revision or undeploy it, then apply the change.
-- **Confirm `service-callout` exists in your org** before you design around it.
 - **Use the trace inspector to see each step.** On the API's page, open the
   **Observability** tab and click **Start trace session**. It shows the headers
   each plugin changes and the request body at every stage, which is the fastest

@@ -2,16 +2,18 @@
 # Solution 11 — proof that the lookup happened once, at the edge, and that the
 # backend received the answer.
 #
-# Exits 0 only if ALL of the following hold:
+# Runs the four automated cases in ../tests/test-plan.yaml as five numbered
+# checks, and exits 0 only if ALL of them hold:
 #   1. The read route returns 200 and the backend received X-Tenant-Plan with a
-#      non-empty value
-#   2. The backend also received the second mapped field
-#   3. The backend received the callout's own HTTP status
+#      non-empty value                                  (case enriched-read)
+#   2. The backend also received the second mapped field (case mapped-second-field)
+#   3. The backend received the callout's own HTTP status (case enriched-read)
 #   4. A client that SENDS its own X-Tenant-Plan does not get to keep it — the
-#      gateway's value wins
+#      gateway's value wins                              (case spoofed-header)
 #   5. The write route returns 200, forwards the body, and carries the header too
+#                                                        (case enriched-write)
 #
-# Case 4 is the one that matters most and the one most likely to be broken by an
+# Check 4 is the one that matters most and the one most likely to be broken by an
 # edit: `headers.set` REPLACES a client-supplied header, `headers.add` would leave
 # the client's value in place. If a caller can assert its own plan, this solution
 # has become a way to escalate rather than a way to enrich.
@@ -68,7 +70,7 @@ echo "→ Read route:  $READ_URL"
 echo "→ Write route: $WRITE_URL"
 echo
 
-# --- 1: the enrichment happened ----------------------------------------------
+# --- Check 1: the enrichment happened (enriched-read) -------------------------
 status="$(curl -s -o "$BODY_FILE" -w '%{http_code}' "$READ_URL")"
 [[ "$status" == "000" ]] && fail "could not reach $READ_URL at all — curl got no HTTP response.
      Check GATEWAY, DNS and reachability before anything else."
@@ -89,19 +91,21 @@ else
      ctx.helix.<ctx_namespace>.<field> exactly; or the callout failed and the policy is fail-open,
      in which case the headers are simply absent."
 
+  # --- Check 2: the second mapped field (mapped-second-field) ----------------
   contact="$(echoed "$CONTACT_HEADER")"
   [[ -n "$contact" ]] \
     && pass "the backend received ${CONTACT_HEADER}: ${contact}" \
     || fail "${CONTACT_HEADER} is missing while ${PLAN_HEADER} arrived — one mapped path did not
      resolve. A path that matches nothing yields no value and no error."
 
+  # --- Check 3: the callout's own status (enriched-read) ---------------------
   pstatus="$(echoed "$STATUS_HEADER")"
   [[ "$pstatus" == "200" ]] \
     && pass "the backend received ${STATUS_HEADER}: 200 (the callout's own status, not the route's)" \
-    || fail "${STATUS_HEADER} is '${pstatus:-absent}', expected 200. Mapping `status` lets the
+    || fail "${STATUS_HEADER} is '${pstatus:-absent}', expected 200. Mapping 'status' lets the
      backend tell a real answer from a fail-open miss — worth keeping."
 
-  # --- 4: a client cannot assert its own value -------------------------------
+  # --- Check 4: a client cannot assert its own value (spoofed-header) -------
   echo
   curl -s -o "$BODY_FILE" -w '%{http_code}' "$READ_URL" -H "${PLAN_HEADER}: Enterprise-Unlimited" >/dev/null
   spoof="$(echoed "$PLAN_HEADER")"
@@ -115,7 +119,7 @@ else
   fi
 fi
 
-# --- 5: the write route ------------------------------------------------------
+# --- Check 5: the write route (enriched-write) --------------------------------
 echo
 status="$(curl -s -o "$BODY_FILE" -w '%{http_code}' -X POST "$WRITE_URL" \
   -H 'content-type: application/json' -d '{"sku":"BRK-2100","qty":1}')"

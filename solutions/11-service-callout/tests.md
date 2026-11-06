@@ -4,9 +4,9 @@
 
 ---
 
-8 test cases in total: **4 automated**, run by `example/verify.sh` against a live
-deployment (five checks), and **4 manual**, because each needs a deliberately
-broken route or a load test. The full machine-readable plan is
+8 test cases in total: **4 automated** and **4 manual**. `example/verify.sh` runs
+the four automated cases against a live deployment, as five numbered checks. The
+manual cases each need a deliberately broken route or a load test. The full machine-readable plan is
 [`tests/test-plan.yaml`](tests/test-plan.yaml); this page is the readable
 walkthrough of what it checks and why.
 
@@ -29,13 +29,15 @@ Exit code 0 means all five checks held:
 **Check 4 is the one not to skip.** It is the difference between enrichment and a
 way for callers to raise their own privileges, and it breaks silently if someone
 changes `set` to `add` while tidying up. Check 3 is quietly useful: mapping the
-callout's own status lets a backend tell a real answer from a fail-open miss.
+callout's own status lets a backend tell a real answer from a fail-open miss. It
+arrives with any 4xx or 5xx from the profile service, but not when the service
+can't be reached at all: down, DNS, TLS or a timeout.
 Check 5 catches the plugin being per route — a route added later gets no
 enrichment until someone remembers.
 
-In the test plan these are four cases: **enriched read** (checks 1 and 3),
-**second mapped field** (check 2), **spoofed header** (check 4) and **enriched
-write** (check 5).
+The five checks cover the plan's four automated cases: **enriched read**
+(checks 1 and 3), **second mapped field** (check 2), **spoofed header** (check 4)
+and **enriched write** (check 5).
 
 The checks look at what the **backend** received, so they need a backend that
 echoes request headers. The example backend does. Against your own, run
@@ -52,7 +54,7 @@ single source both `verify.sh` and the plan read from, so they can't drift apart
 |---|---|---|
 | **Callout down, fail-close** | On a write path, an unreachable profile service stops the request rather than letting it go ahead without the answer. | In a **throwaway** environment, point the write route's callout at a host that doesn't resolve, and call the route. Expect **503** with `tenant profile unavailable`, and the backend never called. Fixture: [`tests/requests/callout-down.http`](tests/requests/callout-down.http). |
 | **Callout down, fail-open** | On a read path, an unreachable profile service does **not** stop the request — and the headers are simply absent. | Same, with the read route's `fail-open` policy. Expect 200, and the backend receives the request with the enrichment headers **absent**, not empty. This case decides whether fail-open is right for your route. |
-| **Wrong phase** | What the most common misconfiguration looks like: a callout that runs too late to be read. | In a **throwaway** environment, change the callout's `phase` from `rewrite` to `access` and call the route. Expect 200 and no enrichment headers at the backend. Nothing errors. |
+| **Wrong phase** | What the most common misconfiguration looks like: a callout that runs too late to be read. | In a **throwaway** environment, change the callout's `phase` from `rewrite` to `access` and call the route. Expect 200 and no enrichment headers at the backend: they are left out altogether, and a header of the same name that the client sends is stripped too. Nothing errors. |
 | **Latency budget** | What the callout costs, since the request waits for it. | Compare p50 and p99 for the route with the callout against an equivalent route without it, under representative load, then set `timeout` from the result. Expect roughly the profile service's own response time, with the worst case bounded by `timeout` (3000 ms as shipped). |
 
 Full procedures, plus the exact assertions each one makes:
