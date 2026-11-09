@@ -409,12 +409,19 @@ Every field of every plugin, and the wider product docs:
 - **Nothing is masked, and every call returns 200.** The patterns assume compact
   JSON (`"email":"`) while the backend sends `"email": "…"`. Ask for patterns that
   match a field however it is spaced.
-- **HTTP 200 with an empty body on one route.** The backend compressed its reply
-  in a format `response-rewrite` can't decode (zstd), so the gateway sent nothing
-  back. Ask the backend for gzip instead: add
-  `"headers":{"set":{"Accept-Encoding":"gzip"}}` to that route's
-  `proxy-rewrite`, for example `{"uri":"/users","headers":{"set":{"Accept-Encoding":"gzip"}}}`.
-  It can show up in a browser but not in curl, because curl doesn't ask for
+- **HTTP 200 with an empty body on the single-record route.** When a browser asks
+  for compression, the test backend compresses one customer's record in a format
+  `response-rewrite` can't decode (zstd), so the gateway sends nothing back. Ask
+  the backend for gzip instead: add `"headers":{"set":{"Accept-Encoding":"gzip"}}`
+  to that route's `proxy-rewrite`, next to its `regex_uri`:
+
+  ```json
+  {"regex_uri":["^/support/customers/(.*)$","/users/$1"],"headers":{"set":{"Accept-Encoding":"gzip"}}}
+  ```
+
+  Keep the `regex_uri`. A fixed `uri` such as `/users` in its place sends every
+  call to the list, so `/support/customers/3` returns every customer. The empty
+  body can show up in a browser but not in curl, because curl doesn't ask for
   compression unless you tell it to.
 - **An email address in some other field is masked too.** The email pattern
   matches anything shaped like an address, not just the `email` field. Tie it to
