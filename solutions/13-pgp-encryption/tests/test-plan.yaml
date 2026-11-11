@@ -32,8 +32,10 @@ cases:
       on every request.
     expected_status: 200
     notes: >-
-      A 500 here means the response could not be encrypted, usually an unparseable
-      public key. The caller's message is deliberately generic; the reason is in the
+      If the key can't be used (still the placeholder, unparseable, or no
+      encryption subkey), the gateway answers 200 with the fail_close_message in a
+      JSON body, not the 500 in fail_close_status. Assert on the body, never the
+      status alone. The message is deliberately generic; the reason is in the
       gateway's telemetry.
 
   - id: no-plaintext-survives
@@ -83,8 +85,9 @@ cases:
     expected: expected/inbound-decrypted-200.json
     response_notes: >-
       The sample upstream echoes what it received, so `data` is the decrypted
-      instruction and `headers.Content-Type` shows the plugin also set
-      application/json on the upstream call. Against a backend that does not echo,
+      instruction and `headers.Content-Type` shows application/json on the
+      upstream call. That holds for a JSON instruction; a plain-text file arrives
+      as text/plain. Against a backend that does not echo,
       read its own log — a 200 from the gateway does not prove the backend got
       plaintext.
     expected_status: 200
