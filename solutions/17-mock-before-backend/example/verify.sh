@@ -82,7 +82,8 @@ if [ "$STAGE" = "mock" ]; then
   [ "$(body_norm)" = "$MOCK_GET" ] || fail "GET /shipments/SHP-1001 body is not the sample shipment:
      $(head -c 300 "$BODY")"
   has_header "$MOCK_HEADER" || fail "GET /shipments/SHP-1001 has no ${MOCK_HEADER} header. Is with_mock_header off,
-     or did the backend answer instead of the mock?"
+     or did the backend answer instead of the mock? After an agent build, read the
+     marker's name back and pass it as MOCK_HEADER=<name>."
   has_header X-Request-Id || fail "GET /shipments/SHP-1001 has no X-Request-Id header. Is request-id on the API?"
   pass "GET /shipments/SHP-1001 → ${s}, the sample shipment, ${MOCK_HEADER}: $(header "$MOCK_HEADER")"
   first="$(body_norm)"

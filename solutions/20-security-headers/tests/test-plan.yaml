@@ -115,7 +115,9 @@ cases:
       Find out who owns Strict-Transport-Security on your host before deciding to
       set it at the gateway.
     expected_outcome: >-
-      curl -sI the API before adding HSTS. If a Strict-Transport-Security header
-      is already there, something in front of the gateway sets it; a value set in
+      GET a route (curl -s -D - -o /dev/null) before adding HSTS; curl -I sends
+      HEAD, which these GET-only routes answer with 404. If a
+      Strict-Transport-Security header is already there, something in front of
+      the gateway sets it; a value set in
       the gateway may not be the one callers receive. If none is there, add it to
       set, redeploy, and check it arrives.

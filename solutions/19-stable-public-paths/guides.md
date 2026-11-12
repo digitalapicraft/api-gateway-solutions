@@ -26,7 +26,10 @@ the run ends early. The agent asks you to confirm before it deploys.
 
 When it finishes, open the revision and check the stored paths and rewrites
 against the [Configuration reference](#configuration-reference), then run
-[`example/verify.sh`](#run-it-as-a-script).
+[`example/verify.sh`](#run-it-as-a-script). The agent may write a `regex_uri`
+on the list route too, such as `["^/v1/customers(.*)$","/users$1"]`, where the
+reference shows `uri: /users`. Both send the list to `/users`; `verify.sh`
+decides.
 
 See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the ground rules these prompts
 assume.
@@ -41,6 +44,8 @@ Screen and button names below are the real ones. Everything lives under
 - **You have an account.** If you don't, register for a free trial at
   [trial.digitalapi.ai](https://trial.digitalapi.ai/). A new trial org comes
   with a `test` environment, which is all this walkthrough needs.
+- **You can create and deploy APIs.** Org admins and gateway admins can. If you
+  don't see an **Add API** button, ask your org admin.
 
 **1. Create the API**
 
@@ -142,8 +147,8 @@ Run it once for each item below.
    ```
 
 4. **`request-id` — puts an id on every response.** Scope: **Entire Revision**.
-   Optional. It gives each response an `X-Request-Id` header, an id a caller can
-   quote when they report a problem.
+   It gives each response an `X-Request-Id` header, an id a caller can quote
+   when they report a problem. `verify.sh` checks for it.
 
    ```json
    {"algorithm":"uuid","header_name":"X-Request-Id"}
@@ -218,6 +223,9 @@ curl -s "$G/users/1"                                           # 404 Route Not F
 Customer 3 is the backend's `/users/3`. The two limits worked, so the query
 string reached the backend through both kinds of rewrite. And the backend's own
 path `/users/1` has no route, so a caller can't use it through the gateway.
+If [solution 20](../20-security-headers/) is deployed in the same environment,
+`/users` and `/users/1` are its routes and answer 200: that is 20 working, not
+a hole in this contract.
 
 ### Run it as a script
 
@@ -232,6 +240,10 @@ GATEWAY=https://<YOUR_GATEWAY_HOST> ./example/verify.sh
 Exit code 0 means every check held. It needs `jq`. What each check proves:
 [Tests](tests.md). Run it again after every backend change: that is what tells
 you the contract still holds.
+
+If solution 20 is deployed in the same environment, run it with
+`BACKEND_PATHS=/users/1/todos`. The other two backend paths are 20's routes,
+so the default check stops at them.
 
 ## Variations
 
@@ -302,7 +314,7 @@ request-id: { algorithm: uuid, header_name: X-Request-Id }
 |---|---|---|---|
 | `proxy-rewrite` | `uri` | `/users` | The backend path for a public path with no id. The caller's query string is added after it. |
 | `proxy-rewrite` | `regex_uri` | `[pattern, backend path]` | The pattern is matched against the public path, never the query string. `([^/]+)` captures one path segment; `$1` puts it back. If the pattern doesn't match, the path is sent on unchanged. When both `uri` and `regex_uri` are set, `uri` wins. |
-| `request-id` | `algorithm` / `header_name` | `uuid` / `X-Request-Id` | Optional. An id on every response. If a request already carries an `X-Request-Id`, that id is kept. |
+| `request-id` | `algorithm` / `header_name` | `uuid` / `X-Request-Id` | An id on every response. If a request already carries an `X-Request-Id`, that id is kept. |
 
 When you use your own backend, change the backend paths (`/users`,
 `/users/$1`, `/users/$1/todos`), never the public ones.

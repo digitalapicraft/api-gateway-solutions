@@ -121,13 +121,15 @@ got="$(echoed "$SUPPLIER_HEADER")"
 if [[ "$got" == "$SUPPLIER_KEY" ]]; then
   pass "the backend received ${SUPPLIER_HEADER} with the configured value"
 elif [[ -z "$got" ]]; then
-  fail "the backend received no ${SUPPLIER_HEADER}. proxy-rewrite headers.set is missing on this route."
-elif [[ "$got" == *"<"* || "$got" == *'${'* ]]; then
+  fail "the backend received no ${SUPPLIER_HEADER}. proxy-rewrite headers.set is missing on this route,
+     or its value is a \${...} reference, which the gateway reads as an empty variable."
+elif [[ "$got" == *"<"* ]]; then
   fail "the backend received ${SUPPLIER_HEADER}: ${got}. That is a placeholder or a reference, stored as
-     text. The gateway resolves no references: put the literal key in the route's config."
+     text. The gateway reads no environment variables: put the literal key in the route's config."
 else
   fail "the backend received ${SUPPLIER_HEADER} with a different value than SUPPLIER_KEY.
-     Check the value on the route, and check SUPPLIER_KEY."
+     Check the value on the route, and check SUPPLIER_KEY. A \$ in the key starts a gateway
+     variable, which shortens what the supplier receives."
 fi
 
 # --- 5: the supplier did NOT get the client's key ---------------------------

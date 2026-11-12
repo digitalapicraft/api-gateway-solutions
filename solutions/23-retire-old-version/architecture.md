@@ -134,7 +134,8 @@ headers while v1 works and 410 once it doesn't.
   their own product id gets a malformed `Link` header or 410 body, in their own
   response only. Line breaks stay encoded, so a caller can't add headers.
 - **Browsers hide these headers from scripts on other sites** unless the
-  response lists them in `Access-Control-Expose-Headers`. See
+  response lists them in `Access-Control-Expose-Headers`. The 410 comes from the
+  gateway alone, so it needs its own CORS headers too. See
   [Variations](guides.md#variations).
 - **One `Sunset` per route.** Every v1 route can carry its own date, but each
   route has exactly one.

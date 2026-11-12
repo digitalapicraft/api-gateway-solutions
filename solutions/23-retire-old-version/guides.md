@@ -41,8 +41,8 @@ Screen and button names below are the real ones. The API lives under
 - **You have an account.** If you don't, register for a free trial at
   [trial.digitalapi.ai](https://trial.digitalapi.ai/). A new trial org comes with
   a `test` environment, which is all this walkthrough needs.
-- **You can create APIs.** If you don't see an **Add API** button, ask your org
-  admin.
+- **You can create and deploy APIs.** Org admins and gateway admins can. If you
+  don't see an **Add API** button, ask your org admin.
 
 **1. Create the API**
 
@@ -272,6 +272,15 @@ can't read `Deprecation`, `Sunset` or `Link` unless the response names them in
 
 ```json
 {"Access-Control-Expose-Headers":"Deprecation, Sunset, Link"}
+```
+
+That covers the deprecated route, whose other CORS headers come from the
+backend. The retired endpoint's 410 comes from the gateway alone and carries no
+CORS headers, so a script on another site can't read it at all. Add them to the
+`response_headers` of that route's `mocking`, beside `Sunset` and `Link`:
+
+```json
+{"Access-Control-Allow-Origin":"*","Access-Control-Expose-Headers":"Sunset, Link"}
 ```
 
 **Point at a migration guide as well.** One `Link` header can carry several

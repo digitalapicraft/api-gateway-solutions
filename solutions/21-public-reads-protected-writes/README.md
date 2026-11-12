@@ -76,7 +76,7 @@ Two needs pull in opposite directions:
 | `PATCH /catalog/items/1` | 404. The API has no `PATCH` route, so there is nothing to call. |
 
 **In the UI it takes eight short steps:** create the API (from scratch or from
-an OpenAPI spec), add one plugin to the whole API and the key check to each of
+an OpenAPI spec), add two plugins to the whole API and the key check to each of
 the three write routes, give it an upstream and deploy it, create a product
 with the API in it, deploy the product, add a developer, create one app per
 partner, then copy each app's key.

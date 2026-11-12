@@ -39,6 +39,8 @@ that doesn't echo, the script stops after case 3 and says so.
 
 Case 4 also catches a placeholder or a reference stored instead of the key: the
 script names it if the supplier received `<SUPPLIER_API_KEY>` or `<ENV:...>`.
+A `${...}` reference shows up as no header at all, and a key containing `$` as
+a shorter value.
 
 postman-echo.com echoes the supplier key in the response body too, so case 7
 checks the response **headers** only. A real supplier doesn't send its key back.

@@ -13,10 +13,11 @@
 #   The supplier sees only its own key. A client never holds it.
 #
 # BEFORE YOU DEPLOY: REPLACE <SUPPLIER_API_KEY> BELOW WITH THE REAL VALUE.
-#   The gateway uses the value exactly as written. It does not read environment
-#   variables and does not resolve ${...} or <ENV:...> references: a value left
-#   as <SUPPLIER_API_KEY> is sent to the supplier as that literal text, and the
-#   supplier rejects every call. Replace it in your own copy (or in the console
+#   The gateway reads no environment variables: a value left as
+#   <SUPPLIER_API_KEY> or <ENV:...> is sent to the supplier as that literal
+#   text, and the supplier rejects every call. A $ is different: the gateway
+#   reads it as the start of a variable, so ${SUPPLIER_KEY} sends no header at
+#   all, and a key with a $ in it can arrive shortened (ab$cd arrives as ab). Replace it in your own copy (or in the console
 #   after import) and never commit the real value to a repository.
 #
 # RUNNABLE ON A FRESH FREE-TRIAL ORG. Link an upstream for postman-echo.com

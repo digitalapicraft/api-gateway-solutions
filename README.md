@@ -230,7 +230,8 @@ repo. You will see:
 | `<OKTA_CLIENT_ID>` · `<OKTA_CLIENT_SECRET>` | the IdP application's credentials — also **literals**, see the warning below |
 | `<KEY_ID>` · `<SECRET_KEY>` | an app credential's HMAC key pair — the control plane generates these; they never appear in a spec |
 | `<YOUR_KAFKA_BROKER>` | a broker hostname the **gateway** can reach. Not a secret |
-| `<DEVICE_API_KEY>` · `<APP_SECRET>` | an app credential's key and secret — the control plane issues these; they never appear in a spec |
+| `<DEVICE_API_KEY>` · `<PARTNER_API_KEY>` · `<APP_API_KEY>` · `<APP_SECRET>` | an app credential's key and secret — the control plane issues these; they never appear in a spec |
+| `<SUPPLIER_API_KEY>` | your backend supplier's own API key, which the gateway sends on every call (solution 22). A **literal** — see the warning below |
 | `<PGP_PUBLIC_KEY>` · `<PGP_PRIVATE_KEY>` | armored OpenPGP key blocks. **Literals**, like the signing secret — see the warning below |
 
 App **keys and secrets** (the `client_id`/`client_secret` on an app) are

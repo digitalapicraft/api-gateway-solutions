@@ -29,7 +29,9 @@ early. The agent asks you to confirm before it deploys: answer yes. To switch
 over later, follow [step 4 of Build it in the UI](#build-it-in-the-ui), and
 check the upstream the agent created first (see
 [Troubleshooting](#troubleshooting)). The agent also picks the name of the
-header that marks a mocked answer, so read it back before running the checks.
+header that marks a mocked answer, so read it back from the revision and run
+the checks with `MOCK_HEADER=<that name>` (see
+[Run it as a script](#run-it-as-a-script)).
 
 See [AGENT-GUIDE.md](../../AGENT-GUIDE.md) for the ground rules these prompts
 assume.
@@ -44,7 +46,8 @@ Screen and button names below are the real ones. Everything lives under
 - **You have an account.** If you don't, register for a free trial at
   [trial.digitalapi.ai](https://trial.digitalapi.ai/). A new trial org comes
   with a `test` environment, which is all this walkthrough needs.
-- **You can create APIs.** Org admins and gateway admins can.
+- **You can create and deploy APIs.** Org admins and gateway admins can. If you
+  don't see an **Add API** button, ask your org admin.
 
 **1. Create the API**
 
@@ -100,8 +103,8 @@ That comes in step 3.
 
 **2. Add the mock**
 
-One plugin, `mocking`, added once to each route. Add it **before** you deploy: a
-live revision can't be changed.
+One plugin, `mocking`, added once to each route, plus `request-id` if you built
+from scratch. Add them **before** you deploy: a live revision can't be changed.
 
 On the API's page, open **Configuration → Plugins** and click **Configure
 plugin**. A short wizard opens:
@@ -133,11 +136,17 @@ are written `\"`, because the sample is text inside JSON. Typed into a
    {"response_status":201,"content_type":"application/json","with_mock_header":true,"response_headers":{"Location":"/shipments/SHP-1001"},"response_example":"{\"shipmentId\":\"SHP-1001\",\"status\":\"LABEL_CREATED\",\"carrier\":\"Acme Freight\",\"eta\":\"2026-11-04T17:00:00Z\",\"events\":[]}"}
    ```
 
+3. **`request-id` — an id on every response, mocked or real.** Only if you
+   built from scratch: `api-spec-basic.yaml` already carries it. Scope:
+   **Entire Revision**. Every response then has an `X-Request-Id` header the
+   frontend can quote in a bug report, and `verify.sh` checks for it.
+
+   ```json
+   {"algorithm":"uuid","header_name":"X-Request-Id"}
+   ```
+
 [`example/api-spec.yaml`](example/api-spec.yaml) writes each sample over several
-lines; one line works the same. Optional: if you built from scratch, add
-`request-id` with Scope **Entire Revision** (see the
-[Configuration reference](#configuration-reference)), so every response carries
-an id the frontend can quote in a bug report.
+lines; one line works the same.
 
 **3. Give it an upstream, then deploy it**
 
@@ -257,8 +266,10 @@ GATEWAY=https://<YOUR_GATEWAY_HOST> ./example/verify.sh                 # the mo
 GATEWAY=https://<YOUR_GATEWAY_HOST> STAGE=backend ./example/verify.sh   # after the switch
 ```
 
-Exit code 0 means every check in that stage held. It needs `jq`. What each
-check proves: [Tests](tests.md).
+Exit code 0 means every check in that stage held. It needs `jq`. After an
+agent build, add `MOCK_HEADER=<the header the agent chose>` to the first
+command: it looks for `x-mock-by` by default. What each check proves:
+[Tests](tests.md).
 
 ## Variations
 

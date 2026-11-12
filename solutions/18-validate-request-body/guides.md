@@ -40,6 +40,8 @@ Screen and button names below are the real ones. The API lives under
 - **You have an account.** If you don't, register for a free trial at
   [trial.digitalapi.ai](https://trial.digitalapi.ai/). A new trial org comes
   with a `test` environment, which is all this walkthrough needs.
+- **You can create and deploy APIs.** Org admins and gateway admins can. If you
+  don't see an **Add API** button, ask your org admin.
 
 **1. Create the API**
 

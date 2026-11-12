@@ -20,7 +20,9 @@ GATEWAY=https://<YOUR_GATEWAY_HOST> ./example/verify.sh
 GATEWAY=https://<YOUR_GATEWAY_HOST> STAGE=backend ./example/verify.sh
 ```
 
-Exit code 0 means every case of that stage held. It needs `jq`.
+Exit code 0 means every case of that stage held. It needs `jq`. If an agent
+built the mock and named its marker something other than `x-mock-by`, add
+`MOCK_HEADER=<that name>` to the first command.
 
 | # | Stage | Case | Expected |
 |---|---|---|---|

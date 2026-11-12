@@ -179,8 +179,10 @@ name and email, then **Add**.
 **7. Create one app per partner**
 Go to **API Distribution → Apps**, click **Add App**. Fill in **Display Name**,
 for example `partner-acme`. Pick the **Environment** and the **Developer**, add
-the product, let credentials auto-generate, then **Create App**. If the product
-list says **No products found.**, go back to step 5. One app per partner, so
+the product, pick **Helix Auth** under **Authentication** and let credentials
+auto-generate, then **Create App**. Nothing is picked by default: without it the
+app is not created, and the page says *Select an authentication method*. If the
+product list says **No products found.**, go back to step 5. One app per partner, so
 each can be switched off on its own.
 
 **8. Get each app's key**
@@ -344,6 +346,11 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
 - **A `PUT` returns 500.** The sample backend answers 500 for a `PUT` on an id
   above 100. That is the backend, not the gateway.
 - **A `HEAD` request returns 404.** The API has `GET` routes, not `HEAD` routes.
+- **The deploy fails because another API already uses these routes.** APIs
+  deployed to the same environment share its host, so two APIs can't both serve
+  `GET /catalog/items`. [Solution 09](../09-xml-to-json/) serves that path too.
+  Undeploy the other one, or change the paths. Don't let the agent delete an
+  API you still need.
 - **A partner you switched off can still read.** Expected: reads are public.
 - **The agent run ends before anything is created.** Paste the three steps one
   at a time, in the same chat.

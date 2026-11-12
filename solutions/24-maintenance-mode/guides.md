@@ -42,6 +42,8 @@ Screen and button names below are the real ones. The API lives under
 - **You have an account.** If you don't, register for a free trial at
   [trial.digitalapi.ai](https://trial.digitalapi.ai/). A new trial org comes
   with a `test` environment, which is all this walkthrough needs.
+- **You can create and deploy APIs.** Org admins and gateway admins can. If you
+  don't see an **Add API** button, ask your org admin.
 
 **1. Create the API**
 
@@ -119,8 +121,8 @@ Do this once for each plugin below.
 
 2. **`request-id` — puts an id on every response.** Scope: **Entire Revision**.
    Every response carries an `X-Request-Id` header, the maintenance 503
-   included, so a caller can quote it. Optional: see the
-   [Configuration reference](#configuration-reference).
+   included, so a caller can quote it. `verify.sh` checks for it in both
+   modes.
 
    ```json
    {"algorithm":"uuid","header_name":"X-Request-Id"}
@@ -194,14 +196,17 @@ check proves: [Tests](tests.md).
 
 ### Switch maintenance on
 
-First choose the end time, and write it twice: as a date for `Retry-After`
-(`Sat, 07 Nov 2026 03:00:00 GMT`, always GMT) and in the message. Then pick one
-of the three ways below.
+First choose the end time: a moment in the future. It goes in three places:
+`Retry-After`, as a date in the shape `Sat, 07 Nov 2026 03:00:00 GMT` (always
+GMT); the message's words; and `retry_after`, as `2026-11-07T03:00:00Z`. The
+dates below are a sample and already past: replace all three, or callers retry
+straight away. Then pick one of the three ways below.
 
 **In the UI.**
 1. On the API's page, use **Clone Revision** on the live revision.
 2. On the copy, open **Configuration → Plugins**, click **Configure plugin**,
-   pick `mocking`, Scope **Entire Revision**, and paste this, with your time:
+   pick `mocking`, Scope **Entire Revision**, and paste this, with your end
+   time in all three places:
 
    ```json
    {"response_status":503,"content_type":"application/json","with_mock_header":false,"response_headers":{"Retry-After":"Sat, 07 Nov 2026 03:00:00 GMT"},"response_example":"{\"error\":\"maintenance\",\"message\":\"Bookings is down for planned maintenance. Please try again after 03:00 UTC.\",\"retry_after\":\"2026-11-07T03:00:00Z\"}"}
@@ -325,13 +330,13 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
   the copy's `mocking` has no `"_meta": {"disable": true}`.
 - **The deploy is refused because another revision is already deployed.** Use
   **Force Deploy** (`"force":true` in the API). That replaces the live revision
-  and keeps it.
+  and keeps the old one, inactive.
 - **"Only INACTIVE revisions can be updated".** You're editing the live
   revision. Clone it and edit the copy.
 - **Callers retry straight away.** The `Retry-After` date is in the past, or
-  written in a shape clients can't read. Use exactly
-  `Sat, 07 Nov 2026 03:00:00 GMT`: day name, two-digit day, month, year, 24-hour
-  time, `GMT`.
+  written in a shape clients can't read. Set a future date in exactly the
+  shape of `Sat, 07 Nov 2026 03:00:00 GMT`: day name, two-digit day, month,
+  year, 24-hour time, `GMT`.
 - **`GET /bookings/1` returns 404 Route Not Found after an agent build.** The
   route was stored as `/bookings/{bookingId}`. Change it to
   `/bookings/:bookingId` and redeploy. The agent can do this even when the

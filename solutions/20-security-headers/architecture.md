@@ -120,7 +120,10 @@ a set time. It describes the **host and its TLS**, not one API: with
 where TLS ends for the host, by whoever owns the domain. If one API set it, every
 other API on the host would inherit the decision.
 
-Check what your callers already receive (`curl -sI https://<YOUR_GATEWAY_HOST>/users/1`).
+Check what your callers already receive with a GET
+(`curl -s -D - -o /dev/null https://<YOUR_GATEWAY_HOST>/users/1`). Not
+`curl -I`: that sends HEAD, which these GET routes don't serve, so it gets a
+404 without the five headers.
 If nothing sends it, [add it to `set`](guides.md#add-hsts).
 
 ## What it does not do

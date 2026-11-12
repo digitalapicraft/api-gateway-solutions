@@ -76,8 +76,8 @@ Screen and button names below are the real ones. The API lives under
 - **You have an account.** If you don't, register for a free trial at
   [trial.digitalapi.ai](https://trial.digitalapi.ai/). A new trial org comes
   with a `test` environment, which is all this walkthrough needs.
-- **You're an org admin or a gateway admin.** Those roles can create and deploy
-  APIs.
+- **You can create and deploy APIs.** Org admins and gateway admins can. If you
+  don't see an **Add API** button, ask your org admin.
 
 **1. Create the API**
 
@@ -327,6 +327,10 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
   deployed to the same environment share its host, so two APIs can't both serve
   `GET /users`. Undeploy the other one, or change the paths. Don't let the
   agent delete an API you still need.
+- **Solution 19's check now fails at `/users`.** This API's two routes are the
+  backend paths [solution 19](../19-stable-public-paths/) keeps unreachable.
+  With both deployed in one environment, run 19's `verify.sh` with
+  `BACKEND_PATHS=/users/1/todos`.
 - **`GET /users/1` returns `404 Route Not Found` after an agent build.** The
   route was stored as `/users/{userId}`. Change it to `/users/:userId` on a
   cloned revision and deploy again. The agent can do this even when the prompt

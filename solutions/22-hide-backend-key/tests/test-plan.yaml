@@ -72,8 +72,9 @@ cases:
     notes: >-
       verify.sh compares the echoed value with SUPPLIER_KEY. If the backend
       received text such as <SUPPLIER_API_KEY> or <ENV:SUPPLIER_API_KEY>, the
-      placeholder or reference was stored as written: the gateway resolves no
-      references, so the route must hold the literal key.
+      placeholder or reference was stored as written: the gateway reads no
+      environment variables, so the route must hold the literal key. A ${...}
+      reference is read as a gateway variable instead, and no header arrives.
 
   - id: client-key-removed
     type: positive

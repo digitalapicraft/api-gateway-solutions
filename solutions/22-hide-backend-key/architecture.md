@@ -135,10 +135,11 @@ for billing or legal reasons. Then each client needs its own supplier key.
 ## Limits worth knowing
 
 - **The supplier key is stored as plain text in the API's configuration.** The
-  gateway uses it exactly as written; it does not resolve environment variables
-  or references such as `${...}` or `<ENV:...>`. Anyone who can open this API's
-  plugins in the console can read it. Keep the real value out of any file you
-  commit, and limit who can edit the API.
+  gateway reads no environment variables, so `<ENV:...>` is sent as that text.
+  A `$` is read as the start of a gateway variable: `${...}` sends an empty
+  value, and a key with a `$` in it can arrive shortened. Anyone who can open
+  this API's plugins in the console can read it. Keep the real value out of any
+  file you commit, and limit who can edit the API.
 - **Changing the supplier key means a new revision** (a new saved version of the
   API): clone, change the value, deploy. Clients don't change.
 - **Every route that calls the supplier needs its own `proxy-rewrite`.** The key

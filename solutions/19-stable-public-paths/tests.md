@@ -44,7 +44,8 @@ Not Found"}`.
 
 APIs in the same environment share one host. If another API serves one of the
 backend paths in case 9, the script stops and says so; leave that path out
-with `BACKEND_PATHS="/users/1/todos"`.
+with `BACKEND_PATHS="/users/1/todos"`. [Solution 20](../20-security-headers/)
+serves `/users` and `/users/1`, so use that whenever 20 is deployed alongside.
 
 Raw fixtures, to run one case by hand: [`tests/requests/`](tests/requests/) and
 [`tests/expected/`](tests/expected/). The script reads its expected statuses

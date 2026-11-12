@@ -141,10 +141,11 @@ Run the wizard once per plugin:
 
    `uri` is the supplier's path (`/get` on postman-echo.com). `set` adds the
    supplier key and replaces any value a client sends in that header. `remove`
-   stops the client's own key going on to the supplier. The gateway uses the key
-   exactly as you type it: a reference such as `${SUPPLIER_KEY}` or
-   `<ENV:SUPPLIER_KEY>` is sent as that text. The key is stored as plain text in
-   the API's configuration.
+   stops the client's own key going on to the supplier. Type the key itself.
+   `<ENV:SUPPLIER_KEY>` is sent as that text. `${SUPPLIER_KEY}` is read as a
+   gateway variable, so no header is sent at all. If the real key contains a
+   `$`, check what the supplier receives with `verify.sh`: `ab$cd` arrives as
+   `ab`. The key is stored as plain text in the API's configuration.
 
 3. **`request-id` (optional) — gives every call an id.** Scope **Entire
    Revision**. It adds an `X-Request-Id` header to every response, so a client's
@@ -225,7 +226,7 @@ H=(-H "authorization: Bearer $TOKEN" -H 'content-type: application/json')
 
 # 1. Put the supplier key into a local copy of the spec. Never commit the copy.
 #    (If the key contains |, & or \, edit the copy by hand instead.)
-read -rsp 'Supplier key: ' SUPPLIER_KEY; echo
+printf 'Supplier key: '; IFS= read -rs SUPPLIER_KEY; echo
 sed "s|<SUPPLIER_API_KEY>|$SUPPLIER_KEY|" example/api-spec.yaml > weather-api.local.yaml
 
 # 2. Import it. Keep both ids the response returns. Then delete the copy.
@@ -335,7 +336,7 @@ and `request-id` cover the whole API; `proxy-rewrite` is on `GET /forecast`.
 | `helix-auth` | `validate_auth_type` | `key-auth` | A setting of `helix-auth`, not a separate plugin. Finds the app the key belongs to. |
 | `helix-auth` | `apikey.source` / `apikey.key` | `header` / `X-Api-Key` | Where the client's key is read from. **Required.** |
 | `proxy-rewrite` | `uri` | `/get` | The supplier's path for this route. Query strings are passed on. |
-| `proxy-rewrite` | `headers.set` | `X-Supplier-Key: <SUPPLIER_API_KEY>` | Adds the supplier's key, replacing any value a client sent. **Replace the placeholder with the real key before you deploy**; it is used exactly as written. |
+| `proxy-rewrite` | `headers.set` | `X-Supplier-Key: <SUPPLIER_API_KEY>` | Adds the supplier's key, replacing any value a client sent. **Replace the placeholder with the real key before you deploy**; it is sent as written, except that a `$` starts a gateway variable. |
 | `proxy-rewrite` | `headers.remove` | `[X-Api-Key]` | Stops the client's own key reaching the supplier. `helix-auth` can't do this itself. |
 | `request-id` | `algorithm` / `header_name` | `uuid` / `X-Request-Id` | API-wide. An id on every response. |
 
@@ -357,9 +358,12 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
 
 - **The supplier rejects every call, often with 401 or 403.** It didn't get its
   real key. Read the deployed revision back: `X-Supplier-Key` must hold the
-  literal key, not `<SUPPLIER_API_KEY>`, `${...}` or `<ENV:...>`. The gateway
-  resolves none of these. The Helix Agent can write such a reference on its own,
-  so check after every agent build.
+  literal key. `<SUPPLIER_API_KEY>` and `<ENV:...>` are sent as that text;
+  `${...}` is read as a gateway variable, so no header arrives at all. The Helix
+  Agent can write such a reference on its own, so check after every agent build.
+- **The supplier rejects a key that contains `$`.** The gateway reads `$` and
+  the letters after it as a variable, so `ab$cd` arrives as `ab`. `verify.sh`
+  case 4 shows the value the supplier received.
 - **The supplier's logs show your clients' keys.** `X-Api-Key` is missing from
   `remove`. Add it on every route that calls the supplier.
 - ***Missing API key in request* on every call.** The key is in another header,
