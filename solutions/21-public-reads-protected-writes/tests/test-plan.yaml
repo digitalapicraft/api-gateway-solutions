@@ -1,0 +1,183 @@
+# Test plan — public reads, protected writes.
+#
+# Cases 1-14 are executed in order by ../example/verify.sh, which exits 0 only if
+# all of them hold. Several plan entries cover more than one verify.sh case (the
+# three write methods share one entry). The fixtures under requests/ and
+# expected/ document each case independently so you can run one by hand.
+#
+# Substitute your own values:
+#   {{GATEWAY}}           gateway base URL, e.g. https://<YOUR_GATEWAY_HOST>
+#   {{PARTNER_API_KEY}}   a partner app's credential KEY, not its secret
+
+meta:
+  solution: 21-public-reads-protected-writes
+  version: 1.0.0
+  executor: example/verify.sh
+  note: >-
+    Cases 1-14 are automated. The API-wide variant, the other-product key and
+    switch-off are manual: the first needs a different deployment, the second a
+    second product, and the third destroys the credential the automated cases
+    need.
+
+cases:
+  - id: read-list
+    type: positive
+    intent: >-
+      Anyone can list the catalogue with no key. verify.sh case 1.
+    request: requests/read-list.http
+    expected: expected/read-list-200.json
+    expected_status: 200
+    notes: >-
+      A 401 here is the failure this package exists to prevent: the key check
+      is on the whole API, not on the write routes.
+
+  - id: read-item
+    type: positive
+    intent: >-
+      Anyone can read one item with no key. verify.sh case 2.
+    request: requests/read-item.http
+    expected: expected/read-item-200.json
+    expected_status: 200
+    notes: >-
+      A 404 with "404 Route Not Found" means the route was stored as
+      /catalog/items/{itemId} instead of /catalog/items/:itemId.
+
+  - id: write-no-key
+    type: negative
+    intent: >-
+      POST, PUT and DELETE with no key are each refused by the key check before
+      the backend is called. verify.sh cases 3-5.
+    request: requests/write-no-key.http
+    expected: expected/no-key-401.json
+    expected_status: 401
+    response_notes: >-
+      "Missing API key in request" means nothing arrived in X-Api-Key. The body
+      is JSON sent with the content type text/plain.
+    notes: >-
+      Run all three methods. The key check is per route, so a 2xx on any one of
+      them means that one route was left open.
+
+  - id: write-unknown-key
+    type: negative
+    intent: >-
+      POST, PUT and DELETE with a key that belongs to no app are each refused.
+      verify.sh cases 6-8.
+    request: requests/write-unknown-key.http
+    expected: expected/unknown-key-401.json
+    expected_status: 401
+    response_notes: >-
+      "Invalid API key in request" means a key arrived and no app has it. This
+      is also what a switched-off partner sees.
+
+  - id: create
+    type: positive
+    intent: A partner's key opens the add route. verify.sh case 9.
+    request: requests/create.http
+    expected: expected/create-201.json
+    expected_status: 201
+    notes: >-
+      The sample backend echoes the item with id 101 and stores nothing. A 401
+      means the value sent is not an app's credential key (often the secret or
+      the app id is sent instead).
+
+  - id: update
+    type: positive
+    intent: A partner's key opens the change route. verify.sh case 10.
+    request: requests/update.http
+    expected: expected/update-200.json
+    expected_status: 200
+    notes: >-
+      Use an item id the sample backend has (1 to 100). It answers 500 for a PUT
+      on an id it does not have; that is the backend, not the gateway.
+
+  - id: delete
+    type: positive
+    intent: A partner's key opens the remove route. verify.sh case 11.
+    request: requests/delete.http
+    expected: expected/delete-200.json
+    expected_status: 200
+
+  - id: read-with-key
+    type: boundary
+    intent: >-
+      A partner that sends its key on a read is served like everyone else.
+      verify.sh case 12.
+    request: requests/read-with-key.http
+    expected: expected/read-item-200.json
+    expected_status: 200
+
+  - id: read-with-unknown-key
+    type: boundary
+    intent: >-
+      A read with a key no app has is still served: the read route never looks
+      at the header. verify.sh case 13.
+    request: requests/read-with-unknown-key.http
+    expected: expected/read-item-200.json
+    expected_status: 200
+    notes: >-
+      A 401 means a key check sits on the read route, so a partner with an old
+      key cannot read what the public can.
+
+  - id: unlisted-method
+    type: boundary
+    intent: >-
+      A method the API does not list has no route, so it is refused before the
+      backend: open reads are not open everything. verify.sh case 14.
+    request: requests/unlisted-method.http
+    expected: expected/unlisted-method-404.json
+    expected_status: 404
+    notes: >-
+      If this returns anything other than 404, another route answers PATCH on
+      this path. Read the deployed revision back.
+
+  - id: key-check-api-wide
+    type: failure
+    intent: >-
+      Show what the wrong placement does, so the reason for the design is
+      visible.
+    type_of_execution: manual
+    procedure: >-
+      In a throwaway environment, deploy a copy of the spec with helix-auth moved
+      from the three write routes into the top-level x-helix-gateway block. Run
+      verify.sh against it.
+    expected_outcome: >-
+      verify.sh stops at case 1: GET /catalog/items with no key returns 401
+      "Missing API key in request". With a partner's key the read returns 200.
+      The public can no longer read.
+
+  - id: key-from-another-product
+    type: boundary
+    intent: >-
+      Establish that the key check does not look at the app's product, so
+      nobody assumes it does.
+    type_of_execution: manual
+    procedure: >-
+      Create a second product that does NOT include this API, and an app on it.
+      POST to /catalog/items with that app's key.
+    expected_outcome: >-
+      201. Any app's key in the environment opens the writes. To limit them to
+      the apps on this API's product, add api-product-enforcer (solution 01),
+      after which this case returns 403.
+
+  - id: switch-off
+    type: failure
+    intent: >-
+      Deleting a partner's app stops its writes on the next request, with no
+      configuration change and no redeploy, and leaves its reads alone.
+    type_of_execution: manual
+    procedure: >-
+      1) Confirm POST with the key returns 201. 2) Delete the app, or click
+      Generate New Credentials on it. 3) Repeat the POST, then GET
+      /catalog/items/1, with the same old key.
+    expected_outcome: >-
+      The POST returns 401 "Invalid API key in request" once the gateway's
+      short credential cache has expired. The GET still returns 200.
+    notes: >-
+      Not in verify.sh because it destroys the credential every other case
+      needs. Deleting the app also deletes its usage history.
+
+coverage:
+  positive: [read-list, read-item, create, update, delete]
+  negative: [write-no-key, write-unknown-key]
+  boundary: [read-with-key, read-with-unknown-key, unlisted-method, key-from-another-product]
+  failure:  [key-check-api-wide, switch-off]

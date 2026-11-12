@@ -1,0 +1,104 @@
+# Solution 24 — Maintenance mode: one switch that answers every call with
+# "down for maintenance, try again at 03:00", without a code release.
+#
+# This is the importable artifact: an OpenAPI 3.0.3 document carrying
+# x-helix-gateway.plugins. It is both the API description and the gateway
+# configuration.
+#
+# RUNNABLE ON A FRESH FREE-TRIAL ORG. The upstream is public
+# https://jsonplaceholder.typicode.com, standing in for the bookings backend.
+# Deploy to the "test" environment (the free-trial default).
+#
+# ONE FILE, TWO STATES. The maintenance response is already in this file, at
+# the document root, and SWITCHED OFF with `_meta.disable: true`. Imported as
+# is, the API is in its normal state: every call goes to the backend.
+#
+#   Normal state       this file as is. The mock is skipped; calls reach the
+#                      backend.
+#   Maintenance state  a COPY of the live revision (Clone Revision) with the
+#                      mock switched on and the end time set, then deployed.
+#                      Every route and method answers 503 at the gateway; the
+#                      backend is never called.
+#   Back to normal     deploy the earlier revision again. Nothing to edit: it
+#                      still has the mock switched off.
+#
+# A deployed revision can't be edited, so the switch is always "deploy another
+# revision", and switching back is the platform's ordinary rollback.
+#
+# PATHS. Callers use /bookings; the sample backend calls them /posts.
+# proxy-rewrite maps one to the other. With your own backend, change or remove
+# that block.
+#
+# RETRY-AFTER. For a window with a known end, use a date (HTTP-date, always
+# GMT), not a number of seconds. The value is fixed text in the config, so a
+# number of seconds would be counted from whenever each response is sent, and
+# would push every retry past the real end time. A date means the same moment
+# whenever the response is sent. Change it, and the time in the message, for
+# every window: a date in the past tells callers to retry straight away.
+
+openapi: 3.0.3
+
+info:
+  title: Bookings API
+  version: 1.0.0
+  description: >-
+    A bookings API with a maintenance switch. Switched on, every call gets 503,
+    a Retry-After time and a JSON message from the gateway, and the backend is
+    not called.
+
+paths:
+  /bookings:
+    get:
+      summary: List bookings
+      responses:
+        '200': { description: Bookings (the sample backend's posts) }
+        '503': { description: Down for maintenance. Answered by the gateway, with Retry-After. }
+    post:
+      summary: Create a booking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '201': { description: Created (the sample backend echoes it with an id) }
+        '503': { description: Down for maintenance. Answered by the gateway, with Retry-After. }
+
+  /bookings/{bookingId}:
+    get:
+      summary: Get one booking
+      parameters:
+        - { name: bookingId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: The booking }
+        '404': { description: No such booking. Answered by the backend. }
+        '503': { description: Down for maintenance. Answered by the gateway, with Retry-After. }
+
+# API-WIDE POLICY: every block here covers every route.
+x-helix-gateway:
+  plugins:
+    # Callers say /bookings, the sample backend says /posts.
+    # /bookings -> /posts, /bookings/7 -> /posts/7.
+    proxy-rewrite:
+      regex_uri: ["^/bookings(.*)$", "/posts$1"]
+
+    # An id on every response, the maintenance 503 included, so a caller who
+    # reports a problem can quote it.
+    request-id:
+      algorithm: uuid
+      header_name: X-Request-Id
+
+    # THE MAINTENANCE SWITCH. Off while `_meta.disable` is true.
+    # To switch it on: in a cloned revision, remove `_meta` (or set disable to
+    # false), set the date and time below, and deploy that revision.
+    mocking:
+      _meta:
+        disable: true
+      response_status: 503
+      content_type: application/json
+      with_mock_header: false
+      response_headers:
+        Retry-After: "Sat, 07 Nov 2026 03:00:00 GMT"
+      response_example: >-
+        {"error":"maintenance","message":"Bookings is down for planned
+        maintenance. Please try again after 03:00 UTC.","retry_after":"2026-11-07T03:00:00Z"}

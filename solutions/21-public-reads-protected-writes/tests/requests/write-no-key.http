@@ -1,0 +1,16 @@
+### Case: write-no-key — each write method with no key.
+### Expect 401 "Missing API key in request" from all three. The backend is never
+### called. A 2xx on any one means that write route has no key check.
+POST {{GATEWAY}}/catalog/items
+content-type: application/json
+
+{"title":"Trail running shoe","price":89.5}
+
+###
+PUT {{GATEWAY}}/catalog/items/1
+content-type: application/json
+
+{"id":1,"title":"Trail running shoe","price":79.5}
+
+###
+DELETE {{GATEWAY}}/catalog/items/1

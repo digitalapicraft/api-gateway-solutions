@@ -1,0 +1,48 @@
+# Solution 24 — Maintenance mode: the basic example spec.
+#
+# Three routes and nothing else: no plugins. Import this when you want to add
+# the plugins yourself in the UI, so you see what each one does. The
+# walkthrough is ../guides.md, "Build it in the UI".
+#
+# The same API with the plugins already in it, maintenance response included
+# (switched off), is api-spec.yaml, next to this file.
+#
+# RUNNABLE ON A FRESH FREE-TRIAL ORG. The upstream is public
+# https://jsonplaceholder.typicode.com, standing in for the bookings backend.
+# It calls bookings "posts", so until you add the path mapping in step 2, a
+# call to /bookings gets the backend's own 404.
+
+openapi: 3.0.3
+
+info:
+  title: Bookings API
+  version: 1.0.0
+  description: >-
+    A bookings API with a maintenance switch. Switched on, every call gets 503,
+    a Retry-After time and a JSON message from the gateway, and the backend is
+    not called.
+
+paths:
+  /bookings:
+    get:
+      summary: List bookings
+      responses:
+        '200': { description: Bookings (the sample backend's posts) }
+    post:
+      summary: Create a booking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '201': { description: Created (the sample backend echoes it with an id) }
+
+  /bookings/{bookingId}:
+    get:
+      summary: Get one booking
+      parameters:
+        - { name: bookingId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: The booking }
+        '404': { description: No such booking. Answered by the backend. }

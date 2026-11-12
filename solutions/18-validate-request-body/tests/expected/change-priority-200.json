@@ -1,0 +1,10 @@
+{
+  "status": 200,
+  "headers": {
+    "present": ["X-Request-Id", "X-Powered-By"]
+  },
+  "body": {
+    "id": 1,
+    "priority": "low"
+  }
+}

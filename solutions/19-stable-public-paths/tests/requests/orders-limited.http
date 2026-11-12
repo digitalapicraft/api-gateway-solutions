@@ -1,0 +1,6 @@
+### Case: orders-query-kept — the query string through a pattern rewrite.
+###
+### Expect 200 and exactly 3 orders, all customer 1's. The backend received
+### GET /users/1/todos?_limit=3.
+GET {{GATEWAY}}/v1/customers/1/orders?_limit=3
+accept: application/json

@@ -1,0 +1,5 @@
+### Case: follow-link — the address from case "deprecated"'s Link header.
+###
+### Expect 200, the same product 1, and no Deprecation or Sunset header.
+GET {{GATEWAY}}/v2/products/1
+accept: application/json

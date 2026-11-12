@@ -1,0 +1,127 @@
+# Solution 18 — Validate the request body at the gateway.
+#
+# This is the importable artifact: an OpenAPI 3.0.3 document carrying
+# x-helix-gateway.plugins. It is both the API description and the gateway
+# configuration. Import it and the API is built with every plugin in place.
+#
+# RUNNABLE ON A FRESH FREE-TRIAL ORG. The upstream is public
+# https://jsonplaceholder.typicode.com, which stands in for a support-ticket
+# service: it accepts any body and echoes it back. Deploy to the "test"
+# environment (the free-trial default).
+#
+# TWO ROUTES, TWO RULES. The rule lives on the route, not on the API:
+#   POST  /tickets            → a new ticket. The body must be a JSON object with
+#                               a non-empty string "title" and a "priority" of
+#                               low, normal or high. Both are required.
+#   PATCH /tickets/{ticketId} → a change to a ticket. Nothing is required, but a
+#                               field that IS sent must still follow the rule.
+#
+# A body that breaks the rule is answered by the gateway with HTTP 400 and a
+# one-line message naming the field. The request never reaches the backend.
+#
+# EXECUTION ORDER is by priority, not by position in this file. request-validation
+# (2800) and proxy-rewrite (1008) both run in the rewrite phase, so the body is
+# checked first. A rejected request is never rewritten and never sent on.
+# request-id puts an X-Request-Id on every response, the gateway's 400s included.
+#
+# The body_schema blocks are kept as shallow as the rule allows: one
+# "properties" map, one level of field rules under it, nothing deeper.
+
+openapi: 3.0.3
+
+info:
+  title: Support Tickets API
+  version: 1.0.0
+  description: >-
+    A support-ticket API that checks every new ticket and every change at the
+    gateway. A body with a missing field, a wrong type or an unknown priority is
+    refused with HTTP 400 and a message naming the field, before it reaches the
+    ticket service.
+
+paths:
+  /tickets:
+    post:
+      summary: Open a ticket
+      description: >-
+        title and priority are required. Refused at the gateway with 400 when
+        either is missing, title is not a non-empty string, or priority is not
+        low, normal or high.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, priority]
+              properties:
+                title: { type: string, minLength: 1 }
+                priority: { type: string, enum: [low, normal, high] }
+      responses:
+        '201': { description: Created. The ticket service echoes the ticket with an id. }
+        '400': { description: The body broke the rule. Answered by the gateway; the ticket service never sees it. }
+      x-helix-gateway:
+        plugins:
+          request-validation:
+            body_schema:
+              type: object
+              required: [title, priority]
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                priority:
+                  enum: [low, normal, high]
+            # rejected_code defaults to 400. No rejected_msg: the default
+            # message names the field that failed, which is what a caller needs
+            # to fix the request. guides.md shows the fixed-message variation.
+            rejected_code: 400
+          # The public path is /tickets; the ticket service's is /posts.
+          proxy-rewrite:
+            uri: /posts
+
+  /tickets/{ticketId}:
+    patch:
+      summary: Change a ticket
+      description: >-
+        Nothing is required: send only the fields that change. A field that is
+        sent must still follow the rule, so an unknown priority or an empty
+        title is refused with 400.
+      parameters:
+        - { name: ticketId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string, minLength: 1 }
+                priority: { type: string, enum: [low, normal, high] }
+      responses:
+        '200': { description: The changed ticket, as the ticket service returns it. }
+        '400': { description: A field broke the rule. Answered by the gateway; the ticket service never sees it. }
+      x-helix-gateway:
+        plugins:
+          # The same field rules as POST /tickets, with no "required" list.
+          request-validation:
+            body_schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                priority:
+                  enum: [low, normal, high]
+            rejected_code: 400
+          # /tickets/7 on the way in becomes /posts/7 on the way to the service.
+          proxy-rewrite:
+            regex_uri: ["^/tickets/(.*)$", "/posts/$1"]
+
+# API-WIDE POLICY.
+x-helix-gateway:
+  plugins:
+    # An id on every response, the 400s included, so a caller who quotes it can
+    # be matched to the gateway's logs.
+    request-id:
+      algorithm: uuid
+      header_name: X-Request-Id

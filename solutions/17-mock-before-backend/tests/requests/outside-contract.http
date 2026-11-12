@@ -1,0 +1,4 @@
+### Case: outside-contract — a method that is not in the contract.
+###
+### Expect 404 {"error_msg":"404 Route Not Found"} from the gateway itself.
+DELETE {{GATEWAY}}/shipments/SHP-1001

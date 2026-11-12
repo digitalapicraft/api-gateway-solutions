@@ -1,0 +1,7 @@
+### Case: client-sends-supplier-key — a client tries to pick the supplier key.
+### Expect 200, and the backend sees only the configured x-supplier-key:
+### "set" replaces the client's value instead of adding to it.
+GET {{GATEWAY}}/forecast
+X-Api-Key: {{APP_API_KEY}}
+X-Supplier-Key: client-chosen-value
+accept: application/json

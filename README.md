@@ -36,6 +36,14 @@ it, and an honest record of what was and wasn't validated.
 | **14** | [Per-partner PGP keys](solutions/14-per-partner-pgp-keys/) | *"Fourteen partners, fourteen keys in fourteen routes, and a deploy every time one of them rotates."* Fetch the key per request so rotation is a write, not a release. | [prompt](solutions/14-per-partner-pgp-keys/helix-agent-prompt.md) |
 | **15** | [gRPC stream proxy](solutions/15-grpc-proxy/) | *"Our units hold a bidirectional gRPC stream open for hours. Anything that wants to authenticate or count them has to be built into the service."* Authenticate each stream as it opens, from gRPC metadata, without touching the service. | [prompt](solutions/15-grpc-proxy/helix-agent-prompt.md) |
 | **16** | [Request tracing](solutions/16-request-tracing/) | *"A partner says our API returns 400 on calls that look fine. Our logs show a 400 and nothing else."* Trace a deployed API's live requests and see which plugin answered, what reached the backend, and where the time went. No redeploy. | [prompt](solutions/16-request-tracing/helix-agent-prompt.md) |
+| **17** | [Mock before the backend](solutions/17-mock-before-backend/) | *"The frontend is blocked: the screen needs two endpoints and the backend won't have them for three weeks."* Answer the agreed routes at the gateway today; when the backend ships, remove the mock and the same URLs reach it. | [prompt](solutions/17-mock-before-backend/helix-agent-prompt.md) |
+| **18** | [Validate the request body](solutions/18-validate-request-body/) | *"Our ticket service throws a 500 when `priority` is missing or `title` is null."* Describe a good body once at the gateway; a bad one gets a 400 naming the field and never reaches the backend. | [prompt](solutions/18-validate-request-body/helix-agent-prompt.md) |
+| **19** | [Stable public paths](solutions/19-stable-public-paths/) | *"The backend team renamed `/users`, and every client release broke."* Publish paths that are a contract and send each call to wherever the backend really serves it. | [prompt](solutions/19-stable-public-paths/helix-agent-prompt.md) |
+| **20** | [Security headers](solutions/20-security-headers/) | *"The pen test flagged missing security headers, and every response announces `X-Powered-By: Express`."* Add the expected headers and remove the revealing ones, once for the whole API, with the data untouched. | [prompt](solutions/20-security-headers/helix-agent-prompt.md) |
+| **21** | [Public reads, protected writes](solutions/21-public-reads-protected-writes/) | *"Anyone should be able to read our catalogue. Today anyone who finds the POST endpoint can change it too."* Leave the reads open and require a partner's key on the routes that change data. | [prompt](solutions/21-public-reads-protected-writes/helix-agent-prompt.md) |
+| **22** | [Hide a backend API key](solutions/22-hide-backend-key/) | *"Our supplier's one API key is compiled into four apps."* Each app calls the gateway with its own key; the gateway adds the supplier's key on the way out, so no app holds it. | [prompt](solutions/22-hide-backend-key/helix-agent-prompt.md) |
+| **23** | [Retire an old API version](solutions/23-retire-old-version/) | *"We removed a v1 endpoint and partners got a bare 404, assumed an outage, and opened priority tickets."* Mark v1 deprecated in standard headers and answer retired endpoints with a 410 naming the replacement. | [prompt](solutions/23-retire-old-version/helix-agent-prompt.md) |
+| **24** | [Maintenance mode](solutions/24-maintenance-mode/) | *"The backend is down for an hour on Saturday. Last time clients got 502s and retried in tight loops."* Answer every call with a 503 and a time to come back, switched on and off by deploying a revision. | [prompt](solutions/24-maintenance-mode/helix-agent-prompt.md) |
 
 They compose. 02 gives you identity, 03 gives you the protocol bridge, 01 turns
 the result into something sellable, and 04 tells you what happened. Running all
@@ -53,6 +61,11 @@ same crypto with the key in the route and in a store respectively — read 13 fi
 and move to 12 at the second counterparty. 10's two masks are the third pair, and
 they live in one package because shipping one without the other is the standard
 way that project fails.
+
+**17–24 are quick starts.** Each solves one everyday problem with plugins the
+packages above already use: a mock, a body check, a path rewrite, response
+headers, a key on some routes but not others. Each runs on a fresh org
+in about fifteen minutes.
 
 A browser can hold a token but not a secret; a partner's backend can hold either,
 and should sign when the payload's integrity is the point; a forecourt terminal
@@ -217,7 +230,8 @@ repo. You will see:
 | `<OKTA_CLIENT_ID>` · `<OKTA_CLIENT_SECRET>` | the IdP application's credentials — also **literals**, see the warning below |
 | `<KEY_ID>` · `<SECRET_KEY>` | an app credential's HMAC key pair — the control plane generates these; they never appear in a spec |
 | `<YOUR_KAFKA_BROKER>` | a broker hostname the **gateway** can reach. Not a secret |
-| `<DEVICE_API_KEY>` · `<APP_SECRET>` | an app credential's key and secret — the control plane issues these; they never appear in a spec |
+| `<DEVICE_API_KEY>` · `<PARTNER_API_KEY>` · `<APP_API_KEY>` · `<APP_SECRET>` | an app credential's key and secret — the control plane issues these; they never appear in a spec |
+| `<SUPPLIER_API_KEY>` | your backend supplier's own API key, which the gateway sends on every call (solution 22). A **literal** — see the warning below |
 | `<PGP_PUBLIC_KEY>` · `<PGP_PRIVATE_KEY>` | armored OpenPGP key blocks. **Literals**, like the signing secret — see the warning below |
 
 App **keys and secrets** (the `client_id`/`client_secret` on an app) are

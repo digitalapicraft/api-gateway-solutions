@@ -1,0 +1,95 @@
+# Solution 20 — security headers on every response, and the stack's name on none.
+#
+# This is the importable artifact: an OpenAPI 3.0.3 document carrying
+# x-helix-gateway.plugins. Import it, map an upstream, deploy the revision.
+#
+# RUNNABLE ON A FRESH FREE-TRIAL ORG. The upstream is the public
+# https://jsonplaceholder.typicode.com. Its /users records are customer data
+# (names, emails, phone numbers, home addresses), and it answers them with
+# exactly what a pen test flags: Cache-Control: max-age=43200 (twelve hours in
+# any cache on the way) and X-Powered-By: Express. Deploy to the "test"
+# environment (the free-trial default).
+#
+# ONE BLOCK, AT THE TOP OF THE FILE. The response-rewrite block below sits under
+# the document-root x-helix-gateway, so it covers every route of this API: the
+# routes below, and any route added later. No route repeats it. That is the
+# point for twelve services and four teams: one place to set it, one place to
+# review it.
+#
+# HEADERS ONLY. This response-rewrite has a "headers" field and nothing else. With
+# no "body" and no "filters" it never reads or changes the response body, so the
+# data a caller receives is byte-for-byte what the backend sent. Compare
+# solution 10, whose response-rewrite carries "filters" and rewrites the body.
+#
+# "set", NOT "add". set REPLACES a header the backend already sends: the backend's
+# Cache-Control: max-age=43200 becomes Cache-Control: no-store, one header, one
+# value. add would append a second Cache-Control line beside the backend's.
+#
+# A ROUTE-LEVEL response-rewrite REPLACES THIS ONE ON THAT ROUTE. It is not
+# merged. If a route later needs its own response-rewrite (to mask a field, say),
+# copy this "headers" block into it, or that route loses every header below.
+#
+# HSTS (Strict-Transport-Security) IS DELIBERATELY NOT HERE. It describes the
+# whole host and its TLS, not one API, so it belongs where TLS is terminated.
+# Check what your callers already receive; if nothing in front of the gateway
+# sends it, add it to "set" (see guides.md, Variations).
+
+openapi: 3.0.3
+
+info:
+  title: Customer API
+  version: 1.0.0
+  description: >-
+    Customer records with the response headers a security review expects for a
+    JSON API, and without the headers that name the backend's stack. Proxies the
+    public jsonplaceholder service, so it returns real data on a fresh org.
+
+paths:
+  /users:
+    get:
+      summary: List customers
+      responses:
+        '200': { description: Array of customer records. Security headers set, stack headers removed. }
+
+  /users/{userId}:
+    get:
+      summary: Get one customer
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: One customer record }
+        '404': { description: No such customer. Answered by the backend, and carries the same headers. }
+
+# API-WIDE POLICY: every route of this API, every status, every response.
+x-helix-gateway:
+  plugins:
+    response-rewrite:
+      headers:
+        # The OWASP set for a JSON API. Each value replaces anything the backend
+        # sent under the same name.
+        set:
+          # Don't guess a content type: treat the body as what it says it is.
+          X-Content-Type-Options: nosniff
+          # Customer data: no browser, proxy or CDN keeps a copy.
+          Cache-Control: no-store
+          # Never render this response inside a frame.
+          X-Frame-Options: DENY
+          # The response is data, not a page: it may load nothing, and nothing
+          # may frame it. Quoted because the value contains single quotes.
+          Content-Security-Policy: "default-src 'none'; frame-ancestors 'none'"
+          # Never send this URL onward as a Referer.
+          Referrer-Policy: no-referrer
+        # Headers that name the software behind the API. Removing a header the
+        # backend doesn't send is harmless, so the list covers common stacks,
+        # not only this backend.
+        remove:
+          - X-Powered-By
+          - Server
+          - Via
+          - X-AspNet-Version
+          - X-AspNetMvc-Version
+
+    # An id on every response, so a caller reporting a problem can quote it.
+    request-id:
+      algorithm: uuid
+      header_name: X-Request-Id

@@ -1,0 +1,7 @@
+### Case: before — the backend, called directly, without the gateway.
+###
+### Expect 200 with X-Powered-By: Express and Cache-Control: max-age=43200.
+### This is what the pen test saw, and it is what makes the "after" cases mean
+### something: a header can't be removed if it was never there.
+GET https://jsonplaceholder.typicode.com/users/1
+accept: application/json

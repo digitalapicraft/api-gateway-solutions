@@ -1,0 +1,5 @@
+### Case: no-key — a call with no client key at all.
+### Expect 401 with "Missing API key in request".
+### The key check answers it; the supplier is never called.
+GET {{GATEWAY}}/forecast?city=London
+accept: application/json

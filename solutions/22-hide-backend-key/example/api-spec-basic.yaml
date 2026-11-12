@@ -1,0 +1,37 @@
+# Solution 22 — Keep a supplier's API key out of every client: the basic spec.
+#
+# One route and nothing else: no plugins. Import this when you want to add the
+# plugins yourself in the UI, so you see what each one does. The walkthrough is
+# ../guides.md, "Build it in the UI".
+#
+# The same API with the plugins already in it is api-spec.yaml, next to this file.
+#
+# RUNNABLE ON A FRESH FREE-TRIAL ORG. Link an upstream for postman-echo.com
+# (port 443, HTTPS), a public test service that echoes the request it received.
+# Until you add the plugins, /forecast needs no key, sends no supplier key, and
+# is forwarded as /forecast, a path postman-echo.com answers with 404.
+
+openapi: 3.0.3
+
+info:
+  title: Weather API
+  version: 1.0.0
+  description: >-
+    The forecast endpoint your mobile app, web app and partners call. Add the
+    plugins to check each client's own key and to send the supplier's key on
+    the way to the supplier.
+
+paths:
+  /forecast:
+    get:
+      summary: Get the forecast
+      parameters:
+        - { name: city, in: query, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: The supplier's answer, passed through unchanged
+          content:
+            application/json:
+              schema:
+                type: object
+        '401': { description: No key in X-Api-Key, or a key that belongs to no app. The gateway answers this once you add helix-auth. }
