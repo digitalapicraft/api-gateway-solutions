@@ -76,7 +76,8 @@ third rewrite changes, and clients get the same responses.
 [One thing to watch when that happens →](guides.md#the-backend-moved)
 
 **In the UI it takes three steps:** create the API with its three routes, add
-a `proxy-rewrite` plugin to each route, then add an upstream and deploy.
+a `proxy-rewrite` plugin to each route and `request-id` to the whole API, then
+add an upstream and deploy.
 [Full walkthrough →](guides.md#build-it-in-the-ui)
 
 [Build it any of three ways, then see it work →](guides.md)

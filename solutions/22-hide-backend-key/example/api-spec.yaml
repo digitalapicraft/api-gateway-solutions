@@ -17,8 +17,10 @@
 #   <SUPPLIER_API_KEY> or <ENV:...> is sent to the supplier as that literal
 #   text, and the supplier rejects every call. A $ is different: the gateway
 #   reads it as the start of a variable, so ${SUPPLIER_KEY} sends no header at
-#   all, and a key with a $ in it can arrive shortened (ab$cd arrives as ab). Replace it in your own copy (or in the console
-#   after import) and never commit the real value to a repository.
+#   all, and a key with a $ in it can arrive shortened (ab$cd arrives as ab).
+#   Replace it in your own copy (or in the console after import) and never
+#   commit the real value to a repository. While the upstream is
+#   postman-echo.com, use a test value: it echoes every header back.
 #
 # RUNNABLE ON A FRESH FREE-TRIAL ORG. Link an upstream for postman-echo.com
 # (port 443, HTTPS). It is a public test service that echoes the request it

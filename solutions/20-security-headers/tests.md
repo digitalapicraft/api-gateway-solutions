@@ -41,7 +41,7 @@ to run by hand: [`tests/requests/`](tests/requests/).
 
 | Case | What it proves | How to run it |
 |---|---|---|
-| **No route** | A path the API doesn't have gets the gateway's plain `404 Route Not Found`, without these headers. | `curl -sI $GATEWAY/users-no-such-route`. Expect `404` and none of the five headers. |
+| **No route** | A path the API doesn't have gets the gateway's plain `404 Route Not Found`, without these headers. | `curl -s -D - $GATEWAY/users-no-such-route`, a GET: `curl -I` sends HEAD, which gets a 404 on every path. Expect `404 Route Not Found` and none of the five headers. |
 | **A route with its own rule** | A route-level `response-rewrite` replaces the API-wide one on that route. | Give one route a `response-rewrite` with only `filters`, and deploy. That route has none of the five headers; `X-Request-Id` is still there. Copy the `headers` block in beside the `filters`, deploy again: all five return. |
 | **`add` instead of `set`** | `add` puts a second header beside the backend's. | Use `add: ["Cache-Control: no-store"]` instead of `set`. A backend that sends `Cache-Control: max-age=600` now produces both headers. |
 | **Who owns HSTS** | Whether something in front of the gateway already sets `Strict-Transport-Security`. | `curl -s -D - -o /dev/null $GATEWAY/users/1` before adding it: a GET, because `curl -I` sends HEAD and these routes answer it with 404. See [Add HSTS](guides.md#add-hsts). |

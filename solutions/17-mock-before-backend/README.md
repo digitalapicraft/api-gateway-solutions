@@ -74,7 +74,8 @@ The sample package switches over to a public test backend that has no
 backend's `/posts`. Your own backend won't need that.
 
 **In the UI it takes four steps:** create the API with its two routes, add the
-`mocking` plugin to each route, give it an upstream and deploy it, then, when the
+`mocking` plugin to each route (and `request-id` to the whole API, if you built
+from scratch), give it an upstream and deploy it, then, when the
 backend is ready, clone the revision without the mock and **Force Deploy** it.
 [Full walkthrough →](guides.md#build-it-in-the-ui)
 

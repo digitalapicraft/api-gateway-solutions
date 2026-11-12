@@ -6,8 +6,9 @@
 
 Replace the `{{...}}` values, then paste the prompt to the Helix Agent as one
 message. If the run ends early, paste the three steps one at a time instead.
-`{{supplier_api_key}}` is your supplier's real key, or any test value if you are
-trying it with postman-echo.com. When it finishes, read the deployed revision
+`{{supplier_api_key}}` is a made-up test value while the upstream is
+postman-echo.com, which echoes every header it receives back to whoever calls.
+Put your supplier's real key in only once the upstream points at your supplier. When it finishes, read the deployed revision
 back: the supplier key must be stored as the literal value, not as a reference
 such as `<ENV:...>`, and `X-Api-Key` must be on the list of headers removed. See
 [Troubleshooting](guides.md#troubleshooting) if something looks off.

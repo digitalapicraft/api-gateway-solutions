@@ -129,7 +129,8 @@ for billing or legal reasons. Then each client needs its own supplier key.
 
 - An upstream for the supplier's host. To try it, `postman-echo.com` on port
   443 with HTTPS: a public test service that echoes back the request it got.
-- The supplier's real key, ready to paste in place of `<SUPPLIER_API_KEY>`.
+- A test value for `<SUPPLIER_API_KEY>` while the upstream is postman-echo, and
+  the supplier's real key once it points at your supplier.
 - A product that includes this API, a developer, and one app per client.
 
 ## Limits worth knowing

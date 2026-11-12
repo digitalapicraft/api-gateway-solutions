@@ -19,7 +19,8 @@
 # the request back: postman-echo.com, as in the example. postman-echo also echoes
 # the supplier's key in the response BODY, so a client of THIS test setup can
 # read it there. A real supplier does not echo its key back; with one, run cases
-# 4-6 once against the echo upstream, then switch the upstream.
+# 4-6 once against the echo upstream with a TEST key, then switch the upstream
+# and put the real key in. Never send the real key to postman-echo.
 #
 # Usage:
 #   GATEWAY=https://<YOUR_GATEWAY_HOST> \
