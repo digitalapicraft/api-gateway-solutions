@@ -250,10 +250,10 @@ curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/envs/<TEST_ENV_ID>/upstreams" \
   -d '{"name":"posts-upstream","specification":{"scheme":"https","pass_host":"rewrite","upstream_host":"jsonplaceholder.typicode.com","nodes":[{"host":"jsonplaceholder.typicode.com","port":443,"weight":1}]}}'
 # → {"id":"<UPSTREAM_ID>", ...}
 
-curl -s "${H[@]}" -X PATCH "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/upstream-bindings/add" \
-  -d '{"environmentUpstreams":[{"environmentId":"<TEST_ENV_ID>","upstreamId":"<UPSTREAM_ID>"}]}'
-curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/deploy" \
-  -d '{"environmentId":"<TEST_ENV_ID>","force":false}'
+curl -s "${H[@]}" -X PUT "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/envs/<TEST_ENV_ID>/bind-upstream" \
+  -d '{"upstreamId":"<UPSTREAM_ID>"}'
+curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/envs/<TEST_ENV_ID>/deploy" \
+  -d '{"force":false}'
 
 # 3. Create the products, then deploy each one. A separate deploy from step 2:
 #    the quota isn't enforced until the product is deployed too. Every product

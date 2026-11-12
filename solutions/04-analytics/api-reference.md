@@ -4,11 +4,15 @@
 
 ---
 
-The raw calls behind [Call the metrics API directly](guides.md#call-the-metrics-api-directly)
-and [`scripts/query-analytics.sh`](scripts/query-analytics.sh), listed for lookup
-rather than as a walkthrough. Every call only reads. The full request body for each
-everyday question is in the [query catalogue](charts.md); the wider product
-documentation is at [docs.digitalapi.ai/api-gateway](https://docs.digitalapi.ai/api-gateway).
+The raw calls behind
+[Call the metrics API directly](guides.md#call-the-metrics-api-directly) and
+[`scripts/query-analytics.sh`](scripts/query-analytics.sh), listed for lookup rather
+than as a walkthrough. Every call only reads. The full request body for each
+everyday question is in the [query catalogue](charts.md). Every field of the metrics
+endpoint is in the
+[analytics API reference](https://docs.digitalapi.ai/api-gateway/api-reference/api-spec/analytics),
+and the wider product documentation is at
+[docs.digitalapi.ai/api-gateway](https://docs.digitalapi.ai/api-gateway).
 
 All calls are `POST /api/orgs/{orgId}/analytics/metrics/{metric}` with
 `Authorization: Bearer <control-plane token>` and `content-type: application/json`.

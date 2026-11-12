@@ -391,10 +391,10 @@ curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/envs/<TEST_ENV_ID>/upstreams" \
   -d '{"name":"httpbin","specification":{"scheme":"https","pass_host":"rewrite","upstream_host":"httpbin.org","nodes":[{"host":"httpbin.org","port":443,"weight":1}]}}'
 # → {"id":"<UPSTREAM_ID>", ...}
 
-curl -s "${H[@]}" -X PATCH "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/upstream-bindings/add" \
-  -d '{"environmentUpstreams":[{"environmentId":"<TEST_ENV_ID>","upstreamId":"<UPSTREAM_ID>"}]}'
-curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/deploy" \
-  -d '{"environmentId":"<TEST_ENV_ID>","force":false}'
+curl -s "${H[@]}" -X PUT "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/envs/<TEST_ENV_ID>/bind-upstream" \
+  -d '{"upstreamId":"<UPSTREAM_ID>"}'
+curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/envs/<TEST_ENV_ID>/deploy" \
+  -d '{"force":false}'
 
 # 3. Create the operators product with this API in it, then deploy it. Every
 #    product needs a quota object. Add this API to no other product.

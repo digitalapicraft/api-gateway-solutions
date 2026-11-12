@@ -210,10 +210,10 @@ curl -s -H "authorization: Bearer $TOKEN" -F "file=@example/api-spec.yaml" \
 curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/envs/$ENV_ID/upstreams" \
   -d '{"name":"catalogue-upstream","specification":{"scheme":"https","pass_host":"rewrite","upstream_host":"jsonplaceholder.typicode.com","nodes":[{"host":"jsonplaceholder.typicode.com","port":443,"weight":1}]}}'
 # → {"id":"<UPSTREAM_ID>", ...}
-curl -s "${H[@]}" -X PATCH "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/upstream-bindings/add" \
-  -d '{"environmentUpstreams":[{"environmentId":"'$ENV_ID'","upstreamId":"<UPSTREAM_ID>"}]}'
-curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/deploy" \
-  -d '{"environmentId":"'$ENV_ID'","force":false}'
+curl -s "${H[@]}" -X PUT "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/envs/$ENV_ID/bind-upstream" \
+  -d '{"upstreamId":"<UPSTREAM_ID>"}'
+curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/envs/$ENV_ID/deploy" \
+  -d '{"force":false}'
 
 # 3. A product with this API in it, deployed. Every product needs a quota.
 curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/products" \
