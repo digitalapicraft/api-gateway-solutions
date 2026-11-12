@@ -135,9 +135,10 @@ Run the wizard once per plugin:
 
 2. **`proxy-rewrite` — swaps the client's key for the supplier's.** Scope
    **Specific endpoint**, route `GET /forecast`. Replace `<SUPPLIER_API_KEY>`
-   **before** you click **Apply**: with a test value while the upstream is
-   postman-echo.com, and with the real key only once it points at your
-   supplier.
+   **before** you click **Apply**. postman-echo.com is a public test service
+   that echoes every header it receives, this key included, back to the caller.
+   Use a test value with it; put your real key in only after the upstream points
+   at your supplier.
 
    ```json
    {"uri":"/get","headers":{"set":{"X-Supplier-Key":"<SUPPLIER_API_KEY>"},"remove":["X-Api-Key"]}}
