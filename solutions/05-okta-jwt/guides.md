@@ -143,6 +143,7 @@ where each one comes from.
   "client_secret": "<OKTA_CLIENT_SECRET>",
   "unauth_action": "deny",
   "bearer_only": true,
+  "realm": "partner-albums",
   "use_jwks": true,
   "ssl_verify": true,
   "accept_unsupported_alg": false,
@@ -386,6 +387,7 @@ openid-connect:
   client_secret: "<OKTA_CLIENT_SECRET>"
   unauth_action: deny
   bearer_only: true
+  realm: partner-albums
   use_jwks: true
   ssl_verify: true
   accept_unsupported_alg: false
@@ -416,6 +418,7 @@ audience. See [Architecture](architecture.md#why-helix-auth-cannot-do-this).
 | `use_jwks` | `true` | **Required, and not in the published schema.** Checks tokens locally against Okta's keys. Without it every token is rejected. |
 | `bearer_only` | `true` | Accept tokens only; never start a browser sign-in. Without it the deploy is rejected. |
 | `unauth_action` | `deny` | Refuse rather than redirect. Redundant while `bearer_only` is true (tested), kept for clarity. |
+| `realm` | `partner-albums` | The realm a 401's `WWW-Authenticate` header names, so a caller can tell which API refused it. Use your API's name. |
 | `ssl_verify` | `true` | Check Okta's TLS certificate when fetching keys. Default is `false`. |
 | `accept_unsupported_alg` / `accept_none_alg` | `false` / `false` | Refuse unsigned or unusually signed tokens. The first defaults to `true`. |
 | `token_signing_alg_values_expected` | `RS256` | The only signing algorithm accepted. |

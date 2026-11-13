@@ -149,19 +149,19 @@ paths:
             include_req_body: true
             log_format:
               event: "$request_body"
-              # USE $apisix_request_id, NOT $request_id. They are different values
+              # USE $http_x_request_id, NOT $request_id. They are different values
               # and only one of them correlates with what the caller was given:
-              #   $request_id        nginx's own id, 32 hex chars, no dashes.
-              #                      NEVER matches the X-Request-Id header.
-              #   $apisix_request_id seeded from $request_id, then OVERWRITTEN by
-              #                      the request-id plugin with the UUID it put in
-              #                      the response header. This is the one you want.
-              #   $http_x_request_id also correct, but it hard-codes the header
-              #                      name — change request-id's header_name and this
-              #                      silently becomes empty.
-              # Confirmed by posting one event and comparing all three against the
+              #   $request_id         the gateway's own id, 32 hex chars, no dashes.
+              #                       NEVER matches the X-Request-Id header.
+              #   $http_x_request_id  the X-Request-Id request header, which the
+              #                       request-id plugin sets (or keeps, if the
+              #                       caller sent one) and returns to the caller.
+              # It follows request-id's header_name: $http_ plus the header name,
+              # lower-cased, hyphens as underscores. Change one and change the
+              # other, or this field is written empty.
+              # Confirmed by posting one event and comparing each against the
               # returned X-Request-Id.
-              request_id:  "$apisix_request_id"
+              request_id:  "$http_x_request_id"
               received_at: "$time_iso8601"
             # A real broker round trip per event rather than a fire-and-forget
             # ring buffer. This does NOT make delivery guaranteed — the caller

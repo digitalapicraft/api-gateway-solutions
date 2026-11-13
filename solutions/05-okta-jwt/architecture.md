@@ -118,7 +118,7 @@ introspection endpoint, so there is nothing to ask, and **every token is
 rejected**, valid ones included, with this header:
 
 ```
-www-authenticate: Bearer realm="…", error="invalid_token",
+www-authenticate: Bearer realm="partner-albums", error="invalid_token",
                   error_description="no endpoint URI for introspection"
 ```
 
@@ -151,9 +151,9 @@ Two operator-side patterns are worth alerting on. A sudden, uniform rise in 401s
 usually means Okta rotated its signing key while the gateway still had the old
 keys cached. And a 302 means the plugin is configured for a browser.
 
-The 401 carries `www-authenticate: Bearer realm="…"`, and the default realm names
-the underlying gateway software. `realm` is a field you can set if you would
-rather it didn't.
+The 401 carries `www-authenticate: Bearer realm="partner-albums"`. The realm tells
+a caller which API refused it. The spec sets `realm` because the plugin's default
+names no API; set it to your own API's name.
 
 ## Execution order
 
