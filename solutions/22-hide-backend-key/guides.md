@@ -249,10 +249,10 @@ rm weather-api.local.yaml
 curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/envs/$ENV_ID/upstreams" \
   -d '{"name":"weather-supplier","specification":{"scheme":"https","pass_host":"rewrite","upstream_host":"postman-echo.com","nodes":[{"host":"postman-echo.com","port":443,"weight":1}]}}'
 # → {"id":"<UPSTREAM_ID>", ...}
-curl -s "${H[@]}" -X PATCH "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/upstream-bindings/add" \
-  -d '{"environmentUpstreams":[{"environmentId":"'"$ENV_ID"'","upstreamId":"<UPSTREAM_ID>"}]}'
-curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/deploy" \
-  -d '{"environmentId":"'"$ENV_ID"'","force":false}'
+curl -s "${H[@]}" -X PUT "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/envs/$ENV_ID/bind-upstream" \
+  -d '{"upstreamId":"<UPSTREAM_ID>"}'
+curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/envs/$ENV_ID/deploy" \
+  -d '{"force":false}'
 
 # 4. A product with this API, deployed. Its quota isn't enforced here.
 curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/products" \

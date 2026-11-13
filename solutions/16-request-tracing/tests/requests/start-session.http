@@ -3,7 +3,7 @@
 ### Any start on an API that already has an active session returns THAT session,
 ### unchanged (its expiry and filter included). Stop it first to change either.
 ### ttl_seconds: 60 to 3600 in the UI; 300 if omitted.
-POST {{CONTROL_PLANE}}/api/orgs/{{ORG}}/apis/{{API_ID}}/envs/{{ENV_ID}}/trace/sessions
+POST {{CONTROL_PLANE}}/api/orgs/{{ORG}}/apis/{{API_ID}}/envs/{{ENV_ID}}/trace/v2/sessions
 authorization: Bearer {{TOKEN}}
 content-type: application/json
 

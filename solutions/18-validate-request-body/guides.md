@@ -202,10 +202,10 @@ curl -s "${H[@]}" -X POST "$CP/api/orgs/$ORG/envs/<ENV_ID>/upstreams" \
 # → {"id":"<UPSTREAM_ID>", ...}
 # Keep pass_host and upstream_host. Without them the backend receives your
 # gateway's host name instead of its own, and every call returns 502.
-curl -s "${H[@]}" -X PATCH "$CP/api/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/upstream-bindings/add" \
-  -d '{"environmentUpstreams":[{"environmentId":"<ENV_ID>","upstreamId":"<UPSTREAM_ID>"}]}'
-curl -s "${H[@]}" -X POST "$CP/api/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/deploy" \
-  -d '{"environmentId":"<ENV_ID>","force":false}'
+curl -s "${H[@]}" -X PUT "$CP/api/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/envs/<ENV_ID>/bind-upstream" \
+  -d '{"upstreamId":"<UPSTREAM_ID>"}'
+curl -s "${H[@]}" -X POST "$CP/api/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/envs/<ENV_ID>/deploy" \
+  -d '{"force":false}'
 ```
 
 The routes answer a few seconds after the deploy. The same calls without

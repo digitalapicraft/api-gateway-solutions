@@ -4,10 +4,13 @@
 
 ---
 
-The raw control-plane calls behind [Install it directly](guides.md#install-it-directly),
-listed for lookup rather than as a walkthrough. None of it requires custom code.
-The full control-plane and plugin documentation is at
-[docs.digitalapi.ai/api-gateway](https://docs.digitalapi.ai/api-gateway).
+The raw control-plane calls behind
+[Install it directly](guides.md#install-it-directly), listed for lookup rather than
+as a walkthrough. None of it requires custom code. Each step links to its page in
+the
+[control-plane API reference](https://docs.digitalapi.ai/api-gateway/api-reference/api-reference);
+plugin fields are in the
+[plugin reference](https://docs.digitalapi.ai/api-gateway/plugin-reference/plugin-reference).
 
 The API needs an upstream bound and its revision deployed **before** any route is
 reachable — the spec import doesn't do either for you, and nothing fails loudly
@@ -15,11 +18,11 @@ if you skip them.
 
 | Step | Call | Body | Notes |
 |---|---|---|---|
-| Import the spec | `POST /api/orgs/{orgId}/apis/from-spec` | `multipart/form-data`, part `file` — or a JSON body `{"spec": <document>}` | Creates the API and its first revision with `xml-to-json`, `proxy-rewrite`, `request-id` and `cors`. Response is `{"api", "revision"}` — keep both ids. A raw `application/yaml` body is rejected with 415. |
-| Create an upstream | `POST /api/orgs/{orgId}/envs/{envId}/upstreams` | `{"name","specification":{"scheme","pass_host":"rewrite","upstream_host","nodes":[{"host","port","weight"}], ...}}` | Point it at `httpbin.org` for the example, or at your XML backend. Set `pass_host` to `rewrite` and `upstream_host` to the backend's host: without them the backend gets the gateway's host and every call returns HTTP 502 (bad gateway). |
-| Bind the upstream to the revision | `PATCH /api/orgs/{orgId}/apis/{apiId}/revisions/{revisionId}/upstream-bindings/add` | `{"environmentUpstreams":[{"environmentId","upstreamId"}]}` | Must succeed before the deploy call below. |
-| Deploy the revision | `POST /api/orgs/{orgId}/apis/{apiId}/revisions/{revisionId}/deploy` | `{"environmentId","force":false}` | This is what makes the routes live. `force: true` replaces an existing deployment of the same revision. |
-| List APIs (to get `<API_ID>`) | `GET /api/orgs/{orgId}/apis` | — | Find the id of the imported "Catalog API" here, if you didn't keep it from the import response. |
+| [Import the spec](https://docs.digitalapi.ai/api-gateway/api-reference/api-spec/api-import) | `POST /api/orgs/{orgId}/apis/from-spec` | `multipart/form-data`, part `file` — or a JSON body `{"spec": <document>}` | Creates the API and its first revision with `xml-to-json`, `proxy-rewrite`, `request-id` and `cors`. Response is `{"api", "revision"}` — keep both ids. A raw `application/yaml` body is rejected with 415. |
+| [Create an upstream](https://docs.digitalapi.ai/api-gateway/api-reference/api-spec/upstreams) | `POST /api/orgs/{orgId}/envs/{envId}/upstreams` | `{"name","specification":{"scheme","pass_host":"rewrite","upstream_host","nodes":[{"host","port","weight"}], ...}}` | Point it at `httpbin.org` for the example, or at your XML backend. Set `pass_host` to `rewrite` and `upstream_host` to the backend's host: without them the backend gets the gateway's host and every call returns HTTP 502 (bad gateway). |
+| [Bind the upstream to the revision](https://docs.digitalapi.ai/api-gateway/api-reference/api-spec/revisions) | `PUT /api/orgs/{orgId}/apis/{apiId}/revisions/{revisionId}/envs/{envId}/bind-upstream` | `{"upstreamId"}` | Must succeed before the deploy call below. |
+| [Deploy the revision](https://docs.digitalapi.ai/api-gateway/api-reference/api-spec/revisions) | `POST /api/orgs/{orgId}/apis/{apiId}/revisions/{revisionId}/envs/{envId}/deploy` | `{"force":false}` | This is what makes the routes live. `force: true` replaces an existing deployment of the same revision. |
+| [List APIs (to get `<API_ID>`)](https://docs.digitalapi.ai/api-gateway/api-reference/api-spec/apis) | `GET /api/orgs/{orgId}/apis` | — | Find the id of the imported "Catalog API" here, if you didn't keep it from the import response. |
 
 No products, developers or apps are created: the package ships unauthenticated.
 To add identity, see [Guides → Variations](guides.md#variations).
