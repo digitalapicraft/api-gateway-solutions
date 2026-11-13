@@ -121,12 +121,15 @@ alert or dashboard on the caller's side can help with.
 | Variable | What it is | Matches the caller's `X-Request-Id`? |
 |---|---|---|
 | `$request_id` | the web server's own request id, 32 hex characters | **No** |
-| `$apisix_request_id` | starts as `$request_id`, then the `request-id` plugin overwrites it with the UUID it returns to the caller | **Yes** |
-| `$http_x_request_id` | the request header the plugin set | Yes, but tied to the plugin's `header_name` |
+| `$http_x_request_id` | the `X-Request-Id` request header, which the `request-id` plugin sets (or keeps, if the caller sent one) and returns to the caller | **Yes** |
 
 A `log_format` built on `$request_id` gives a correlation field that matches
-nothing. The first version of this package shipped that way; logging all three
-side by side against the returned header showed the difference.
+nothing. The first version of this package shipped that way; logging the
+candidates side by side against the returned header showed the difference.
+
+`$http_x_request_id` follows the plugin's `header_name`: `$http_` plus the header
+name, lower-cased, with hyphens as underscores. Change `header_name` and change
+the variable with it, or the field is written empty.
 
 ## Why `mocking` rather than a backend
 

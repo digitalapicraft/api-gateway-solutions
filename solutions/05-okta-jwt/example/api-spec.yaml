@@ -122,6 +122,11 @@ x-helix-gateway:
       unauth_action: deny
       bearer_only: true
 
+      # The realm every 401 names in its WWW-Authenticate challenge. Set it to
+      # this API, so a caller can tell which API refused it: the plugin's
+      # default is a fixed string that names no API at all.
+      realm: "partner-albums"
+
       # THE LINE WITHOUT WHICH NOTHING WORKS.
       #
       # Verified against a live gateway: omit this and EVERY token — including a

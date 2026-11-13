@@ -40,8 +40,9 @@ When it finishes, read the revision back. Before you trust it, check:
   defaults to `true`, which adds an `x-mock-by` header;
 - `kafka-logger` has `_meta.filter` `[["status","==",202]]`, so a rejected event is
   never published;
-- its `log_format.request_id` is `$apisix_request_id`, not `$request_id`, so each
-  message matches the caller's `X-Request-Id`;
+- its `log_format.request_id` is `$http_x_request_id`, not `$request_id`, so each
+  message matches the caller's `X-Request-Id`. If the build chose another variable,
+  post one event and compare the message with the header before you rely on it;
 - `required_acks` is `-1`, so a message counts only once every replica has it.
   The spec also sets `producer_type: sync`, `batch_max_size: 1` and
   `max_retry_count: 3`. The prompt doesn't ask for those, so set any the build
@@ -201,7 +202,7 @@ order, whatever order you add them in.
      "include_req_body": true,
      "log_format": {
        "event": "$request_body",
-       "request_id": "$apisix_request_id",
+       "request_id": "$http_x_request_id",
        "received_at": "$time_iso8601"
      },
      "producer_type": "sync",
@@ -403,7 +404,7 @@ kafka-logger:
   include_req_body: true
   log_format:
     event: "$request_body"
-    request_id:  "$apisix_request_id"
+    request_id:  "$http_x_request_id"
     received_at: "$time_iso8601"
   producer_type: sync
   batch_max_size: 1
@@ -421,7 +422,7 @@ kafka-logger:
 | `kafka-logger` | `brokers` / `kafka_topic` | `<YOUR_KAFKA_BROKER>:9092` / `events` | Replace both. The broker must be reachable from the gateway. |
 | `kafka-logger` | `_meta.filter` | `status == 202` | Without it a 400 is published too, and rejected events reach the topic anyway. |
 | `kafka-logger` | `include_req_body` | `true` | Tested and **not** needed for the body to be published when `log_format` uses `$request_body`. Left on because it costs nothing. |
-| `kafka-logger` | `log_format` | `event`, `request_id`, `received_at` | `request_id` must be `$apisix_request_id`, not `$request_id`. See [Architecture](architecture.md#correlation-matching-a-request-to-its-message). |
+| `kafka-logger` | `log_format` | `event`, `request_id`, `received_at` | `request_id` must be `$http_x_request_id`, not `$request_id`, and must follow `request-id`'s `header_name`. See [Architecture](architecture.md#correlation-matching-a-request-to-its-message). |
 | `kafka-logger` | `producer_type` | `sync` | A real broker round trip, so a rejection is logged rather than vanishing. Also removes the async producer's 1-second wait. |
 | `kafka-logger` | `required_acks` | `-1` | All in-sync replicas. The default, `1`, is the leader only, which loses the event if the leader fails before copying it. |
 | `kafka-logger` | `max_retry_count` / `retry_delay` | `3` / `1` | The default is **0**: a failed batch is dropped, not retried. |
@@ -458,7 +459,10 @@ Every field of every plugin, and the wider product docs:
 - **Bodies over `max_req_body_bytes` (512 KB by default) are truncated** in the
   published message, not rejected.
 - **The correlation id doesn't match.** `log_format` is using `$request_id`.
-  Use `$apisix_request_id`.
+  Use `$http_x_request_id`.
+- **The correlation id is empty.** `request-id`'s `header_name` was changed and
+  the variable wasn't. It must be `$http_` plus that header name, lower-cased,
+  with hyphens as underscores.
 - **`verify.sh` gets a 404.** The route isn't deployed. A 400 on a valid event
   means `request-validation` rejected it: compare `body_schema` with the payload.
 - **The deploy fails on a missing binding.** Bind any upstream, even though the

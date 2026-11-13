@@ -115,7 +115,7 @@ cases:
       likely failure if request-validation were removed. That was tested and is
       false: the body is published with request-validation removed, and with
       include_req_body set to false. Correlate on request_id, which must come from
-      $apisix_request_id — $request_id never matches the header the caller got.
+      $http_x_request_id — $request_id never matches the header the caller got.
 
   - id: rejected-event-not-published
     type: negative
