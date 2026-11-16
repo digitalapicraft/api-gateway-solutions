@@ -52,9 +52,8 @@ Screen and button names below are the real ones. The API lives under
 - **You have an account.** If you don't, register for a free trial at
   [trial.digitalapi.ai](https://trial.digitalapi.ai/). A new trial org comes with
   a `test` environment, which is all this walkthrough needs.
-- **Your org includes `hmac-auth`.** There is no screen for this check in this
-  walkthrough. Ask the Helix Agent *"confirm the hmac-auth plugin exists in this
-  org"*, or use the call in [Install it directly](#install-it-directly).
+- **Your org includes `hmac-auth`.** Go to **API Gateway → Plugins** and type
+  `hmac-auth` in the search box. If it isn't listed, your org doesn't have it.
 - **You can create APIs, products and apps.** If you don't see an **Add API**,
   **Add API Product** or **Add App** button, ask your org admin.
 
@@ -171,9 +170,20 @@ in step 7, and the gateway looks it up from the key id each request carries.
 Don't leave out `signed_headers` on either route. Without it, the caller decides
 what its own signature covers, and the route is as good as open.
 
-Repeat for the second route. [Configuration reference](#configuration-reference)
-explains every field, and the optional extra (`request-id`) that the full spec
-adds.
+Repeat for the second route.
+
+Then, on the **Entire Revision**:
+
+1. **`request-id` — a tracking id on every call (recommended).** It adds an
+   `X-Request-Id` header to each response. Most rejections give the caller the
+   same short message, and this id is what they quote so you can find the log
+   line. Without it, responses carry no `X-Request-Id`.
+
+   ```json
+   {"algorithm":"uuid","header_name":"X-Request-Id"}
+   ```
+
+[Configuration reference](#configuration-reference) explains every field.
 
 **3. Give it an upstream, then deploy it**
 1. Go to **API Gateway → Upstreams → Add Upstream**. Name it, pick environment
@@ -236,12 +246,9 @@ environment yet: an app can only pick products that are. Go back to step 5.
 On the app's **Overview** tab, find the **Authentication** card. It shows
 `hmac-auth` with a key and a secret, both hidden, each with a show and a copy
 button. The key is the `key_id` and the secret is the `secret_key`; the caller
-needs both to sign. The `secret_key` is returned **once**, when the credentials
-are generated, and stored encrypted after that, so copy both values then.
-**Generate New Credentials**, in the same card, issues a new pair. If you don't
-see the secret, create the app through
-[Install it directly](#install-it-directly) instead, where it is in the create
-response.
+needs both to sign. The card shows the secret every time you open the app, not
+only when it is created, so anyone who can open the app in the portal can read
+it. **Generate New Credentials**, in the same card, issues a new pair.
 
 **Switching a caller off.** There are two ways, and both stop the old
 credentials (the `key_id` and `secret_key`) working within seconds:
@@ -294,7 +301,7 @@ curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/envs/<TEST_ENV_ID>/products/<PRODUCT_
 
 # 4. Create a developer, then one app per partner integration. An EMPTY
 #    {"hmac-auth": {}} tells the control plane to generate key_id and secret_key.
-#    They come back ONCE, in this response. Store them now.
+#    Both come back in this response, and the app's Overview tab shows them too.
 curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/developers" \
   -d '{"firstName":"<FIRST_NAME>","lastName":"<LAST_NAME>","email":"<EMAIL>"}' \
   | jq -r '.id'                                              # → <DEVELOPER_ID>
@@ -345,6 +352,9 @@ WWW-Authenticate: hmac realm="partner-events"
 
 {"message":"client request can't be validated: missing Authorization header"}
 ```
+
+The body is JSON, but it is sent with `Content-Type: text/plain`. A client that
+reads the error should parse the body as JSON whatever the header says.
 
 To see what the other rejections look like, and how to find the real reason in
 the gateway log, read [Architecture: Reading a rejection](architecture.md#reading-a-rejection).
@@ -550,8 +560,11 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
   `authMethods` is still the `["helix-auth"]` default.
 - **The product can't be undeployed.** Apps still subscribe to it. Remove the
   product from those apps, or delete the apps, then undeploy.
-- **You need the secret again.** It is returned once and stored encrypted. Create
-  a new key instead.
+- **A client can't read the 401 body as JSON.** The body is JSON, but it comes
+  with `Content-Type: text/plain`. Parse it as JSON whatever the header says.
+- **You need the secret again.** Open the app's **Overview** tab: the
+  **Authentication** card shows it. To replace it, use **Generate New
+  Credentials**.
 - **Leaving `hmac-sha1` allowed.** It is in the plugin's default list. This spec
   narrows the list to SHA-256 and SHA-512. Keep it that way.
 - **The agent invents a `secret_key` or `signing_secret` field on the route.**

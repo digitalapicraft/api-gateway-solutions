@@ -147,8 +147,8 @@ in [Guides](guides.md#see-it-work) instead of pointing them at a library.
 ## Reading a rejection
 
 Every rejection is `401` with the header
-`WWW-Authenticate: hmac realm="partner-events"`. The body depends on **where** the
-check failed:
+`WWW-Authenticate: hmac realm="partner-events"`. The body is JSON, sent with
+`Content-Type: text/plain`. What it says depends on **where** the check failed:
 
 | Failure | Body |
 |---|---|
@@ -175,7 +175,9 @@ gateway's error log:
 | `Invalid algorithm` | The `algorithm` is not in `allowed_algorithms` |
 
 Ask the caller for the `X-Request-Id` from the response. With it, finding the log
-line is a single search. That is why `request-id` is in this spec.
+line is a single search. That is why `request-id` is in this spec; if you build
+in the UI, add it as the guide's recommended step, or responses carry no
+`X-Request-Id`.
 
 ## Execution order
 
@@ -225,7 +227,7 @@ flowchart LR
     P["Product<br/>authMethods: [hmac-auth]"] --> A
     D["Developer<br/>(the partner)"] --> A
     A["App<br/>plugins: {hmac-auth: {}}"] -->|"control plane generates"| C["Credential<br/>key_id + secret_key"]
-    C -->|"returned ONCE<br/>secret_key stored encrypted"| O["Your partner's config"]
+    C -->|"in the create response<br/>and on the app's page"| O["Your partner's config"]
     C -.->|"gateway looks it up by key_id<br/>for each request"| GW["hmac-auth on the route"]
 ```
 
@@ -234,8 +236,9 @@ flowchart LR
 - **An empty config, `{"hmac-auth": {}}`, tells the control plane to create both
   values.** If you must match a secret a partner already holds, supply your own
   values instead.
-- **`secret_key` is returned once**, in the response to the create call, and then
-  stored encrypted. Nothing shows it again.
+- **`secret_key` comes back in the response to the create call**, and the app's
+  **Overview** tab shows it whenever someone opens the app. Anyone who can open
+  the app in the portal can read it.
 - **Changing the key replaces both values at once.** There is no overlap period
   for the old secret, so the change is instant.
 - **One app per integration.** If two partners share a credential, you can't tell
