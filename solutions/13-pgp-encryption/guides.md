@@ -75,7 +75,8 @@ gpg --list-keys statements@acme.example
 ```
 
 You need a `sub` line marked **`[E]`** (E for encryption), such as
-`sub   cv25519 <date> [E]`.
+`sub   cv25519 <date> [E]`. Older gpg (2.2) makes an RSA key here instead of
+cv25519; that works too, as long as the `[E]` line is there.
 
 **5. Export both halves as ASCII armor.**
 
@@ -108,7 +109,7 @@ or in your secrets store with its passphrase, for rotation and recovery.
 
 The gateway can fall back to running `gpg` itself, so any key `gpg` can use
 works. RSA keys (2048 and 3072) and the ed25519/cv25519 pair the command above
-produces both work, with or without a passphrase. If your partner insists on
+produces on gpg 2.3 and later both work, with or without a passphrase. If your partner insists on
 RSA, generate with `rsa3072 sign 2y` in step 3, then add the subkey:
 `gpg --quick-add-key <fingerprint> rsa3072 encr 2y`.
 
@@ -131,7 +132,9 @@ gpg --armor --export partner@example.test > partner-public.asc          # -> enc
 ```
 
 Paste the two files and the printed passphrase into the routes, as in step 6.
-Then run the full test from the same shell, so it can play the partner:
+Then run the full test from the same shell, so it can play the partner. Use this
+script, not the [quickest check](#see-it-work): that one needs one key pair in
+both fields, and these are two different pairs, so its POST returns 400.
 
 ```bash
 GATEWAY=https://<YOUR_GATEWAY_HOST> RECIPIENT=ours@example.test ./example/verify.sh
@@ -262,7 +265,8 @@ plugin**. A short wizard opens:
    Paste the JSON below, or fill in the fields. Then **Next**.
 4. **Review** — shows the configuration before and after. Click **Apply**.
 
-Run the wizard once for each plugin on each route: four times in all.
+Run the wizard once for each plugin on each route: four times, plus once for
+`request-id` on the whole API.
 
 **About the keys.** Before you deploy, replace `<PGP_PRIVATE_KEY>` and
 `<PGP_PUBLIC_KEY>` with the whole armored key block, from `-----BEGIN PGP …-----`
@@ -270,7 +274,8 @@ to `-----END PGP …-----`. `passphrase` is empty, for a key without one. If you
 private key has a passphrase, put it there instead (it is the value the agent
 prompt writes as `<PGP_PASSPHRASE>`). The gateway uses each value exactly as
 written: it does not fill in `<ENV:...>` or `${...}`, so a placeholder left in
-place fails when a request arrives. In the JSON editor, each line break inside
+place fails when a request arrives. The console saves placeholder text such as
+`<PGP_PUBLIC_KEY>` as a key without a warning. In the JSON editor, each line break inside
 the key is written as `\n`. The two keys are not a pair: the private key is
 yours, the public key is your partner's.
 [Which key goes where](architecture.md#two-parties-four-key-halves). How to make
@@ -302,9 +307,12 @@ On the **`GET /statements/:statementId`** route (Scope: **Specific endpoint**,
 that route):
 
 1. **`pgp-crypto` — encrypts the statement to your partner's key.** It encrypts
-   the whole response body, never one field of it. If the statement can't be
-   encrypted, the caller gets HTTP 500 (a server-side error), never the statement
-   in readable form.
+   the whole response body. If the statement can't be encrypted, the caller never
+   gets it in readable form. When the key can't be used, for example because the
+   placeholder is still there, the caller gets **HTTP 200 with
+   `{"message":"statement could not be encrypted"}` in the body**, not the 500
+   set in `fail_close_status`. A client must check the body, not just the status
+   code.
 
    ```json
    {"encrypt":{"target":"response","source":"body","public_key":"<PGP_PUBLIC_KEY>","fail_policy":"fail-close","fail_close_status":500,"fail_close_message":"statement could not be encrypted"},"max_body_size":1048576,"gpg_timeout_ms":5000}
@@ -320,8 +328,18 @@ that route):
    {"uri":"/json"}
    ```
 
-Repeat for each plugin and route. What every field means, and the optional extra (`request-id`) the full spec adds:
-[Configuration reference](#configuration-reference).
+Then, on the **Entire Revision**:
+
+1. **`request-id` — a tracking id on every call (recommended).** It adds an
+   `X-Request-Id` header to each response. Every failure gives the partner the
+   same short message, and this id is what they quote so you can find the call.
+   Without it, responses carry no `X-Request-Id`.
+
+   ```json
+   {"algorithm":"uuid","header_name":"X-Request-Id"}
+   ```
+
+What every field means: [Configuration reference](#configuration-reference).
 
 **3. Give it an upstream, then deploy it**
 
@@ -400,7 +418,9 @@ The same calls without narration: [API reference](api-reference.md).
 
 **The quickest check uses one key pair in both fields.** The outbound route then
 encrypts to a key the inbound route can decrypt, so the GET's own output feeds
-straight into the POST:
+straight into the POST. With the [throwaway keys](#try-it-with-throwaway-keys)
+the two fields hold different pairs, so the POST returns 400: run the script
+further down instead.
 
 ```bash
 GW=https://<YOUR_GATEWAY_HOST>
@@ -414,8 +434,9 @@ curl -s -X POST "$GW/statements/inbound" \
 ```
 
 Two calls, no `gpg`, nothing to import, and it exercises both directions. The
-echoed `Content-Type: application/json` on the POST shows that decryption actually
-happened rather than the body passing through.
+POST's echo shows the backend's statement as readable JSON in `data`, which shows
+that decryption actually happened. The echoed `Content-Type: application/json`
+proves it only for a JSON file: a plain-text file arrives as `text/plain`.
 
 Two things this loop cannot do:
 
@@ -485,10 +506,11 @@ Copy this, fill in the two blanks, and it is a complete integration brief:
 > **Encrypt to:** the public key attached (`ops@your-org.example`). Send us your
 > own public key and we will encrypt statements to it.
 >
-> **Wire format:** base64 **of** the ASCII-armored message — not the armor. Armor
-> is already a text encoding; we need another layer on top. `gpg --armor --encrypt`
-> then `base64` the result. **A raw armored body is rejected with 400**, and the
-> error does not mention base64.
+> **Wire format:** base64 **of** the encrypted message, not the armor itself.
+> `gpg --armor --encrypt`, then `base64` the result. Base64 of gpg's binary
+> output (without `--armor`) works too, and line breaks in the base64 are fine.
+> **A raw armored body is rejected with 400**, and the error does not mention
+> base64.
 >
 > **Key requirements:** your key must carry an **encryption subkey**. Check with
 > `gpg --list-keys --with-colons <uid> | awk -F: '/^(pub|sub)/{print $1, $12}'` —
@@ -496,8 +518,9 @@ Copy this, fill in the two blanks, and it is a complete integration brief:
 > default 2y` creates one; naming an algorithm such as `rsa3072` in place of the
 > first `default` does not. Add one with `gpg --quick-add-key <fpr> rsa3072 encr 2y`.
 >
-> **On failure** you will get a 400 with a generic message — the reason is in our
-> logs, not your response. Quote the `X-Request-Id` header and we will look.
+> **On failure** you will get a 400 with the same short message, whatever the
+> cause: wrong key, wrong format or a file over 1 MiB. Quote the `X-Request-Id`
+> header and we will look.
 
 ## Variations
 
@@ -537,13 +560,16 @@ Require an app's API key in the X-Api-Key header on both routes, and keep the
 crypto exactly as it is. Then create a developer, a product and an app, and give me
 the key.
 ```
-Encrypting to a partner's key does not check who called. This puts identity in
-front of both routes, as in [solution 08](../08-api-key/), and keeps the crypto as
-it is.
+The gateway doesn't check who sent a file. It doesn't read the signature, so a
+file signed by someone else is accepted: anyone who has your public key can send
+you one. This puts identity in front of both routes, as in
+[solution 08](../08-api-key/), and keeps the crypto as it is.
 
-**Encrypt one field only.** Not available in the way it sounds: `field` on an
-encrypt block returns **only** that field's ciphertext as the whole response body.
-If you want the rest of the document intact, encrypt the whole body.
+**Encrypt one field only.** Set `field` on the encrypt block to the field's
+path, for example `"field":"accountNumber"`. Only that field is encrypted, and the
+rest of the document stays readable JSON. `include_full_body` controls this and
+is on by default; set it to `false` and the response is only that field's
+encrypted value.
 
 ## Configuration reference
 
@@ -588,13 +614,22 @@ pgp-crypto:
 | `pgp-crypto` | `decrypt.private_key` | `<PGP_PRIVATE_KEY>` | **Your** armored private key, used verbatim. |
 | `pgp-crypto` | `decrypt.passphrase` | `""` | Empty for an unprotected key. If your key has a passphrase, put it here: it is a second literal in the document, so keep the filled-in file out of version control. A missing or wrong passphrase makes every inbound request fail with 400. |
 | `pgp-crypto` | `decrypt.fail_policy` / `fail_close_status` | `fail-close` / `400` | Refuse a body that cannot be decrypted; the backend is not called. |
-| `pgp-crypto` | `encrypt.target` / `encrypt.source` | `response` / `body` | Encrypt the whole response body. Do not set `field`. |
+| `pgp-crypto` | `encrypt.target` / `encrypt.source` | `response` / `body` | Encrypt the whole response body. `field` isn't set: with it, only that field would be encrypted and the rest would stay readable. |
 | `pgp-crypto` | `encrypt.public_key` | `<PGP_PUBLIC_KEY>` | **Your partner's** armored public key, used verbatim. |
-| `pgp-crypto` | `encrypt.fail_policy` / `fail_close_status` | `fail-close` / `500` | Never send the statement unencrypted. |
+| `pgp-crypto` | `encrypt.fail_policy` / `fail_close_status` | `fail-close` / `500` | Never send the statement unencrypted. When the key itself can't be used, the caller gets 200 with `fail_close_message` in the body instead of 500. |
 | `pgp-crypto` | `max_body_size` | `1048576` (1 MiB) | The crypto buffers the whole body; larger bodies are rejected, not streamed. |
 | `pgp-crypto` | `gpg_timeout_ms` | `5000` | Time limit for the `gpg` fallback path. |
 | `proxy-rewrite` | `uri` | `/post` (inbound), `/json` (outbound) | The backend's paths. |
 | `request-id` | `algorithm` / `header_name` | `uuid` / `X-Request-Id` | API-wide. Errors are vague; this is what a partner quotes. |
+
+**Other `pgp-crypto` settings** the example doesn't use:
+
+| Setting | What it does |
+|---|---|
+| `field` | Encrypts or decrypts one field instead of the whole body: a dotted path into the JSON body, or a header, query or form name. |
+| `include_full_body` | With `field` on a body, keeps the rest of the JSON and replaces only that field. On by default; when `false`, the body becomes just that field's value. |
+| `decode_base64` | Encrypting a response only. For a backend that already returns base64: the gateway decodes it before encrypting. The output is still base64 of the encrypted message. Off by default. |
+| A key per caller | `public_key`, `private_key` and `passphrase` can name a value instead of holding one, such as `$consumer.public_key`, so each partner gets its own key. [Solution 14](../14-per-partner-pgp-keys/) shows how. |
 
 > **`private_key` and `public_key` are used verbatim, and so is `passphrase`.**
 > The gateway does not resolve `<ENV:...>` or `${...}`. Replace the placeholders
@@ -621,26 +656,36 @@ Every field of every plugin: [docs.digitalapi.ai/api-gateway](https://docs.digit
   The partner is sending raw armor: the body must be base64 *of* the armor, and
   the error does not say so. Or the placeholder is still in `private_key`. Or the
   key is passphrase-protected and `decrypt.passphrase` is missing or wrong.
-- **A 400 on inbound, with no further detail.** That is expected: errors are vague
-  on purpose. The reason is in the gateway's telemetry; ask for the
-  `X-Request-Id`.
-- **Every statement request returns 500.** The response could not be encrypted.
-  The placeholder is still in `public_key`, or the public key can't be read.
-- **A 500, or a 200 with an error message in the body.** The public key may have
-  no encryption subkey, which is what `gpg --quick-generate-key` makes when you
-  name an algorithm such as `rsa3072`. Such a key can't be encrypted to, and the
-  failure can come back either way, so check the body, not just the status. [Get the keys](#get-the-keys) shows how to
-  check for the subkey.
+- **A 400 on inbound, with no further detail.** That is expected: every inbound
+  failure gives the same 400 and the same message, whether the key is wrong, the
+  format is wrong, the passphrase is wrong or the file is over `max_body_size`.
+  The reason is in the gateway's telemetry; ask for the `X-Request-Id`.
+- **Every statement request returns 200 with
+  `{"message":"statement could not be encrypted"}`.** The statement could not be
+  encrypted, and the caller gets your `fail_close_message` with a 200, not the
+  500 in `fail_close_status`. A client that only checks the status code thinks
+  it worked, so check the body. The placeholder is still in `public_key`, or the
+  public key can't be read, or it has no encryption subkey (what
+  `gpg --quick-generate-key` makes when you name an algorithm such as `rsa3072`).
+  [Get the keys](#get-the-keys) shows how to check for the subkey.
 - **The partner cannot decrypt a response that looks perfect.** It was encrypted
   to the wrong public key. Nothing at the gateway shows this; only a round-trip
   test finds it.
+- **Part of the statement comes back readable.** `field` was set on the encrypt
+  block, so only that field is encrypted. Remove it to encrypt the whole
+  statement, or ask the agent to.
 - **The response is a short ciphertext and the rest of the document is gone.**
-  `field` was set on the encrypt block. It selects what is returned, not just
-  what is encrypted. Remove it, or ask the agent to.
+  `field` is set and `include_full_body` is `false`. Remove `field` to encrypt
+  the whole statement.
+- **A file from someone you don't know is accepted.** The gateway doesn't check
+  who sent or signed a file: anyone who has your public key can send one. Put an
+  API key in front: [Only callers we know](#variations).
 - **A statement comes back readable.** `fail_policy` is `fail-open` on the
   encrypt block, and encryption failed. Set `fail-close`.
 - **The month-end batch fails, and everything else works.** The body exceeded
-  `max_body_size`. Raise it deliberately, with the memory cost in mind.
+  `max_body_size` (1 MiB here). The 400 and its message are the same as for any
+  other failure, so check the file size first. Raise the limit deliberately,
+  with the memory cost in mind.
 - **Messages encrypted to the old key fail after a key change.** Changing the key
   on a route is a hard cutover. Agree the switch with the partner, or move the
   key to a store: [solution 14](../14-per-partner-pgp-keys/).

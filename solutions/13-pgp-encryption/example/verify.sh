@@ -67,9 +67,15 @@ echo
 status="$(curl -s -o "$WORK/resp.b64" -w '%{http_code}' -D "$WORK/resp.h" "$READ_URL")"
 [[ "$status" == "000" ]] && fail "could not reach $READ_URL at all — curl got no HTTP response."
 [[ "$status" == "$EXP_READ" ]] \
-  || fail "read route → ${status} (expected ${EXP_READ}). A 500 here means the response could not be
-     encrypted — usually an unparseable public_key. The caller's message is deliberately generic;
-     the reason is in the gateway's telemetry. Body: $(head -c 200 "$WORK/resp.b64")"
+  || fail "read route → ${status} (expected ${EXP_READ}). Body: $(head -c 200 "$WORK/resp.b64")"
+
+# A key that can't be used comes back as 200 with the failure message in a JSON
+# body, not as fail_close_status, so the status alone proves nothing here.
+if grep -q '"message"' "$WORK/resp.b64"; then
+  fail "read route → 200, but the body is the failure message: $(head -c 200 "$WORK/resp.b64")
+     The statement could not be encrypted. Usually public_key is still the placeholder,
+     can't be read, or has no encryption subkey."
+fi
 
 grep -qi 'content-type:.*text/plain' "$WORK/resp.h" \
   && pass "content-type is text/plain (the body is no longer the backend's JSON)" \

@@ -11,7 +11,8 @@ both directions:
 
 1. **Inbound** (`POST /statements/inbound`). The partner sends an encrypted
    instruction. The gateway decrypts it, replaces the request body with the plain
-   content, sets `content-type: application/json`, and passes it to your backend.
+   content, sets the content type (`application/json` for a JSON file), and passes
+   it to your backend.
 2. **Outbound** (`GET /statements/:statementId`). Your backend returns an ordinary
    JSON statement. The gateway encrypts it to the partner's public key and replaces
    the response body with the encrypted file, setting `content-type: text/plain`.
@@ -103,15 +104,17 @@ private key, in the same integration, minutes apart.
 ## The wire format is base64 of the armor
 
 Both directions use **base64 of the ASCII-armored message**, not the armor. Armor
-is already a text encoding; base64 on top of it is a second one.
+is already a text encoding; base64 on top of it is a second one. Inbound, the
+gateway also accepts base64 of gpg's binary output (made without `--armor`), and
+base64 split across lines.
 
 ```
 encrypt (response) : body becomes base64("-----BEGIN PGP MESSAGE-----…"), content-type text/plain
-decrypt (request)  : body must ARRIVE base64-encoded
+decrypt (request)  : body must ARRIVE base64-encoded (armored or binary inside)
 ```
 
-Every PGP tool produces armor by default, so a partner following the standard
-correctly is rejected: a raw armored body gets a 400, and the same message
+Partners usually send armor, the form most PGP guides show, so a partner following
+the standard correctly is rejected: a raw armored body gets a 400, and the same message
 base64-encoded decrypts cleanly. There is no setting that accepts bare armor, so
 this is an integration-guide problem, not a configuration one. The note you send
 the partner is part of the work: [Guides → The note to send your partner](guides.md#the-note-to-send-your-partner).
@@ -123,11 +126,12 @@ the partner is part of the work: [Guides → The note to send your partner](guid
 | Inbound | **200** | Decrypted; the backend received plain content. |
 | Inbound | **400** | Not a PGP message this gateway can decrypt — raw armor, plain text, or a message encrypted to a different key — or the private key's passphrase is missing or wrong. The backend was not called. |
 | Outbound | **200**, `text/plain` | The statement, encrypted to the partner's key. |
-| Outbound | **500** | The response could not be encrypted, usually because the public key cannot be read or is still the placeholder. |
+| Outbound | **200**, with `{"message":"statement could not be encrypted"}` | The response could not be encrypted: the public key is still the placeholder, can't be read, or has no encryption subkey. The caller gets your `fail_close_message` with a 200, not the 500 in `fail_close_status`, so a client must check the body, not just the status. |
 
 **Errors are vague on purpose.** The caller sees `failed to encrypt response` or
-your `fail_close_message`, and nothing else. An unreadable key, a wrong recipient
-and an oversized body all look the same. That is correct — an error that describes
+your `fail_close_message`, and nothing else. Inbound, a wrong key, a wrong format,
+a wrong passphrase and a file over `max_body_size` all give the same 400 and the
+same message. That is correct — an error that describes
 your key material helps an attacker — but it means a partner cannot work out the
 cause alone. Give them the `X-Request-Id` header value to quote, and a support path.
 
@@ -149,7 +153,7 @@ exactly that reason.
 |---|---|---|
 | `pgp-crypto` (priority 898) | inbound: `decrypt`, target request · outbound: `encrypt`, target response | The crypto. |
 | `proxy-rewrite` | both routes | Rewrites the path to the backend's (`/post`, `/json`). Path only. |
-| `request-id` | API-wide | Adds `X-Request-Id`, the handle a partner quotes, since errors are vague. |
+| `request-id` | API-wide | Adds `X-Request-Id`, the handle a partner quotes, since errors are vague. Recommended; without it, responses carry no `X-Request-Id`. |
 
 The crypto runs inside the gateway, with a `gpg` binary as a fallback for material
 the in-process path does not cover. It uses the gateway's own CPU, and is bounded by
@@ -224,11 +228,10 @@ Do not use it when:
 
 ## What this does not do
 
-- **It uses base64 of the armor in both directions**, which no standard PGP tool
-  produces by default, so every partner needs an explicit note.
-- **`field` on an encrypt block returns only that field's ciphertext** as the whole
-  response body and discards the rest of the document. It is not a way to encrypt
-  one field of a document you otherwise keep.
+- **It uses base64 in both directions**, which no standard PGP tool produces by
+  default, so every partner needs an explicit note.
+- **It encrypts the whole statement here.** `field` would encrypt one field and
+  leave the rest readable; this package doesn't set it.
 - **Key material is a literal** in the document, with no environment-variable
   lookup, and so is the passphrase. The gateway does not resolve `<ENV:...>` or
   `${...}`.
@@ -239,7 +242,8 @@ Do not use it when:
 - **The whole body is buffered**, bounded by `max_body_size`, which rejects rather
   than streams. Batch files are how people find this limit.
 - **Confidentiality only** — no sender authentication, no signature, no
-  non-repudiation.
+  non-repudiation. The gateway doesn't check who signed a file: anyone who has
+  your public key can send you one, and it is decrypted and passed on.
 - **It is not authentication.** Anyone who can reach the route gets a document they
   cannot read, which is not the same as being refused. Put
   [solution 08](../08-api-key/) in front.
