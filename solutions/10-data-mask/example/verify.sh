@@ -8,7 +8,7 @@
 #   3. Every phone number is redacted
 #   4. Every coordinate pair is redacted
 #   5. Fields that are not in the filter list are untouched
-#   6. The single-record route masks identically
+#   6. The single-record route returns the customer asked for, masked the same way
 #
 # Case 1 says "every", and it means it. The most dangerous default in this whole
 # package is response-rewrite's scope, which is `once` — a filter without
@@ -27,6 +27,10 @@
 #   LIST_PATH    default /support/customers
 #   ONE_PATH     default /support/customers/3
 #   MASK         default [redacted]
+#   ACCEPT_ENCODING  unset by default. Set it to 'gzip, br, zstd' to ask for
+#                compression the way a browser does. A route whose backend then
+#                answers in a format response-rewrite can't decode returns an
+#                empty body, and this script says so.
 
 set -uo pipefail
 
@@ -34,6 +38,9 @@ GATEWAY="${GATEWAY:?set GATEWAY to the gateway base URL, e.g. https://<YOUR_GATE
 LIST_PATH="${LIST_PATH:-/support/customers}"
 ONE_PATH="${ONE_PATH:-/support/customers/3}"
 MASK="${MASK:-[redacted]}"
+ONE_ID="${ONE_PATH##*/}"
+ENC=()
+[[ -n "${ACCEPT_ENCODING:-}" ]] && ENC=(--compressed -H "accept-encoding: ${ACCEPT_ENCODING}")
 
 LIST_URL="${GATEWAY%/}${LIST_PATH}"
 ONE_URL="${GATEWAY%/}${ONE_PATH}"
@@ -43,6 +50,11 @@ trap 'rm -f "$BODY_FILE"' EXIT
 fail() { printf '\033[31mFAIL\033[0m  %s\n' "$1"; exit 1; }
 pass() { printf '\033[32mPASS\033[0m  %s\n' "$1"; }
 info() { printf '\033[34mNOTE\033[0m  %s\n' "$1"; }
+empty_body() {
+  [[ -s "$BODY_FILE" ]] || fail "$1 returned an empty body (compressed upstream?).
+     The backend may have compressed its reply in a format response-rewrite can't
+     decode. Set Accept-Encoding: gzip in the route's proxy-rewrite."
+}
 
 FIXTURES="$(cd "$(dirname "${BASH_SOURCE[0]}")/../tests/expected" 2>/dev/null && pwd || true)"
 expect() {
@@ -59,11 +71,12 @@ echo "→ Single route: $ONE_URL"
 echo
 
 # --- fetch the list ----------------------------------------------------------
-status="$(curl -s -o "$BODY_FILE" -w '%{http_code}' "$LIST_URL" -H 'accept: application/json')"
+status="$(curl -s ${ENC[@]+"${ENC[@]}"} -o "$BODY_FILE" -w '%{http_code}' "$LIST_URL" -H 'accept: application/json')"
 [[ "$status" == "000" ]] && fail "could not reach $LIST_URL at all — curl got no HTTP response.
      Check GATEWAY, DNS and reachability before anything else."
 [[ "$status" == "$EXP_LIST" ]] \
   || fail "list → ${status} (expected ${EXP_LIST}). Body: $(head -c 200 "$BODY_FILE")"
+empty_body "the list route"
 
 records="$(grep -o '"email"' "$BODY_FILE" | wc -l | tr -d ' ')"
 [[ "$records" -ge 2 ]] \
@@ -118,10 +131,15 @@ fi
 
 # --- 6: the single-record route ----------------------------------------------
 echo
-status="$(curl -s -o "$BODY_FILE" -w '%{http_code}' "$ONE_URL" -H 'accept: application/json')"
+status="$(curl -s ${ENC[@]+"${ENC[@]}"} -o "$BODY_FILE" -w '%{http_code}' "$ONE_URL" -H 'accept: application/json')"
 [[ "$status" == "$EXP_ONE" ]] \
   || fail "single record → ${status} (expected ${EXP_ONE}). If this is a 404, the path rewrite is
      not carrying the id through — check proxy-rewrite's regex_uri, not the mask."
+empty_body "the single-record route"
+grep -Eq "\"id\"[[:space:]]*:[[:space:]]*\"?${ONE_ID}\"?[[:space:]]*[,}]" "$BODY_FILE" \
+  && pass "the single-record route returned customer ${ONE_ID}, the one asked for" \
+  || fail "the single-record route did not return customer ${ONE_ID}. If every id returns the
+     same customer, proxy-rewrite has a fixed uri; it needs a regex_uri that carries the id."
 grep -q '"\*\*\*@' "$BODY_FILE" \
   && pass "the single-record route masks identically" \
   || fail "the single-record route returned an unmasked address. The filters are per route and it

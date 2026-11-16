@@ -1,0 +1,5 @@
+### Case: read-with-key — a partner reads with its key attached.
+### Expect 200, the same as with no key.
+GET {{GATEWAY}}/catalog/items/1
+X-Api-Key: {{PARTNER_API_KEY}}
+accept: application/json

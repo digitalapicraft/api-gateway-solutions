@@ -1,0 +1,143 @@
+# Solution 23 — Retire an old API version in stages, and tell callers in
+# headers a program can read.
+#
+# This is the importable artifact: an OpenAPI 3.0.3 document carrying
+# x-helix-gateway.plugins. It is both the API description and the gateway
+# configuration.
+#
+# RUNNABLE ON A FRESH FREE-TRIAL ORG. The upstream is public
+# https://jsonplaceholder.typicode.com: a "product" is one of its posts and a
+# "review" is one of its comments. Deploy to the "test" environment (the
+# free-trial default) with an upstream for that host bound to the revision.
+#
+# FOUR ROUTES, THREE STAGES OF A VERSION'S LIFE:
+#   GET /v1/products/{productId}           DEPRECATED. Still works. Every
+#                                          response carries Deprecation, Sunset
+#                                          and Link (the v2 address of the same
+#                                          product).
+#   GET /v1/products/{productId}/reviews   RETIRED. The gateway answers HTTP 410
+#                                          (gone) itself, with a JSON body and a
+#                                          Link to the v2 address. The backend
+#                                          is never called.
+#   GET /v2/products/{productId}           CURRENT. No deprecation headers.
+#   GET /v2/products/{productId}/reviews   CURRENT. No deprecation headers.
+#
+# THE HEADER VALUES, AND THE STANDARDS THEY FOLLOW:
+#   Deprecation: @1777593600
+#     RFC 9745. A structured-field date: "@" then whole seconds since
+#     1970-01-01 UTC. 1777593600 is 1 May 2026 00:00:00 UTC, the day v1 was
+#     deprecated. NOT an HTTP-date, and not "true" (an older draft's form).
+#   Sunset: Wed, 31 Mar 2027 23:59:59 GMT
+#     RFC 8594. An HTTP-date, always in GMT. The moment v1 stops answering.
+#   Link: </v2/products/1>; rel="successor-version"
+#     RFC 8288 syntax; the relation type is from RFC 5829. Built per request:
+#     $uri_param_productId is the {productId} the caller asked for, so the
+#     header names the replacement for THIS product, not a generic page.
+#
+# The retired route's Sunset is in the past (30 Sep 2026, the day it was
+# retired). RFC 8594 allows a past date; here it records when the endpoint went.
+#
+# EXECUTION ORDER (priority, highest first; phase beats priority):
+#   request-id       12015  every response gets X-Request-Id
+#   mocking           1999  access phase. Answers the retired route and stops
+#                           there, so nothing is sent to the backend.
+#   proxy-rewrite     1008  rewrite phase. /v1|v2/products/1 -> /posts/1
+#   response-rewrite   899  header phase, on the way back. Adds the headers to
+#                           the backend's answer, whatever its status.
+#
+# No secrets in this file.
+
+openapi: 3.0.3
+
+info:
+  title: Products API
+  version: 1.0.0
+  description: >-
+    Two versions of one API side by side. v1 still answers but announces its
+    end date in standard headers; one v1 endpoint is already retired and
+    answers 410 with the address of its replacement; v2 is the current version.
+
+paths:
+  # --- v1: deprecated, still served --------------------------------------
+  /v1/products/{productId}:
+    get:
+      summary: Get a product (v1, deprecated)
+      deprecated: true
+      parameters:
+        - { name: productId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: The product, with Deprecation, Sunset and Link headers.
+          headers:
+            Deprecation: { schema: { type: string, example: '@1777593600' } }
+            Sunset: { schema: { type: string, example: 'Wed, 31 Mar 2027 23:59:59 GMT' } }
+            Link: { schema: { type: string, example: '</v2/products/1>; rel="successor-version"' } }
+        '404': { description: No such product. Answered by the backend; the headers are still added. }
+      x-helix-gateway:
+        plugins:
+          proxy-rewrite:
+            regex_uri: ["^/v1/products/([^/]+)$", "/posts/$1"]
+          # headers.set replaces any value the backend sent under the same name.
+          response-rewrite:
+            headers:
+              set:
+                Deprecation: "@1777593600"
+                Sunset: "Wed, 31 Mar 2027 23:59:59 GMT"
+                Link: '</v2/products/$uri_param_productId>; rel="successor-version"'
+
+  # --- v1: retired, answered by the gateway ------------------------------
+  /v1/products/{productId}/reviews:
+    get:
+      summary: Get a product's reviews (v1, retired)
+      deprecated: true
+      parameters:
+        - { name: productId, in: path, required: true, schema: { type: string } }
+      responses:
+        '410':
+          description: >-
+            Retired. Answered by the gateway; the backend is never called. The
+            body and the Link header name the v2 address.
+      x-helix-gateway:
+        plugins:
+          mocking:
+            response_status: 410
+            content_type: application/json
+            with_mock_header: false
+            response_headers:
+              Sunset: "Wed, 30 Sep 2026 23:59:59 GMT"
+              Link: '</v2/products/$uri_param_productId/reviews>; rel="successor-version"'
+            response_example: '{"error":"gone","message":"This endpoint was retired on 30 September 2026. Use the successor address.","successor":"/v2/products/$uri_param_productId/reviews"}'
+
+  # --- v2: current --------------------------------------------------------
+  /v2/products/{productId}:
+    get:
+      summary: Get a product (v2)
+      parameters:
+        - { name: productId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: The product. }
+        '404': { description: No such product. Answered by the backend. }
+      x-helix-gateway:
+        plugins:
+          proxy-rewrite:
+            regex_uri: ["^/v2/products/([^/]+)$", "/posts/$1"]
+
+  /v2/products/{productId}/reviews:
+    get:
+      summary: Get a product's reviews (v2)
+      parameters:
+        - { name: productId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: The product's reviews (an array). }
+      x-helix-gateway:
+        plugins:
+          proxy-rewrite:
+            regex_uri: ["^/v2/products/([^/]+)/reviews$", "/posts/$1/comments"]
+
+# API-WIDE POLICY.
+x-helix-gateway:
+  plugins:
+    # An id on every response, so a partner's ticket can quote one call.
+    request-id:
+      algorithm: uuid
+      header_name: X-Request-Id

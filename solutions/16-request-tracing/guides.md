@@ -220,23 +220,23 @@ curl -s "${H[@]}" -X POST "$CP/api/orgs/$ORG/envs/<ENV_ID>/upstreams" \
 # → {"id":"<UPSTREAM_ID>", ...}
 # Keep pass_host and upstream_host. Without them the backend receives your
 # gateway's host name instead of its own, and every call returns 502.
-curl -s "${H[@]}" -X PATCH "$CP/api/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/upstream-bindings/add" \
-  -d '{"environmentUpstreams":[{"environmentId":"<ENV_ID>","upstreamId":"<UPSTREAM_ID>"}]}'
-curl -s "${H[@]}" -X POST "$CP/api/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/deploy" \
-  -d '{"environmentId":"<ENV_ID>","force":false}'
+curl -s "${H[@]}" -X PUT "$CP/api/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/envs/<ENV_ID>/bind-upstream" \
+  -d '{"upstreamId":"<UPSTREAM_ID>"}'
+curl -s "${H[@]}" -X POST "$CP/api/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/envs/<ENV_ID>/deploy" \
+  -d '{"force":false}'
 
 # 3. Open a trace session on it: 5 minutes, every request recorded.
-curl -s "${H[@]}" -X POST "$CP/api/orgs/$ORG/apis/<API_ID>/envs/<ENV_ID>/trace/sessions" \
+curl -s "${H[@]}" -X POST "$CP/api/orgs/$ORG/apis/<API_ID>/envs/<ENV_ID>/trace/v2/sessions" \
   -d '{"ttl_seconds":300}'
 # → {"status":"active","session_id":"<SESSION_ID>","max_requests":10,"requests_traced":0, ...}
 
 # 4. Send traffic, then read the records. Each raw_json is one full record.
-curl -s "${H[@]}" "$CP/api/orgs/$ORG/trace/sessions/<SESSION_ID>/traces?limit=100" \
+curl -s "${H[@]}" "$CP/api/orgs/$ORG/trace/v2/sessions/<SESSION_ID>/traces?limit=100" \
   | jq '.traces[].raw_json | fromjson | {method: .request.method, uri: .request.uri,
         status: .response.status, outcome, short_circuit, backend: .upstream.status}'
 
 # 5. Stop it.
-curl -s "${H[@]}" -X POST "$CP/api/orgs/$ORG/apis/<API_ID>/envs/<ENV_ID>/trace/sessions/<SESSION_ID>/stop"
+curl -s "${H[@]}" -X POST "$CP/api/orgs/$ORG/apis/<API_ID>/envs/<ENV_ID>/trace/v2/sessions/<SESSION_ID>/stop"
 ```
 
 The same calls without narration: [API reference](api-reference.md).

@@ -16,6 +16,7 @@ walkthrough of what it checks and why.
 ```bash
 GATEWAY=https://<YOUR_GATEWAY_HOST> ./example/verify.sh
 # defaults: LIST_PATH=/support/customers  ONE_PATH=/support/customers/3  MASK=[redacted]
+# optional: ACCEPT_ENCODING='gzip, br, zstd' asks for compression the way a browser does
 ```
 
 Exit code 0 means all six held:
@@ -27,7 +28,7 @@ Exit code 0 means all six held:
 | 3 | Every phone number | `[redacted]` |
 | 4 | Every coordinate | `[redacted]` |
 | 5 | A field the filters don't name | untouched |
-| 6 | The single-record route | masked the same way |
+| 6 | The single-record route | the customer you asked for (`"id": 3`), masked the same way |
 
 **Check 1 is the one that matters.** It is the `scope: once` trap, checked rather
 than hoped for: if exactly one record is masked, a filter is missing
@@ -37,8 +38,12 @@ field names and aren't quietly damaging fields nobody asked to mask.
 In the test plan these are four cases: **list masked** (checks 1, 3, 4),
 **domain survives** (check 2), **no over-masking** (check 5) and **single record**
 (check 6). A 404 on the single-record route is a routing fault, not a masking
-one — `proxy-rewrite`'s `regex_uri` carries the id. Filters are per route, so it is
-easy to update one route and forget the other; this case catches that.
+one — `proxy-rewrite`'s `regex_uri` carries the id. The same customer coming back
+for every id means the rewrite is a fixed `uri`; the id check catches that. Filters
+are per route, so it is easy to update one route and forget the other; this case
+catches that too. If either route returns an empty body, the script says so
+rather than reporting an unmasked address: see
+[Troubleshooting](guides.md#troubleshooting).
 
 Raw fixtures, if you want to run one case by hand instead of the whole script:
 [`tests/requests/`](tests/requests/) (the HTTP requests) and

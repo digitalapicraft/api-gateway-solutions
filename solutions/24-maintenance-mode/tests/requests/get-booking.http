@@ -1,0 +1,6 @@
+### Case: read one booking.
+###
+### Normal state: 200 and booking 1.
+### Maintenance state: 503, the same answer as every other route.
+GET {{GATEWAY}}/bookings/1
+accept: application/json

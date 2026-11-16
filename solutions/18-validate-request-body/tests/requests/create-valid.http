@@ -1,0 +1,9 @@
+### Case: create-valid — a ticket that follows the rule.
+###
+### Expect 201 from the ticket service (jsonplaceholder echoes the ticket with
+### id 101). The response carries the backend's own X-Powered-By header, which
+### is how you know the request reached it.
+POST {{GATEWAY}}/tickets
+content-type: application/json
+
+{"title": "Printer on fire", "priority": "high"}

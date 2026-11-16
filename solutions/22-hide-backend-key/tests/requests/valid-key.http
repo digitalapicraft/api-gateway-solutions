@@ -1,0 +1,7 @@
+### Case: valid-key — the app's own key, in X-Api-Key.
+### Expect 200. With postman-echo.com as the upstream, the body lists the headers
+### the backend received: x-supplier-key with the configured value, and no
+### x-api-key. The response headers carry X-Request-Id and no supplier key.
+GET {{GATEWAY}}/forecast?city=London
+X-Api-Key: {{APP_API_KEY}}
+accept: application/json

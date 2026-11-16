@@ -1,0 +1,7 @@
+### Case: a booking that does not exist.
+###
+### Normal state: 404, the backend's own answer, passed through.
+### Maintenance state: 503. The gateway answers before the backend could say
+### 404, so callers get one consistent answer during the window.
+GET {{GATEWAY}}/bookings/999999
+accept: application/json

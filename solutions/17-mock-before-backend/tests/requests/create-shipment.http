@@ -1,0 +1,8 @@
+### Case: create-shipment (mock) and backend-create (after the switch-over).
+###
+### While mocked: 201, Location: /shipments/SHP-1001, the sample body, x-mock-by.
+### The mock does not read this body. After the switch-over: the backend's 201.
+POST {{GATEWAY}}/shipments
+content-type: application/json
+
+{"origin": "Rotterdam", "destination": "Leeds"}

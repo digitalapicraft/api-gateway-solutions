@@ -1,0 +1,171 @@
+# Test plan — Stable public paths.
+#
+# Cases 1-10 are executed in order by ../example/verify.sh, which exits 0 only if
+# all of them hold. The fixtures under requests/ and expected/ document each case
+# independently so you can run one by hand.
+#
+# Substitute your own value:
+#   {{GATEWAY}}  gateway base URL, e.g. https://<YOUR_GATEWAY_HOST>
+
+meta:
+  solution: 19-stable-public-paths
+  version: 1.0.0
+  executor: example/verify.sh
+  note: >-
+    Every automated case checks WHICH record came back (an id, a count, whose
+    orders), not only the status code. A rewrite that sends every caller to the
+    same record still answers 200.
+
+cases:
+  - id: list-customers
+    type: positive
+    intent: The public list path returns the backend's /users list.
+    request: requests/list-customers.http
+    expected: expected/list-customers-200.json
+    asserts:
+      - an array of 10 customers, the first with id 1 and an email
+      - X-Request-Id is present
+
+  - id: list-query-kept
+    type: positive
+    intent: >-
+      A fixed rewrite ("uri") keeps the caller's query string and sends it on
+      after the new path: /v1/customers?_limit=2 reaches the backend as
+      /users?_limit=2.
+    request: requests/list-limited.http
+    expected: expected/list-limited-200.json
+    asserts:
+      - exactly 2 customers, ids 1 and 2
+
+  - id: get-customer
+    type: positive
+    intent: A pattern rewrite ("regex_uri") carries the id from the public path to the backend path.
+    request: requests/get-customer.http
+    expected: expected/get-customer-200.json
+    asserts:
+      - id is 3 and username is Samantha
+    notes: >-
+      If this returns a different customer, the route has a fixed "uri" instead of
+      "regex_uri", and every caller gets the same record.
+
+  - id: customer-orders
+    type: positive
+    intent: A deeper public path is rewritten the same way, to /users/<id>/todos.
+    request: requests/customer-orders.http
+    expected: expected/customer-orders-200.json
+    asserts:
+      - 20 orders, every one with userId 1
+
+  - id: orders-query-kept
+    type: positive
+    intent: A pattern rewrite keeps the caller's query string too.
+    request: requests/orders-limited.http
+    expected: expected/orders-limited-200.json
+    asserts:
+      - exactly 3 orders, every one with userId 1
+    notes: >-
+      The pattern is matched against the path only. The query string is never
+      part of the match, and is added back after the new path.
+
+  - id: orders-repeated-id
+    type: boundary
+    intent: >-
+      A caller who adds ?userId=2 still gets only customer 1's orders. Holds
+      because the id travels in the backend's path and this backend takes it
+      from there.
+    request: requests/orders-repeated-id.http
+    expected: expected/customer-orders-200.json
+    asserts:
+      - every order has userId 1
+    response_notes: >-
+      Fails after the "backend moved" variation, which sends the id in the
+      backend's query string (/todos?userId=1). The caller's ?userId=2 is then
+      added after it, the backend receives both, and returns customer 1's and
+      customer 2's orders (40). That is the trap this case exists to catch.
+
+  - id: unknown-customer
+    type: negative
+    intent: >-
+      An id the backend doesn't have gets the backend's own 404, passed through.
+      The route matched; the backend said no.
+    request: requests/unknown-customer.http
+    expected: expected/unknown-customer-404.json
+    response_notes: >-
+      The body is the backend's ({}), and X-Request-Id is set. Compare with the
+      gateway's own 404 in the next case.
+
+  - id: unmapped-path
+    type: negative
+    intent: A path that is not part of the contract gets the gateway's own 404.
+    request: requests/unmapped-path.http
+    expected: expected/route-not-found-404.json
+    response_notes: >-
+      {"error_msg":"404 Route Not Found"} is the gateway's answer: no route
+      serves the path, and the backend was never called.
+
+  - id: backend-paths-unreachable
+    type: negative
+    intent: >-
+      The backend's own paths (/users, /users/1, /users/1/todos) have no route,
+      so a caller who learns them still can't use them through the gateway.
+    request: requests/backend-path.http
+    expected: expected/route-not-found-404.json
+    notes: >-
+      Gateway routes are shared by every API deployed to the same environment.
+      If another API serves one of these paths, verify.sh reports it; leave that
+      path out with BACKEND_PATHS.
+
+  - id: dot-dot-path
+    type: negative
+    intent: >-
+      A path with "../" segments, sent as-is, is resolved before routing, so
+      /v1/customers/../../users/1/todos is /users/1/todos, which has no route.
+    request: requests/dot-dot-path.http
+    expected: expected/route-not-found-404.json
+    notes: >-
+      Send it with curl --path-as-is. Without that flag curl resolves the "../"
+      itself, and the test proves nothing about the gateway.
+
+  # ---- manual ----------------------------------------------------------------
+
+  - id: backend-moved
+    type: positive
+    manual: true
+    intent: >-
+      The backend moves a path; only the rewrite on that route changes; callers'
+      paths and the responses they get stay the same.
+    procedure: >-
+      Change the orders route's regex_uri to
+      ["^/v1/customers/([0-9]+)/orders$", "/todos?userId=$1"] on a cloned
+      revision and deploy it. Run verify.sh.
+    expected_outcome: >-
+      Cases 1-5 pass, and their response bodies are identical to the ones
+      before the move. Case 6 fails: /v1/customers/1/orders?userId=2 returns 40
+      orders, customers 1 and 2. Cases 7-10 are unaffected.
+
+  - id: id-pattern-in-query
+    type: boundary
+    manual: true
+    intent: >-
+      When the rewrite copies the id into a query string, a loose pattern lets a
+      caller smuggle extra parameters inside the id; a digits-only pattern does
+      not.
+    procedure: >-
+      With the moved orders route, call /v1/customers/1&userId=2/orders once with
+      the pattern ([^/]+) and once with ([0-9]+).
+    expected_outcome: >-
+      ([^/]+) sends /todos?userId=1&userId=2 and returns 40 orders. ([0-9]+)
+      does not match, so the backend is asked for the public path itself and
+      answers 404 {}.
+
+  - id: path-variants
+    type: negative
+    manual: true
+    intent: Paths are matched exactly, so near-misses get the gateway's 404.
+    procedure: >-
+      Call /V1/customers, /v1/Customers/1, /v1/customers/ (trailing slash),
+      /v1/customers/1/ and /v1/customers/1%2Ftodos.
+    expected_outcome: >-
+      All five return 404 {"error_msg":"404 Route Not Found"}. Paths are
+      case-sensitive, a trailing slash is a different path, and %2F is decoded
+      to "/" before routing.

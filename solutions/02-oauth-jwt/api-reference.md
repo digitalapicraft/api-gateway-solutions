@@ -4,10 +4,13 @@
 
 ---
 
-The raw control-plane calls behind [Install it directly](guides.md#install-it-directly),
-listed for lookup rather than as a walkthrough. None of it requires custom code. The
-full control-plane and plugin documentation is at
-[docs.digitalapi.ai/api-gateway](https://docs.digitalapi.ai/api-gateway).
+The raw control-plane calls behind
+[Install it directly](guides.md#install-it-directly), listed for lookup rather than
+as a walkthrough. None of it requires custom code. Each step links to its page in
+the
+[control-plane API reference](https://docs.digitalapi.ai/api-gateway/api-reference/api-reference);
+plugin fields are in the
+[plugin reference](https://docs.digitalapi.ai/api-gateway/plugin-reference/plugin-reference).
 
 **Before the first call:** replace every `<YOUR_JWT_SIGNING_SECRET>` in
 `example/api-spec.yaml` with one long random value. The gateway uses it exactly as
@@ -15,15 +18,15 @@ written, and there is no control-plane call that sets it for you.
 
 | Step | Call | Body | Notes |
 |---|---|---|---|
-| Import the spec | `POST /api/orgs/{orgId}/apis/from-spec` | `multipart/form-data`, part `file` — or a JSON body `{"spec": <document>}` | Attaches `helix-auth` (generate on `/oauth/token`, validate on the `/posts` routes), `request-id` and `cors`. Response is `{"api", "revision"}` — keep both ids. A raw `application/yaml` body is rejected with 415. |
-| Create an upstream | `POST /api/orgs/{orgId}/envs/{envId}/upstreams` | `{"name","specification":{"scheme","pass_host":"rewrite","upstream_host","nodes":[{"host","port","weight"}], ...}}` | Upstreams are created **per environment**. Set `pass_host` to `rewrite` and `upstream_host` to the backend's host: without them the backend gets the gateway's host and every call returns HTTP 502 (bad gateway). |
-| Bind the upstream to the revision | `PATCH /api/orgs/{orgId}/apis/{apiId}/revisions/{revisionId}/upstream-bindings/add` | `{"environmentUpstreams":[{"environmentId","upstreamId"}]}` | Must succeed before the deploy call below. |
-| Deploy the revision | `POST /api/orgs/{orgId}/apis/{apiId}/revisions/{revisionId}/deploy` | `{"environmentId","force":false}` | This is what makes the routes live. A live (ACTIVE) revision rejects edits — undeploy or clone it first. |
-| List APIs (to get `<API_ID>`) | `GET /api/orgs/{orgId}/apis` | — | Find the imported "Posts API" here, if you didn't keep the id from the import response. |
-| Create a product | `POST /api/orgs/{orgId}/products` | `{"name","displayName","apiIds","quota":{"limit":-1}}` | An app gets its credentials through a product. Which product isn't checked here: `helix-auth` alone accepts a token from any app in the environment. Every product needs a `quota` object; `limit: -1` means unlimited. |
-| Deploy the product | `POST /api/orgs/{orgId}/envs/{envId}/products/{productId}/deploy` | — | A separate deploy from the revision's. |
-| Create a developer | `POST /api/orgs/{orgId}/developers` | `{"firstName","lastName","email"}` | Returns the developer's `id`. |
-| Create an app | `POST /api/orgs/{orgId}/developers/{developerId}/envs/{envId}/apps` | `{"name","displayName","products":{"<productId>":<rank>},"plugins":{"helix-auth":{}}}` | `developerId` and the environment are **path segments**, not body fields. An empty `helix-auth` object asks for auto-generated credentials: the client id (the credential key) and the client secret. |
+| [Import the spec](https://docs.digitalapi.ai/api-gateway/api-reference/api-spec/api-import) | `POST /api/orgs/{orgId}/apis/from-spec` | `multipart/form-data`, part `file` — or a JSON body `{"spec": <document>}` | Attaches `helix-auth` (generate on `/oauth/token`, validate on the `/posts` routes), `request-id` and `cors`. Response is `{"api", "revision"}` — keep both ids. A raw `application/yaml` body is rejected with 415. |
+| [Create an upstream](https://docs.digitalapi.ai/api-gateway/api-reference/api-spec/upstreams) | `POST /api/orgs/{orgId}/envs/{envId}/upstreams` | `{"name","specification":{"scheme","pass_host":"rewrite","upstream_host","nodes":[{"host","port","weight"}], ...}}` | Upstreams are created **per environment**. Set `pass_host` to `rewrite` and `upstream_host` to the backend's host: without them the backend gets the gateway's host and every call returns HTTP 502 (bad gateway). |
+| [Bind the upstream to the revision](https://docs.digitalapi.ai/api-gateway/api-reference/api-spec/revisions) | `PUT /api/orgs/{orgId}/apis/{apiId}/revisions/{revisionId}/envs/{envId}/bind-upstream` | `{"upstreamId"}` | Must succeed before the deploy call below. |
+| [Deploy the revision](https://docs.digitalapi.ai/api-gateway/api-reference/api-spec/revisions) | `POST /api/orgs/{orgId}/apis/{apiId}/revisions/{revisionId}/envs/{envId}/deploy` | `{"force":false}` | This is what makes the routes live. A live (ACTIVE) revision rejects edits — undeploy or clone it first. |
+| [List APIs (to get `<API_ID>`)](https://docs.digitalapi.ai/api-gateway/api-reference/api-spec/apis) | `GET /api/orgs/{orgId}/apis` | — | Find the imported "Posts API" here, if you didn't keep the id from the import response. |
+| [Create a product](https://docs.digitalapi.ai/api-gateway/api-reference/api-spec/products) | `POST /api/orgs/{orgId}/products` | `{"name","displayName","apiIds","quota":{"limit":-1}}` | An app gets its credentials through a product. Which product isn't checked here: `helix-auth` alone accepts a token from any app in the environment. Every product needs a `quota` object; `limit: -1` means unlimited. |
+| [Deploy the product](https://docs.digitalapi.ai/api-gateway/api-reference/api-spec/products) | `POST /api/orgs/{orgId}/envs/{envId}/products/{productId}/deploy` | — | A separate deploy from the revision's. |
+| [Create a developer](https://docs.digitalapi.ai/api-gateway/api-reference/api-spec/developers) | `POST /api/orgs/{orgId}/developers` | `{"firstName","lastName","email"}` | Returns the developer's `id`. |
+| [Create an app](https://docs.digitalapi.ai/api-gateway/api-reference/api-spec/apps) | `POST /api/orgs/{orgId}/developers/{developerId}/envs/{envId}/apps` | `{"name","displayName","products":{"<productId>":<rank>},"plugins":{"helix-auth":{}}}` | `developerId` and the environment are **path segments**, not body fields. An empty `helix-auth` object asks for auto-generated credentials: the client id (the credential key) and the client secret. |
 
 Two calls a caller makes, not the control plane — listed so the whole flow is in
 one place:

@@ -1,0 +1,5 @@
+### Case: get-shipment — the agreed lookup, answered by the mock.
+###
+### Expect 200, the sample shipment SHP-1001, and an x-mock-by header.
+GET {{GATEWAY}}/shipments/SHP-1001
+accept: application/json

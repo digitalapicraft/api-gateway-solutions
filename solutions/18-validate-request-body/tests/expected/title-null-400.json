@@ -1,0 +1,8 @@
+{
+  "status": 400,
+  "headers": {
+    "present": ["X-Request-Id"],
+    "absent": ["X-Powered-By"]
+  },
+  "body": "property \"title\" validation failed: wrong type: expected string, got userdata"
+}

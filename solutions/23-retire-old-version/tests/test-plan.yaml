@@ -1,0 +1,113 @@
+# Test plan — Retire an old API version in stages.
+#
+# Cases 1-5 are executed in order by ../example/verify.sh, which exits 0 only if
+# all of them hold. The fixtures under requests/ and expected/ document each case
+# independently so you can run one by hand.
+#
+# Substitute your own values:
+#   {{GATEWAY}}     gateway base URL, e.g. https://<YOUR_GATEWAY_HOST>
+
+meta:
+  solution: 23-retire-old-version
+  version: 1.0.0
+  executor: example/verify.sh
+  note: >-
+    Cases 1-5 are automated and need no credentials. The removal stage and the
+    trace check are manual: the first changes the API, and the second needs a
+    trace session.
+  header_values: >-
+    verify.sh compares the headers with the values in example/api-spec.yaml.
+    If you change a date there, pass the new value as DEPRECATION, SUNSET or
+    RETIRED_SUNSET.
+
+cases:
+  - id: deprecated
+    type: positive
+    intent: >-
+      The deprecated v1 route still serves the backend's data, and every
+      response says so in three standard headers.
+    request: requests/deprecated.http
+    expected: expected/deprecated-200.json
+    response_notes: >-
+      Deprecation is a structured-field date (RFC 9745): "@" and whole seconds
+      since 1970 in UTC. Sunset is an HTTP-date (RFC 8594). Link names the v2
+      address of the same product, built from the id in the request.
+    notes: >-
+      X-Powered-By comes from the backend (jsonplaceholder). Case "retired"
+      relies on its absence, so this case first checks that it is present.
+
+  - id: deprecated-not-found
+    type: failure
+    intent: >-
+      An error from the backend still carries the deprecation headers, so a
+      caller learns about the retirement from every v1 answer, not only the
+      successful ones.
+    request: requests/deprecated-not-found.http
+    expected: expected/deprecated-not-found-404.json
+    response_notes: >-
+      The body is the backend's {} and not the gateway's "404 Route Not Found".
+      The Link names /v2/products/999999: the header follows whatever id was
+      asked for, even one that does not exist.
+
+  - id: retired
+    type: negative
+    intent: >-
+      The retired v1 endpoint answers HTTP 410 (gone) from the gateway, with the
+      replacement address in the body and in a Link header, and the backend is
+      never called.
+    request: requests/retired.http
+    expected: expected/retired-410.json
+    response_notes: >-
+      Sunset is in the past: it records the day the endpoint was retired.
+      A 410 with X-Powered-By on it would mean the request reached the backend.
+      verify.sh checks the "successor" field, which is the part a program
+      reads; "error" and "message" are for people and may be worded
+      differently.
+
+  - id: follow-link
+    type: positive
+    intent: >-
+      The address in the deprecated route's Link header works, returns the same
+      product, and carries no Deprecation or Sunset.
+    request: requests/current.http
+    expected: expected/current-200.json
+    notes: >-
+      verify.sh reads the address from the Link header of case "deprecated"
+      rather than hard-coding it, so a wrong Link fails here too.
+
+  - id: follow-successor
+    type: boundary
+    intent: >-
+      The address named in the 410 body works and is the current version: 200,
+      the product's reviews, no Deprecation or Sunset.
+    request: requests/current-reviews.http
+    expected: expected/current-reviews-200.json
+    notes: >-
+      verify.sh reads the address from the "successor" field of case "retired".
+
+  # ---- manual ----------------------------------------------------------------
+
+  - id: removed
+    type: negative
+    manual: true
+    intent: >-
+      The last stage. After the retired route is deleted from the API, callers
+      get the gateway's own 404, which is why the 410 stage comes first.
+    procedure: >-
+      Clone the revision, delete GET /v1/products/:productId/reviews, force
+      deploy the copy, then call GET /v1/products/7/reviews.
+    expected_outcome: >-
+      404 with the body {"error_msg":"404 Route Not Found"}, no Sunset and no
+      Link. Roll back by deploying the previous revision again.
+
+  - id: trace-shows-no-backend-call
+    type: safety
+    manual: true
+    intent: A trace record proves the 410 never reached the backend.
+    procedure: >-
+      Start a trace session on the API (Observability tab, Start trace session),
+      call GET /v1/products/3/reviews and GET /v1/products/3, click Refresh.
+    expected_outcome: >-
+      The 410's Outcome is Upstream not called, answered by mocking in the
+      access phase, with no backend status. The 200's record shows
+      response-rewrite in the header filter phase and a backend status of 200.

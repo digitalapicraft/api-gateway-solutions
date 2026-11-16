@@ -1,0 +1,11 @@
+{
+  "status": 200,
+  "headers": {
+    "present": ["X-Request-Id"],
+    "absent": ["Deprecation", "Sunset"]
+  },
+  "body": {
+    "userId": 1,
+    "id": 1
+  }
+}

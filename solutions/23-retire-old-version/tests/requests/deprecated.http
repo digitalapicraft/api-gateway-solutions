@@ -1,0 +1,8 @@
+### Case: deprecated — v1 still answers, and says when it ends.
+###
+### Expect 200 and the backend's product 1, plus three headers the gateway adds:
+###   Deprecation: @1777593600                          (1 May 2026, RFC 9745)
+###   Sunset: Wed, 31 Mar 2027 23:59:59 GMT             (RFC 8594)
+###   Link: </v2/products/1>; rel="successor-version"
+GET {{GATEWAY}}/v1/products/1
+accept: application/json

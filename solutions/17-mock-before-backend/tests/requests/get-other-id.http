@@ -1,0 +1,7 @@
+### Case: any-id-same-answer (mock) and backend-get (after the switch-over).
+###
+### While mocked: 200 and the SAME sample as /shipments/SHP-1001, with x-mock-by.
+### After the switch-over: the backend's answer, with no x-mock-by. The request
+### is identical in both stages.
+GET {{GATEWAY}}/shipments/1
+accept: application/json

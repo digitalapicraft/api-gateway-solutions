@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "X-Powered-By": "Express",
+    "Cache-Control": "max-age=43200"
+  }
+}

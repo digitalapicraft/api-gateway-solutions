@@ -220,10 +220,10 @@ curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/envs/<TEST_ENV_ID>/upstreams" \
   -d '{"name":"soap-upstream","specification":{"scheme":"https","pass_host":"rewrite","upstream_host":"<SOAP_HOST>","nodes":[{"host":"<SOAP_HOST>","port":443,"weight":1}]}}'
 # → {"id":"<UPSTREAM_ID>", ...}
 
-curl -s "${H[@]}" -X PATCH "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/upstream-bindings/add" \
-  -d '{"environmentUpstreams":[{"environmentId":"<TEST_ENV_ID>","upstreamId":"<UPSTREAM_ID>"}]}'
-curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/deploy" \
-  -d '{"environmentId":"<TEST_ENV_ID>","force":false}'
+curl -s "${H[@]}" -X PUT "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/envs/<TEST_ENV_ID>/bind-upstream" \
+  -d '{"upstreamId":"<UPSTREAM_ID>"}'
+curl -s "${H[@]}" -X POST "$BASE/orgs/$ORG/apis/<API_ID>/revisions/<REVISION_ID>/envs/<TEST_ENV_ID>/deploy" \
+  -d '{"force":false}'
 
 # 4. Prove it — including that the body is really converted, not just relabelled.
 #    REQ_BODY is a real envelope for your service, written as JSON.

@@ -1,0 +1,5 @@
+### Case: get-customer — the id carried through a pattern rewrite ("regex_uri").
+###
+### Expect 200, id 3, username Samantha. The backend received GET /users/3.
+GET {{GATEWAY}}/v1/customers/3
+accept: application/json

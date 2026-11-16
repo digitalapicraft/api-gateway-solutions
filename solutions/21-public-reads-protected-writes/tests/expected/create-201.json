@@ -1,0 +1,8 @@
+{
+  "status": 201,
+  "body": {
+    "title": "Trail running shoe",
+    "price": 89.5,
+    "id": 101
+  }
+}

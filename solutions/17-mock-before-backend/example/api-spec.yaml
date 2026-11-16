@@ -1,0 +1,146 @@
+# Solution 17 — a working URL for an endpoint whose backend doesn't exist yet.
+#
+# This is the importable artifact: an OpenAPI 3.0.3 document carrying
+# x-helix-gateway.plugins. It is the agreed contract AND the gateway
+# configuration. The frontend team codes against the schemas below; the gateway
+# answers every call with the sample in each route's mock.
+#
+# TWO ROUTES, BOTH ANSWERED BY THE GATEWAY ITSELF:
+#   GET  /shipments/{shipmentId}  → 200 and one fixed sample shipment
+#   POST /shipments               → 201, a sample body, and a Location header
+#
+# The backend is never called while the mock is on. Every reply carries the
+# header x-mock-by (with_mock_header is true), so a frontend can tell a mocked
+# answer from a real one.
+#
+# THE LIMIT: every shipment id gets the same answer. GET /shipments/anything
+# returns SHP-1001. For answers that differ per caller, see solution 12.
+#
+# SWITCHING OVER: when the backend ships, deploy the same routes without the
+# mocking blocks. api-spec-basic.yaml, next to this file, is that version. The
+# host, paths and methods don't change, so the frontend changes nothing.
+#
+# AN UPSTREAM MUST STILL BE BOUND TO DEPLOY. A revision with no upstream is
+# refused ("Upstream not configured for environment … Set upstream binding
+# first"), even though no route here calls it. Bind the backend you will switch
+# to (jsonplaceholder.typicode.com for the sample).
+#
+# RUNNABLE ON A FRESH FREE-TRIAL ORG. Deploy to the "test" environment.
+#
+# A "$" FOLLOWED BY A LETTER OR DIGIT IN response_example IS READ AS A VARIABLE.
+# "$uri" becomes the request path, and an unknown one, such as "$12.50",
+# becomes an empty string with no error. Keep "$" out of sample values.
+
+openapi: 3.0.3
+
+info:
+  title: Shipments API
+  version: 1.0.0
+  description: >-
+    Shipment tracking for the frontend. Answered by a mock at the gateway until
+    the backend ships; the routes and the contract stay the same afterwards.
+
+paths:
+  /shipments/{shipmentId}:
+    get:
+      summary: Track one shipment
+      parameters:
+        - { name: shipmentId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: The shipment. While mocked, the same sample for every id.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Shipment' }
+      x-helix-gateway:
+        plugins:
+          # Priority 1999, access phase. Answers the request itself; the
+          # backend is never called.
+          mocking:
+            response_status: 200
+            content_type: application/json
+            with_mock_header: true
+            response_example: |-
+              {
+                "shipmentId": "SHP-1001",
+                "status": "IN_TRANSIT",
+                "carrier": "Acme Freight",
+                "eta": "2026-11-04T17:00:00Z",
+                "events": [
+                  { "at": "2026-10-28T09:12:00Z", "status": "PICKED_UP", "location": "Rotterdam" },
+                  { "at": "2026-10-29T22:40:00Z", "status": "DEPARTED_HUB", "location": "Rotterdam" },
+                  { "at": "2026-10-30T06:05:00Z", "status": "ARRIVED_HUB", "location": "Leeds" }
+                ]
+              }
+
+  /shipments:
+    post:
+      summary: Create a shipment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NewShipment' }
+      responses:
+        '201':
+          description: >-
+            Created. Location names the new shipment. While mocked, the body is
+            not read and every create returns SHP-1001.
+          headers:
+            Location: { schema: { type: string }, description: Path of the new shipment }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Shipment' }
+      x-helix-gateway:
+        plugins:
+          mocking:
+            response_status: 201
+            content_type: application/json
+            with_mock_header: true
+            response_headers:
+              Location: /shipments/SHP-1001
+            response_example: |-
+              {
+                "shipmentId": "SHP-1001",
+                "status": "LABEL_CREATED",
+                "carrier": "Acme Freight",
+                "eta": "2026-11-04T17:00:00Z",
+                "events": []
+              }
+
+components:
+  schemas:
+    Shipment:
+      type: object
+      required: [shipmentId, status, carrier, eta, events]
+      properties:
+        shipmentId: { type: string, example: SHP-1001 }
+        status:
+          type: string
+          enum: [LABEL_CREATED, PICKED_UP, DEPARTED_HUB, ARRIVED_HUB, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED]
+        carrier: { type: string, example: Acme Freight }
+        eta: { type: string, format: date-time, nullable: true }
+        events:
+          type: array
+          items:
+            type: object
+            properties:
+              at: { type: string, format: date-time }
+              status: { type: string }
+              location: { type: string }
+    NewShipment:
+      type: object
+      required: [origin, destination]
+      properties:
+        origin: { type: string, example: Rotterdam }
+        destination: { type: string, example: Leeds }
+        carrier: { type: string, example: Acme Freight }
+
+# API-WIDE POLICY.
+x-helix-gateway:
+  plugins:
+    # An X-Request-Id on every response, mocked or real, so a frontend bug
+    # report can quote the exact call.
+    request-id:
+      algorithm: uuid
+      header_name: X-Request-Id

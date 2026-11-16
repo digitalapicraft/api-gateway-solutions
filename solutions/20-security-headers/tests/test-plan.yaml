@@ -1,0 +1,123 @@
+# Test plan — Security headers.
+#
+# Cases 1-4 are executed in order by ../example/verify.sh, which exits 0 only if
+# all of them hold. The fixtures under requests/ and expected/ document each case
+# independently so you can run one by hand.
+#
+# Substitute your own values:
+#   {{GATEWAY}}   gateway base URL, e.g. https://<YOUR_GATEWAY_HOST>
+#
+# In the header map of an expected/*.json fixture: a string means "exactly this
+# value, exactly once"; true means "present, any value"; null means "absent".
+# verify.sh reads those maps, and the statuses, from the fixtures.
+
+meta:
+  solution: 20-security-headers
+  version: 1.0.0
+  executor: example/verify.sh
+  note: >-
+    Cases 1-4 are automated. The no-route case is manual, because on a shared
+    environment another API may serve the path you pick. The route-override,
+    add-versus-set and HSTS cases are manual: each needs a different
+    configuration from the shipped one.
+
+cases:
+  - id: backend-direct
+    type: precondition
+    intent: >-
+      The backend, called without the gateway, sends what the pen test flagged.
+      Without this, "absent after the gateway" could mean "never there".
+    request: requests/backend-direct.http
+    expected: expected/backend-direct-200.json
+    expected_status: 200
+    response_notes: >-
+      verify.sh reports a NOTE, not a failure, when BACKEND is your own service and
+      it doesn't send these: the after-the-gateway checks still apply.
+
+  - id: one-customer
+    type: positive
+    intent: >-
+      One record leaves the gateway with every security header set once, every
+      stack header removed, and the body exactly as the backend sent it.
+    request: requests/one-customer.http
+    expected: expected/one-customer-200.json
+    expected_status: 200
+    asserts:
+      - each configured header appears exactly once, with the configured value
+      - X-Content-Type-Options is one header although the backend also sends it (set replaces)
+      - Cache-Control is no-store, not the backend's max-age=43200
+      - the body is byte-identical to backend-direct's body
+    response_notes: >-
+      Two Cache-Control headers means the rule used add instead of set. A missing
+      header on this route only means the route carries its own response-rewrite,
+      which replaces the API-wide one.
+
+  - id: customer-list
+    type: positive
+    intent: The same headers on a list, and a 5.6 KB body passed through untouched.
+    request: requests/customer-list.http
+    expected: expected/customer-list-200.json
+    expected_status: 200
+    asserts:
+      - the same header checks as one-customer
+      - the body is byte-identical to the backend's GET /users
+
+  - id: unknown-customer
+    type: negative
+    intent: >-
+      An error from the backend carries the same headers as a success. The rule
+      runs on every response of the API's routes, whatever the status.
+    request: requests/unknown-customer.http
+    expected: expected/unknown-customer-404.json
+    expected_status: 404
+    asserts:
+      - the same header checks as one-customer
+      - the body is the backend's own {}
+
+  # ---- manual ----------------------------------------------------------------
+
+  - id: no-route
+    type: boundary
+    manual: true
+    intent: >-
+      A path the API has no route for never reaches the API, so it gets the
+      gateway's plain 404 without these headers. Proven so nobody reads a
+      scanner's result for such a path as a broken rule.
+    request: requests/no-route.http
+    expected_outcome: >-
+      404 Route Not Found, with none of the five security headers.
+
+  - id: route-override
+    type: boundary
+    manual: true
+    intent: >-
+      A route with its own response-rewrite loses the API-wide headers on that
+      route; copying the headers block into the route's own block restores them.
+    expected_outcome: >-
+      Add a route-level response-rewrite with only filters and deploy: that
+      route's responses carry none of the five headers, while the API-wide
+      X-Request-Id is still there. Add the headers block beside the filters and
+      redeploy: all five return.
+
+  - id: add-versus-set
+    type: negative
+    manual: true
+    intent: add appends beside the backend's header instead of replacing it.
+    expected_outcome: >-
+      With headers.add ["Cache-Control: no-store"] in place of set, a backend that
+      sends Cache-Control: max-age=600 produces two Cache-Control headers,
+      max-age=600 and no-store.
+
+  - id: hsts
+    type: boundary
+    manual: true
+    intent: >-
+      Find out who owns Strict-Transport-Security on your host before deciding to
+      set it at the gateway.
+    expected_outcome: >-
+      GET a route (curl -s -D - -o /dev/null) before adding HSTS; curl -I sends
+      HEAD, which these GET-only routes answer with 404. If a
+      Strict-Transport-Security header is already there, something in front of
+      the gateway sets it; a value set in
+      the gateway may not be the one callers receive. If none is there, add it to
+      set, redeploy, and check it arrives.

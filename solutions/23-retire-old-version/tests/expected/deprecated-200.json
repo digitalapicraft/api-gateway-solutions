@@ -1,0 +1,13 @@
+{
+  "status": 200,
+  "headers": {
+    "Deprecation": "@1777593600",
+    "Sunset": "Wed, 31 Mar 2027 23:59:59 GMT",
+    "Link": "</v2/products/1>; rel=\"successor-version\"",
+    "present": ["X-Request-Id", "X-Powered-By"]
+  },
+  "body": {
+    "userId": 1,
+    "id": 1
+  }
+}

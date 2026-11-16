@@ -1,0 +1,5 @@
+### Case: follow-successor — the address from case "retired"'s body.
+###
+### Expect 200, an array of product 7's reviews, and no Deprecation or Sunset header.
+GET {{GATEWAY}}/v2/products/7/reviews
+accept: application/json

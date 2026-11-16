@@ -1,0 +1,5 @@
+### Case: read-item — anyone reads one item, with no key.
+### Expect 200 and item 1. A "404 Route Not Found" means the route was stored
+### as /catalog/items/{itemId} instead of /catalog/items/:itemId.
+GET {{GATEWAY}}/catalog/items/1
+accept: application/json

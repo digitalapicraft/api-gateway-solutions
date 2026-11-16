@@ -1,0 +1,6 @@
+### Case: unmapped-path — a path that isn't part of the contract.
+###
+### Expect 404 {"error_msg":"404 Route Not Found"}: the gateway's own answer.
+### The backend is never called.
+GET {{GATEWAY}}/v1/accounts
+accept: application/json

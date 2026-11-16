@@ -1,0 +1,11 @@
+{
+  "status": 201,
+  "headers": {
+    "present": ["X-Request-Id", "X-Powered-By"]
+  },
+  "body": {
+    "title": "Printer on fire",
+    "priority": "high",
+    "id": 101
+  }
+}

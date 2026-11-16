@@ -1,0 +1,8 @@
+{
+  "status": 400,
+  "headers": {
+    "present": ["X-Request-Id"],
+    "absent": ["X-Powered-By"]
+  },
+  "body": "property \"priority\" is required"
+}

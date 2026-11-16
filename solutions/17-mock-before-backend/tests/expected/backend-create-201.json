@@ -1,0 +1,17 @@
+{
+  "status": 201,
+  "headers": {
+    "present": [
+      "X-Request-Id",
+      "Location"
+    ],
+    "absent": [
+      "x-mock-by"
+    ]
+  },
+  "body": {
+    "origin": "Rotterdam",
+    "destination": "Leeds",
+    "id": 101
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "status": 410,
+  "headers": {
+    "Content-Type": "application/json",
+    "Sunset": "Wed, 30 Sep 2026 23:59:59 GMT",
+    "Link": "</v2/products/7/reviews>; rel=\"successor-version\"",
+    "present": ["X-Request-Id"],
+    "absent": ["X-Powered-By", "Deprecation"]
+  },
+  "body": {
+    "error": "gone",
+    "message": "This endpoint was retired on 30 September 2026. Use the successor address.",
+    "successor": "/v2/products/7/reviews"
+  }
+}

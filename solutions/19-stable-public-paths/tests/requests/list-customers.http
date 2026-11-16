@@ -1,0 +1,6 @@
+### Case: list-customers — the public list path.
+###
+### Expect 200 and 10 customers. The gateway sent this to the backend as
+### GET /users; the caller never sees that path.
+GET {{GATEWAY}}/v1/customers
+accept: application/json

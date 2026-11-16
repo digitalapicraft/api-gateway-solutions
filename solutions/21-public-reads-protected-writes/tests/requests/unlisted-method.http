@@ -1,0 +1,7 @@
+### Case: unlisted-method — PATCH, which the API does not list.
+### Expect 404 "404 Route Not Found". There is no route for this method, so
+### nothing reaches the backend.
+PATCH {{GATEWAY}}/catalog/items/1
+content-type: application/json
+
+{"price":69.5}

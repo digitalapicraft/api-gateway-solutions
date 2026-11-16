@@ -1,0 +1,7 @@
+### Case: one-customer — a single customer record through the gateway.
+###
+### Expect 200 with the five security headers, each once, with the configured
+### value; no X-Powered-By, Server, Via, X-AspNet-Version or X-AspNetMvc-Version;
+### an X-Request-Id. The body is byte-identical to backend-direct.http's.
+GET {{GATEWAY}}/users/1
+accept: application/json

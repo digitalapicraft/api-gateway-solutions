@@ -1,0 +1,6 @@
+### Case: deprecated-not-found — the backend's own 404 still carries the headers.
+###
+### Expect 404 with the body {} from the backend (not the gateway's
+### "404 Route Not Found"), and Deprecation, Sunset and a Link naming 999999.
+GET {{GATEWAY}}/v1/products/999999
+accept: application/json

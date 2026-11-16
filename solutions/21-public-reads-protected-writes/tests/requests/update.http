@@ -1,0 +1,7 @@
+### Case: update — a partner changes item 1.
+### Expect 200 and the item as sent.
+PUT {{GATEWAY}}/catalog/items/1
+X-Api-Key: {{PARTNER_API_KEY}}
+content-type: application/json
+
+{"id":1,"title":"Trail running shoe","price":79.5}

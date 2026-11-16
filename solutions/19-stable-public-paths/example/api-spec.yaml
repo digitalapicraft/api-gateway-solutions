@@ -1,0 +1,97 @@
+# Solution 19 — Stable public paths: callers use a versioned contract, and the
+# backend's own paths can change behind it.
+#
+# This is the importable artifact: an OpenAPI 3.0.3 document carrying
+# x-helix-gateway.plugins. It is both the API description callers read and the
+# gateway configuration.
+#
+# RUNNABLE ON A FRESH FREE-TRIAL ORG. The upstream is public
+# https://jsonplaceholder.typicode.com, so every route returns real data with no
+# backend of your own. Deploy to the "test" environment (the free-trial default).
+#
+# THE CONTRACT (what callers see)          THE BACKEND (what it really serves)
+#   GET /v1/customers                    →   GET /users
+#   GET /v1/customers/:customerId        →   GET /users/<customerId>
+#   GET /v1/customers/:customerId/orders →   GET /users/<customerId>/todos
+#
+# Callers only ever see the left column. The backend's own paths (/users, ...)
+# have no route on the gateway, so they are not reachable through it: a call to
+# /users/1 gets the gateway's 404 "Route Not Found".
+#
+# WHEN THE BACKEND MOVES, change only the proxy-rewrite on the route it affects,
+# then deploy. The public path, and what callers get back, stay the same.
+#
+# QUERY STRINGS pass through both forms below unchanged:
+#   /v1/customers?_limit=2             → /users?_limit=2
+#   /v1/customers/1/orders?_limit=3    → /users/1/todos?_limit=3
+# If a rewrite target carries its own "?", the caller's query string is added
+# after it with "&". See the guides for what that means.
+
+openapi: 3.0.3
+
+info:
+  title: Customers API
+  version: 1.0.0
+  description: >-
+    Version 1 of the public customers contract. Each route is rewritten at the
+    gateway to the backend's own path, so the backend can rename or move its
+    paths without changing this contract. Proxies the public jsonplaceholder
+    service, where customers are its users and orders are its todos.
+
+paths:
+  /v1/customers:
+    get:
+      summary: List customers
+      parameters:
+        - { name: _limit, in: query, required: false, schema: { type: integer }, description: Return at most this many customers. Passed through to the backend unchanged. }
+      responses:
+        '200': { description: Array of customers }
+      x-helix-gateway:
+        plugins:
+          # A fixed path: the public path has no parameter, so "uri" is enough.
+          # The caller's query string is kept and sent on after it.
+          proxy-rewrite:
+            uri: /users
+
+  /v1/customers/{customerId}:
+    get:
+      summary: Get one customer
+      parameters:
+        - { name: customerId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: The customer }
+        '404': { description: No such customer. Answered by the backend and passed through unchanged. }
+      x-helix-gateway:
+        plugins:
+          # The public path carries an id, so the rewrite must carry it too.
+          # "([^/]+)" captures one path segment (the id); "$1" puts it back.
+          # A fixed "uri" here would send every caller to the same record.
+          proxy-rewrite:
+            regex_uri:
+              - ^/v1/customers/([^/]+)$
+              - /users/$1
+
+  /v1/customers/{customerId}/orders:
+    get:
+      summary: List one customer's orders
+      parameters:
+        - { name: customerId, in: path, required: true, schema: { type: string } }
+        - { name: _limit, in: query, required: false, schema: { type: integer }, description: Return at most this many orders. Passed through to the backend unchanged. }
+      responses:
+        '200': { description: Array of the customer's orders }
+      x-helix-gateway:
+        plugins:
+          # Same idea, one level deeper. The backend calls orders "todos".
+          proxy-rewrite:
+            regex_uri:
+              - ^/v1/customers/([^/]+)/orders$
+              - /users/$1/todos
+
+# API-WIDE POLICY.
+x-helix-gateway:
+  plugins:
+    # An id on every response, so a caller's report can be matched to a
+    # gateway record without either side knowing the backend's paths.
+    request-id:
+      algorithm: uuid
+      header_name: X-Request-Id

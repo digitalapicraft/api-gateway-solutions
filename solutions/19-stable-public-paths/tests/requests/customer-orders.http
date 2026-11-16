@@ -1,0 +1,6 @@
+### Case: customer-orders — one level deeper.
+###
+### Expect 200 and 20 orders, every one with userId 1. The backend received
+### GET /users/1/todos.
+GET {{GATEWAY}}/v1/customers/1/orders
+accept: application/json

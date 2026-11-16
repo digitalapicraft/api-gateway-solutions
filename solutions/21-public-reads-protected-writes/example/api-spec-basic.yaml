@@ -1,0 +1,64 @@
+# Solution 21 — public reads, protected writes: the basic example spec.
+#
+# Five routes and nothing else: no plugins. Import this when you want to add the
+# plugins yourself in the UI, so you see where each one goes. The walkthrough is
+# ../guides.md, "Build it in the UI".
+#
+# The same API with the plugins already in it is api-spec.yaml, next to this file.
+#
+# RUNNABLE ON A FRESH FREE-TRIAL ORG once the plugins are added: the sample
+# backend, https://jsonplaceholder.typicode.com, serves this data at /posts, so
+# the API-wide proxy-rewrite in step 2 of the walkthrough is what makes these
+# paths return data.
+
+openapi: 3.0.3
+
+info:
+  title: Catalogue API
+  version: 1.0.0
+  description: >-
+    A product catalogue anyone can read and only partners can change. Add the
+    plugins yourself to protect the writes.
+
+paths:
+  /catalog/items:
+    get:
+      summary: List catalogue items
+      responses:
+        '200': { description: The catalogue }
+    post:
+      summary: Add a catalogue item (partners only, once helix-auth is added)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201': { description: Created }
+
+  /catalog/items/{itemId}:
+    get:
+      summary: Get one catalogue item
+      parameters:
+        - { name: itemId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: The item }
+    put:
+      summary: Change a catalogue item (partners only, once helix-auth is added)
+      parameters:
+        - { name: itemId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200': { description: Updated }
+    delete:
+      summary: Remove a catalogue item (partners only, once helix-auth is added)
+      parameters:
+        - { name: itemId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Removed }

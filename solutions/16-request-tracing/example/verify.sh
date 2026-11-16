@@ -46,7 +46,7 @@ command -v jq >/dev/null || { echo "verify.sh needs jq"; exit 1; }
 
 GW="${GATEWAY%/}"
 CP="${CONTROL_PLANE%/}/api/orgs/${ORG}"
-SESSIONS="${CP}/apis/${API_ID}/envs/${ENV_ID}/trace/sessions"
+SESSIONS="${CP}/apis/${API_ID}/envs/${ENV_ID}/trace/v2/sessions"
 BODY_FILE="$(mktemp)"
 SESSION_ID=""
 
@@ -79,7 +79,7 @@ cp_post() { # $1 url, $2 body → prints the status; response in $BODY_FILE
     -H "authorization: Bearer ${TOKEN}" -H 'content-type: application/json' -d "${2:-}"
 }
 records() { # all records of the session, one decoded JSON object per line
-  curl -s "${CP}/trace/sessions/${SESSION_ID}/traces?limit=100" \
+  curl -s "${CP}/trace/v2/sessions/${SESSION_ID}/traces?limit=100" \
     -H "authorization: Bearer ${TOKEN}" | jq -c '.traces[]?.raw_json | fromjson'
 }
 record_for() { # $1 method, $2 uri → the matching record

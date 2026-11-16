@@ -1,0 +1,8 @@
+### Case: priority-not-allowed — a priority outside low, normal and high.
+###
+### Expect 400 'property "priority" validation failed: matches none of the
+### enum values'. Matching is exact: "HIGH" is refused too.
+POST {{GATEWAY}}/tickets
+content-type: application/json
+
+{"title": "Printer on fire", "priority": "urgent"}

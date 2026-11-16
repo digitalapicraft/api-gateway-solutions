@@ -1,0 +1,39 @@
+# Solution 20 — Security headers: the basic example spec.
+#
+# Two routes and nothing else: no plugins. Import this when you want to add the
+# plugins yourself in the UI, so you see what each one does. The walkthrough is
+# ../guides.md, "Build it in the UI".
+#
+# The same API with the plugins already in it is api-spec.yaml, next to this file.
+#
+# RUNNABLE ON A FRESH FREE-TRIAL ORG. The upstream is public
+# https://jsonplaceholder.typicode.com, so every route returns real data with no
+# backend of your own. Deployed like this, it passes the backend's own headers
+# straight through: Cache-Control: max-age=43200 and X-Powered-By: Express
+# included. That is the "before" picture.
+
+openapi: 3.0.3
+
+info:
+  title: Customer API
+  version: 1.0.0
+  description: >-
+    Customer records, proxied from the public jsonplaceholder service so they
+    return real data on a fresh org. Add the plugins yourself to set security
+    headers and remove the ones that name the backend's stack.
+
+paths:
+  /users:
+    get:
+      summary: List customers
+      responses:
+        '200': { description: Array of customer records }
+
+  /users/{userId}:
+    get:
+      summary: Get one customer
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: One customer record }
+        '404': { description: No such customer }

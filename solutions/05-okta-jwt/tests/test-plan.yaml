@@ -51,6 +51,7 @@ cases:
     assertions:
       - status is exactly 401
       - the response is NOT a 302/303/307, and carries no Location header pointing at the Okta domain
+      - WWW-Authenticate names realm="partner-albums", the spec's realm, not the plugin's default
     notes: >-
       The redirect is the default behaviour, not an edge case: unauth_action
       defaults to "auth". This case is the one that proves the plugin was

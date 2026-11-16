@@ -1,0 +1,5 @@
+### Case: read-with-unknown-key — a read with a key no app has.
+### Expect 200. The read route never looks at the header.
+GET {{GATEWAY}}/catalog/items/1
+X-Api-Key: 00000000-not-a-real-key
+accept: application/json

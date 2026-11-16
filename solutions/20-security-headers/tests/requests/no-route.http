@@ -1,0 +1,7 @@
+### Case: no-route (manual) — a path the API has no route for.
+###
+### Expect 404 Route Not Found from the gateway itself, WITHOUT the security
+### headers: the request never reached the API, so its plugins never ran.
+### Use a path no other API in the environment serves.
+GET {{GATEWAY}}/users-no-such-route
+accept: application/json

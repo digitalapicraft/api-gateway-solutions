@@ -1,0 +1,8 @@
+### Case: title-null — title is present but null.
+###
+### Expect 400 naming "title". The message ends "got userdata", which is how
+### the validator spells a JSON null.
+POST {{GATEWAY}}/tickets
+content-type: application/json
+
+{"title": null, "priority": "high"}

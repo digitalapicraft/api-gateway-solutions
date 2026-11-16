@@ -4,11 +4,14 @@
 
 ---
 
-These are the raw control-plane calls behind [Install it directly](guides.md#install-it-directly).
-(The control plane is where you manage APIs, products, developers and apps.) They
-are listed so you can look one up, not as a walkthrough. Every call below is part
-of this package's own setup. None of it needs custom code. The full control-plane
-and plugin documentation is at [docs.digitalapi.ai/api-gateway](https://docs.digitalapi.ai/api-gateway).
+These are the raw control-plane calls behind
+[Install it directly](guides.md#install-it-directly). (The control plane is where
+you manage APIs, products, developers and apps.) They are listed so you can look one
+up, not as a walkthrough. Every call below is part of this package's own setup. None
+of it needs custom code. Each step links to its page in the
+[control-plane API reference](https://docs.digitalapi.ai/api-gateway/api-reference/api-reference);
+plugin fields are in the
+[plugin reference](https://docs.digitalapi.ai/api-gateway/plugin-reference/plugin-reference).
 
 Things are created in this order: **product, developer, app, credential**. An app
 can only exist under a product. Creating the app is what creates the `key_id` and
@@ -16,16 +19,16 @@ can only exist under a product. Creating the app is what creates the `key_id` an
 
 | Step | Call | Body | Notes |
 |---|---|---|---|
-| Check the plugin exists | `GET /api/orgs/{orgId}/plugin-schemas?page=1&size=300` | — | `hmac-auth` must be in the list. |
-| Import the spec | `POST /api/orgs/{orgId}/apis/from-spec` | `multipart/form-data`, part `file` — or a JSON body `{"spec": <document>}` | Nothing to fill in first. Adds `hmac-auth` to each route and `request-id` to the whole API. The response is `{"api", "revision"}`; keep both ids. A raw `application/yaml` body is rejected with 415. |
-| Create an upstream | `POST /api/orgs/{orgId}/envs/{envId}/upstreams` | `{"name","specification":{"scheme","pass_host":"rewrite","upstream_host","nodes":[{"host","port","weight"}], ...}}` | An upstream is your backend service. Upstreams are created **per environment**. Set `pass_host` to `rewrite` and `upstream_host` to the backend's host: without them the backend gets the gateway's host and every call returns HTTP 502 (bad gateway). |
-| Link the upstream to the revision | `PATCH /api/orgs/{orgId}/apis/{apiId}/revisions/{revisionId}/upstream-bindings/add` | `{"environmentUpstreams":[{"environmentId","upstreamId"}]}` | Must succeed before the deploy call below. |
-| Deploy the revision | `POST /api/orgs/{orgId}/apis/{apiId}/revisions/{revisionId}/deploy` | `{"environmentId","force":false}` | This is what makes the routes live. |
-| List APIs (to get `<API_ID>`) | `GET /api/orgs/{orgId}/apis` | — | Find the id of the imported "Partner Albums API" here, if you didn't keep it from the import response. |
-| Create the product | `POST /api/orgs/{orgId}/products` | The product object in [`example/products.json`](example/products.json): `{"name","displayName","description","apiIds","authMethods":["hmac-auth"],"quota":{"limit","interval","interval_unit"}}` | `authMethods` **must** name `hmac-auth`; it defaults to `["helix-auth"]`. A product with no `quota` is rejected when you create it. |
-| Deploy the product to an environment | `POST /api/orgs/{orgId}/envs/{envId}/products/{productId}/deploy` | — | A separate deploy from the revision's. |
-| Create a developer | `POST /api/orgs/{orgId}/developers` | `{"firstName","lastName","email"}` | Returns the developer's `id`. |
-| Create an app | `POST /api/orgs/{orgId}/developers/{developerId}/envs/{envId}/apps` | `{"name","displayName","products":{"<productId>":<rank>},"plugins":{"hmac-auth":{}}}` | An **empty** `{"hmac-auth": {}}` creates `key_id` and `secret_key`. They are returned **once**, in this response. To match a secret a partner already holds, put your own values in that object. One app per integration. |
+| [Check the plugin exists](https://docs.digitalapi.ai/api-gateway/api-reference/api-spec/plugin-schema-management) | `GET /api/orgs/{orgId}/plugin-schemas?page=1&size=300` | — | `hmac-auth` must be in the list. |
+| [Import the spec](https://docs.digitalapi.ai/api-gateway/api-reference/api-spec/api-import) | `POST /api/orgs/{orgId}/apis/from-spec` | `multipart/form-data`, part `file` — or a JSON body `{"spec": <document>}` | Nothing to fill in first. Adds `hmac-auth` to each route and `request-id` to the whole API. The response is `{"api", "revision"}`; keep both ids. A raw `application/yaml` body is rejected with 415. |
+| [Create an upstream](https://docs.digitalapi.ai/api-gateway/api-reference/api-spec/upstreams) | `POST /api/orgs/{orgId}/envs/{envId}/upstreams` | `{"name","specification":{"scheme","pass_host":"rewrite","upstream_host","nodes":[{"host","port","weight"}], ...}}` | An upstream is your backend service. Upstreams are created **per environment**. Set `pass_host` to `rewrite` and `upstream_host` to the backend's host: without them the backend gets the gateway's host and every call returns HTTP 502 (bad gateway). |
+| [Link the upstream to the revision](https://docs.digitalapi.ai/api-gateway/api-reference/api-spec/revisions) | `PUT /api/orgs/{orgId}/apis/{apiId}/revisions/{revisionId}/envs/{envId}/bind-upstream` | `{"upstreamId"}` | Must succeed before the deploy call below. |
+| [Deploy the revision](https://docs.digitalapi.ai/api-gateway/api-reference/api-spec/revisions) | `POST /api/orgs/{orgId}/apis/{apiId}/revisions/{revisionId}/envs/{envId}/deploy` | `{"force":false}` | This is what makes the routes live. |
+| [List APIs (to get `<API_ID>`)](https://docs.digitalapi.ai/api-gateway/api-reference/api-spec/apis) | `GET /api/orgs/{orgId}/apis` | — | Find the id of the imported "Partner Albums API" here, if you didn't keep it from the import response. |
+| [Create the product](https://docs.digitalapi.ai/api-gateway/api-reference/api-spec/products) | `POST /api/orgs/{orgId}/products` | The product object in [`example/products.json`](example/products.json): `{"name","displayName","description","apiIds","authMethods":["hmac-auth"],"quota":{"limit","interval","interval_unit"}}` | `authMethods` **must** name `hmac-auth`; it defaults to `["helix-auth"]`. A product with no `quota` is rejected when you create it. |
+| [Deploy the product to an environment](https://docs.digitalapi.ai/api-gateway/api-reference/api-spec/products) | `POST /api/orgs/{orgId}/envs/{envId}/products/{productId}/deploy` | — | A separate deploy from the revision's. |
+| [Create a developer](https://docs.digitalapi.ai/api-gateway/api-reference/api-spec/developers) | `POST /api/orgs/{orgId}/developers` | `{"firstName","lastName","email"}` | Returns the developer's `id`. |
+| [Create an app](https://docs.digitalapi.ai/api-gateway/api-reference/api-spec/apps) | `POST /api/orgs/{orgId}/developers/{developerId}/envs/{envId}/apps` | `{"name","displayName","products":{"<productId>":<rank>},"plugins":{"hmac-auth":{}}}` | An **empty** `{"hmac-auth": {}}` creates `key_id` and `secret_key`. They are returned **once**, in this response. To match a secret a partner already holds, put your own values in that object. One app per integration. |
 
 Not fully pinned down here, so check against your org's live schema before you
 script this for real: an upstream's `specification` has many more optional fields

@@ -1,0 +1,14 @@
+{
+  "status": 503,
+  "headers": {
+    "present": ["Retry-After", "X-Request-Id"],
+    "absent": ["X-Powered-By"],
+    "Content-Type": "application/json",
+    "Retry-After": "Sat, 07 Nov 2026 03:00:00 GMT"
+  },
+  "body": {
+    "error": "maintenance",
+    "message": "Bookings is down for planned maintenance. Please try again after 03:00 UTC.",
+    "retry_after": "2026-11-07T03:00:00Z"
+  }
+}

@@ -1,0 +1,51 @@
+# Solution 19 — Stable public paths: the basic example spec.
+#
+# Three routes and nothing else: no plugins. Import this when you want to add
+# the plugins yourself in the UI, so you see what each one does. The walkthrough
+# is ../guides.md, "Build it in the UI".
+#
+# The same API with the plugins already in it is api-spec.yaml, next to this file.
+#
+# Without the plugins, each route sends its own public path to the backend, and
+# the backend has no /v1/customers, so every call returns 404 until the path
+# rewrites are added.
+#
+# RUNNABLE ON A FRESH FREE-TRIAL ORG. The upstream is public
+# https://jsonplaceholder.typicode.com, so every route returns real data once
+# the plugins are in place.
+
+openapi: 3.0.3
+
+info:
+  title: Customers API
+  version: 1.0.0
+  description: >-
+    Version 1 of the public customers contract. Add the path rewrites yourself
+    to map each public path to the backend's own path.
+
+paths:
+  /v1/customers:
+    get:
+      summary: List customers
+      parameters:
+        - { name: _limit, in: query, required: false, schema: { type: integer }, description: Return at most this many customers. }
+      responses:
+        '200': { description: Array of customers }
+
+  /v1/customers/{customerId}:
+    get:
+      summary: Get one customer
+      parameters:
+        - { name: customerId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: The customer }
+        '404': { description: No such customer }
+
+  /v1/customers/{customerId}/orders:
+    get:
+      summary: List one customer's orders
+      parameters:
+        - { name: customerId, in: path, required: true, schema: { type: string } }
+        - { name: _limit, in: query, required: false, schema: { type: integer }, description: Return at most this many orders. }
+      responses:
+        '200': { description: Array of the customer's orders }

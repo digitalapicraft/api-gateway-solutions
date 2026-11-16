@@ -1,0 +1,133 @@
+# Test plan — Maintenance mode.
+#
+# ../example/verify.sh checks ONE state per run:
+#   MODE=normal       (default) cases 1-4
+#   MODE=maintenance             cases 5-8
+# and exits 0 only if every case for that state holds. Switching between the
+# states is done in the UI, with the Helix Agent or with the calls in
+# ../guides.md; the manual cases below cover the switch itself.
+#
+# The full rehearsal, in order:
+#   1. MODE=normal                  (the API as built)
+#   2. switch maintenance on
+#   3. MODE=maintenance
+#   4. switch back
+#   5. MODE=normal                  (the earlier revision, unchanged)
+#
+# Substitute your own value:
+#   {{GATEWAY}}   gateway base URL, e.g. https://<YOUR_GATEWAY_HOST>
+
+meta:
+  solution: 24-maintenance-mode
+  version: 1.0.0
+  executor: example/verify.sh
+  note: >-
+    "Answered by the backend" is checked with X-Powered-By, which the sample
+    backend adds to every answer and the maintenance response does not carry.
+    With another backend, set BACKEND_HEADER to a header it always sends.
+
+cases:
+  # --- normal state: MODE=normal --------------------------------------------
+  - id: normal-list
+    type: positive
+    intent: In the normal state a call reaches the backend, through the path mapping.
+    request: requests/list-bookings.http
+    expected: expected/normal-list-200.json
+    asserts:
+      - X-Powered-By present (the backend answered)
+      - no Retry-After
+      - X-Request-Id present
+
+  - id: normal-get
+    type: positive
+    intent: A path parameter is carried through the mapping, /bookings/1 to /posts/1.
+    request: requests/get-booking.http
+    expected: expected/normal-get-200.json
+    asserts:
+      - the body is booking 1
+
+  - id: normal-create
+    type: positive
+    intent: A write reaches the backend in the normal state.
+    request: requests/create-booking.http
+    expected: expected/normal-create-201.json
+    response_notes: >-
+      The sample backend echoes the booking with id 101 and stores nothing.
+
+  - id: normal-unknown
+    type: negative
+    intent: >-
+      The backend's own errors pass through unchanged in the normal state. This
+      is what the maintenance case below replaces.
+    request: requests/unknown-booking.http
+    expected: expected/unknown-booking-404.json
+
+  # --- maintenance state: MODE=maintenance -----------------------------------
+  - id: maintenance-list
+    type: positive
+    intent: In maintenance the gateway answers a read itself, with a time to come back.
+    request: requests/list-bookings.http
+    expected: expected/maintenance-503.json
+    asserts:
+      - Retry-After present, a date (Sat, 07 Nov 2026 03:00:00 GMT) or a number of seconds
+      - Content-Type application/json, and the body is a JSON object
+      - X-Powered-By absent (the backend was not called)
+      - X-Request-Id present
+
+  - id: maintenance-get
+    type: positive
+    intent: Every route gets the same answer, the one with a path parameter included.
+    request: requests/get-booking.http
+    expected: expected/maintenance-503.json
+
+  - id: maintenance-create
+    type: positive
+    intent: A write is answered at the gateway too. Its body never reaches the backend.
+    request: requests/create-booking.http
+    expected: expected/maintenance-503.json
+
+  - id: maintenance-unknown
+    type: boundary
+    intent: >-
+      The gateway answers before the backend could. A booking that doesn't exist
+      gets the same 503 as every other call, not the backend's 404.
+    request: requests/unknown-booking.http
+    expected: expected/maintenance-503.json
+    notes: >-
+      verify.sh prints a NOTE when the Retry-After date is already in the past:
+      callers would then retry straight away. Set it to the end of your window.
+
+  # --- the switch: manual ------------------------------------------------------
+  - id: switch-on
+    type: positive
+    intent: >-
+      Clone the live revision, switch the maintenance response on in the copy,
+      and force-deploy the copy. The live revision is replaced, not edited.
+    expected_outcome: >-
+      Within a second or two, GET /bookings/1 answers 503. The revision list
+      shows the copy ACTIVE and the earlier revision INACTIVE, unchanged.
+    notes: >-
+      Call the API in a loop while you deploy. Each call gets either the normal
+      answer or the 503, never an error in between.
+
+  - id: switch-back
+    type: positive
+    intent: Force-deploying the earlier revision restores the normal state exactly.
+    expected_outcome: >-
+      Within a second or two, GET /bookings/1 answers 200 again, and MODE=normal
+      passes. The maintenance revision stays in the list, INACTIVE.
+
+  - id: backend-not-called
+    type: positive
+    intent: A request trace confirms the backend is not called during maintenance.
+    expected_outcome: >-
+      Start a trace session during maintenance and send POST /bookings. The
+      record's outcome is "Upstream not called" (short_circuit), answered by
+      mocking in the access stage, with no backend status.
+
+  - id: route-not-in-api
+    type: boundary
+    intent: Maintenance covers this API's routes only.
+    expected_outcome: >-
+      PUT /bookings/1, a method the API doesn't have, gets 404 Route Not Found
+      in both states.

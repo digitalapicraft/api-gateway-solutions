@@ -1,0 +1,5 @@
+### Case: read-list — anyone lists the catalogue, with no key.
+### Expect 200 and the list of items. A 401 means the key check is on the
+### whole API instead of the write routes.
+GET {{GATEWAY}}/catalog/items
+accept: application/json

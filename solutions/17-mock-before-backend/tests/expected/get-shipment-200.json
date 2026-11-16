@@ -1,0 +1,20 @@
+{
+  "status": 200,
+  "headers": {
+    "present": [
+      "x-mock-by",
+      "X-Request-Id"
+    ]
+  },
+  "body": {
+    "shipmentId": "SHP-1001",
+    "status": "IN_TRANSIT",
+    "carrier": "Acme Freight",
+    "eta": "2026-11-04T17:00:00Z",
+    "events": [
+      { "at": "2026-10-28T09:12:00Z", "status": "PICKED_UP", "location": "Rotterdam" },
+      { "at": "2026-10-29T22:40:00Z", "status": "DEPARTED_HUB", "location": "Rotterdam" },
+      { "at": "2026-10-30T06:05:00Z", "status": "ARRIVED_HUB", "location": "Leeds" }
+    ]
+  }
+}

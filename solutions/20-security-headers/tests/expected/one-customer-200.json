@@ -1,0 +1,21 @@
+{
+  "status": 200,
+  "headers": {
+    "X-Content-Type-Options": "nosniff",
+    "Cache-Control": "no-store",
+    "X-Frame-Options": "DENY",
+    "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+    "Referrer-Policy": "no-referrer",
+    "X-Request-Id": true,
+    "X-Powered-By": null,
+    "Server": null,
+    "Via": null,
+    "X-AspNet-Version": null,
+    "X-AspNetMvc-Version": null
+  },
+  "body": {
+    "id": 1,
+    "name": "Leanne Graham",
+    "email": "Sincere@april.biz"
+  }
+}

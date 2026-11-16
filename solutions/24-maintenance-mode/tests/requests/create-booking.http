@@ -1,0 +1,9 @@
+### Case: create a booking.
+###
+### Normal state: 201. The sample backend echoes the booking with id 101 and
+### stores nothing.
+### Maintenance state: 503. The body is never sent on to the backend.
+POST {{GATEWAY}}/bookings
+content-type: application/json
+
+{"title":"verify.sh booking"}

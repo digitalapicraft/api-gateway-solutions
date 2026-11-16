@@ -1,0 +1,129 @@
+# Test plan — Mock before the backend.
+#
+# Cases 1-4 run in order with STAGE=mock, after example/api-spec.yaml is
+# deployed. Cases 5-6 run with STAGE=backend, after example/api-spec-basic.yaml
+# is deployed as a new revision of the same API (the switch-over). Both are
+# executed by ../example/verify.sh, which exits 0 only if every case of the
+# stage holds. The fixtures under requests/ and expected/ document each case so
+# you can run one by hand.
+#
+# Substitute your own values:
+#   {{GATEWAY}}   gateway base URL, e.g. https://<YOUR_GATEWAY_HOST>
+
+meta:
+  solution: 17-mock-before-backend
+  version: 1.0.0
+  executor: example/verify.sh
+  note: >-
+    Case 2 and case 5 use the same path, GET /shipments/1. The request does not
+    change between the stages; only the source of the answer does.
+
+cases:
+  # ---- STAGE=mock -----------------------------------------------------------
+
+  - id: get-shipment
+    type: positive
+    intent: The agreed lookup answers today, from the gateway, with the sample.
+    request: requests/get-shipment.http
+    expected: expected/get-shipment-200.json
+    response_notes: >-
+      The body equals the fixture's body after JSON normalisation; whitespace
+      in the sample does not matter. x-mock-by marks it as mocked. Its value
+      names the gateway's version, so only its presence is checked.
+
+  - id: any-id-same-answer
+    type: boundary
+    intent: >-
+      The static mock's limit, shown on purpose: every id gets the same
+      shipment.
+    request: requests/get-other-id.http
+    expected: expected/get-shipment-200.json
+    response_notes: >-
+      GET /shipments/1 returns SHP-1001's record, byte-for-byte the body of
+      get-shipment. Per-id answers need solution 12.
+
+  - id: create-shipment
+    type: positive
+    intent: The agreed create answers 201 with a Location the frontend can follow.
+    request: requests/create-shipment.http
+    expected: expected/create-shipment-201.json
+    response_notes: >-
+      The mock does not read the body. The same 201 comes back for any body,
+      which is why a frontend can't test its error handling against it.
+
+  - id: outside-contract
+    type: negative
+    intent: Only the agreed routes exist. A method outside the contract is not mocked.
+    request: requests/outside-contract.http
+    expected: expected/outside-contract-404.json
+    notes: >-
+      The 404 comes from the gateway's route matching, before any plugin. If
+      this returns anything else, another API in the environment serves the
+      path.
+
+  # ---- STAGE=backend (after the switch-over) --------------------------------
+
+  - id: backend-get
+    type: positive
+    intent: >-
+      After the switch-over, the same lookup reaches the backend. The client
+      sent nothing different.
+    request: requests/get-other-id.http
+    expected: expected/backend-get-200.json
+    response_notes: >-
+      No x-mock-by header, and the body is not the mock's sample. With the
+      sample backend the body is post 1 (userId, id, title, body), because
+      proxy-rewrite maps /shipments/1 to /posts/1.
+    notes: >-
+      If this still returns the sample with x-mock-by, the mocked revision is
+      still live: deploy the new one with force.
+
+  - id: backend-create
+    type: positive
+    intent: After the switch-over, the same create reaches the backend.
+    request: requests/create-shipment.http
+    expected: expected/backend-create-201.json
+    response_notes: >-
+      No x-mock-by header. The sample backend echoes the body and adds
+      "id": 101, and its Location names its own host and /posts/101. Your own
+      backend's Location is whatever it sends.
+
+  # ---- manual ---------------------------------------------------------------
+
+  - id: roll-back-to-mock
+    type: failure
+    manual: true
+    intent: >-
+      If the first backend release misbehaves, deploying the mocked revision
+      again restores the sample answers with no client change.
+    expected_outcome: >-
+      After a force deploy of the mocked revision, STAGE=mock passes again and
+      STAGE=backend fails at its first check (x-mock-by is back).
+    procedure: >-
+      With the switched-over revision live, deploy the first revision with
+      "force": true (UI: Deploy, pick r1, Force Deploy). Wait a few seconds and
+      run verify.sh with STAGE=mock.
+
+  - id: deploy-without-upstream
+    type: failure
+    manual: true
+    intent: A fully mocked revision still needs an upstream bound to deploy.
+    expected_outcome: >-
+      Dry-run and deploy both answer 400 "Upstream not configured for
+      environment … Set upstream binding first."
+    procedure: >-
+      Import example/api-spec.yaml and call deploy/dry-run, then deploy, before
+      binding any upstream.
+
+  - id: plain-deploy-refused
+    type: negative
+    manual: true
+    intent: >-
+      While the mocked revision is live, a deploy of the new revision without
+      force is refused, so a switch-over can't happen by accident.
+    expected_outcome: >-
+      409 "Environment … already has revision … deployed for this API". With
+      "force": true it succeeds.
+    procedure: >-
+      Create the no-mock revision, bind the upstream, and deploy it with
+      "force": false while the mocked revision is live.

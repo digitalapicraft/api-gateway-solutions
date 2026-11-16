@@ -1,0 +1,8 @@
+### Case: orders-repeated-id — a caller adds another customer's id.
+###
+### Expect 200 and only customer 1's orders. The backend received
+### GET /users/1/todos?userId=2 and took the id from the path. After the
+### "backend moved" variation it receives /todos?userId=1&userId=2 instead, and
+### returns customers 1 and 2.
+GET {{GATEWAY}}/v1/customers/1/orders?userId=2
+accept: application/json

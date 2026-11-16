@@ -10,7 +10,8 @@ server's discovery URL, and the client id and secret of an Okta application.
 
 **If the run ends early, paste the two steps one at a time instead.** When it
 finishes, read the deployed revision back and check that `openid-connect` carries
-`bearer_only: true` and your real client id and secret, not placeholders. Then
+`bearer_only: true`, `realm` set to your API name, and your real client id and
+secret, not placeholders. Then
 check for `use_jwks: true`: the agent often leaves it out, and without it every
 token is refused, so add it yourself if it is missing. See
 [Troubleshooting](guides.md#troubleshooting) if something looks off.
@@ -29,7 +30,8 @@ gateway verifies these tokens and never issues any — there is no token endpoin
 here. The Okta application is {{okta_client_id}}, secret {{okta_client_secret}},
 use the literal values for the configuration.
 
-Refuse a call without a valid token with a 401, never redirect it to a login page.
+Refuse a call without a valid token with a 401 whose WWW-Authenticate realm is
+"{{api_name}}", and never redirect it to a login page.
 Accept tokens only from the issuer that discovery document reports, signed with RS256,
 and verify Okta's certificate when fetching its keys. Verify each token locally against Okta's published jwks.
 ```

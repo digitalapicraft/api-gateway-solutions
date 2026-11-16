@@ -1,0 +1,4 @@
+### Case: delete — a partner removes item 1.
+### Expect 200 and an empty object.
+DELETE {{GATEWAY}}/catalog/items/1
+X-Api-Key: {{PARTNER_API_KEY}}
